@@ -1,1 +1,2 @@
 23122025,dfgj,Income,4800.0,dftf
+10112025,medical,expense,3322.0,medicines

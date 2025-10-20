@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.lang.reflect.InvocationTargetException;
+import src.db.DBHelper;
+import java.sql.*;
+
 
 public class FinanceManager {
     private List<Transaction> transactions = new ArrayList<>();
@@ -365,7 +368,38 @@ public void loadGoldSilverInvestments(String filename) {
         System.out.println("No Gold/Silver investment file found.");
     }
 }
+ private DBHelper dbHelper;
+    public FinanceManager() throws SQLException { dbHelper = new DBHelper(); }
 
+    public List<Transaction> getAllTransactions() throws SQLException {
+        List<Transaction> txs = new ArrayList<>();
+        String sql = "SELECT * FROM transactions";
+        try (Statement stmt = dbHelper.getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                txs.add(new Transaction(
+                    rs.getString("date"),
+                    rs.getString("category"),
+                    rs.getString("type"),
+                    rs.getDouble("amount"),
+                    rs.getString("description")
+                ));
+            }
+        }
+        return txs;
+    }
+
+    public void saveTransaction(Transaction t) throws SQLException {
+        String sql = "INSERT INTO transactions (date, category, type, amount, description) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+            ps.setString(1, t.getDate());
+            ps.setString(2, t.getCategory());
+            ps.setString(3, t.getType());
+            ps.setDouble(4, t.getAmount());
+            ps.setString(5, t.getDescription());
+            ps.executeUpdate();
+        }
+    }
 
 
 }

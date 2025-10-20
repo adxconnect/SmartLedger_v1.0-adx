@@ -13,6 +13,11 @@ public class Transaction {
         this.amount = amount;
         this.description = description;
     }
+    public String getDate() { return date; }
+    public String getCategory() { return category; }
+    public String getType() { return type; }
+    public double getAmount() { return amount; }
+    public String getDescription() { return description; }
 
     public static Transaction fromCSV(String line) {
         String[] parts = line.split(",");
@@ -23,14 +28,6 @@ public class Transaction {
             Double.parseDouble(parts[3]), // amount
             parts.length > 4 ? parts[4] : ""  // description (safe fallback)
         );
-    }
-
-    public double getAmount() {
-        return amount;
-    }
-
-    public String getType() {
-        return type;
     }
 
     public String toCSV() {
@@ -45,4 +42,6 @@ public class Transaction {
         }
         return date;
     }
+    
+    
 }

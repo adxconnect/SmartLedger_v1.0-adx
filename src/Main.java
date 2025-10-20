@@ -1,8 +1,9 @@
 package src;
 import java.util.Scanner;
+import java.sql.SQLException;
 
 public class Main {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws SQLException {
         FinanceManager manager = new FinanceManager();
         manager.loadRecurringDeposits("data/recurringdeposits.txt");
         manager.loadFixedDeposits("data/fixeddeposits.txt");
@@ -41,7 +42,7 @@ public class Main {
             System.out.println("23. View Credit Cards");
             System.out.println("24. Add Credit Card Expense");
             System.out.println("25. Make Credit Card Payment");
-            System.out.println("26. Exit");
+            System.out.println("26. Save and Exit");
 
 
             System.out.print("Enter choice: ");
