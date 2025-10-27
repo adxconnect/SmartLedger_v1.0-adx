@@ -1,4 +1,5 @@
 package src;
+
 public class GoldSilverInvestment {
     private String type; // "Gold" or "Silver"
     private double weight; // grams
@@ -29,4 +30,8 @@ public class GoldSilverInvestment {
             Double.parseDouble(p[2])    // pricePerGram
         );
     }
+    public String getMetalType() { return type; }
+public double getWeight() { return weight; }
+public double getPricePerGram() { return pricePerGram; }
+
 }

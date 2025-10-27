@@ -1,54 +1,33 @@
 package src;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
 
 public class RecurringDeposit {
-    private double monthlyDeposit;
-    private double rate;
-    private int months;
+    private int id;
+    private String accountNumber, startDate, holderName;
+    private double monthlyAmount, rate;
+    private int tenureMonths;
 
-    public RecurringDeposit(double monthlyDeposit, double rate, int months) {
-        this.monthlyDeposit = monthlyDeposit;
+    public RecurringDeposit(String accountNumber, double monthlyAmount, double rate, int tenureMonths, String startDate, String holderName) {
+        this.accountNumber = accountNumber;
+        this.monthlyAmount = monthlyAmount;
         this.rate = rate;
-        this.months = months;
+        this.tenureMonths = tenureMonths;
+        this.startDate = startDate;
+        this.holderName = holderName;
     }
 
-    public double calculateMaturity() {
-        double n = months;
-        double r = rate / 400; // quarterly
-        return monthlyDeposit * n + (monthlyDeposit * n * (n+1) / 2 * r);
+    public RecurringDeposit(int id, String accountNumber, double monthlyAmount, double rate, int tenureMonths, String startDate, String holderName) {
+        this(accountNumber, monthlyAmount, rate, tenureMonths, startDate, holderName);
+        this.id = id;
     }
 
-    public String toString() {
-        return "Recurring Deposit: ₹" + monthlyDeposit + " per month, Rate: " + rate + "%, Months: " + months + ", Maturity: ₹" + calculateMaturity();
+    public Object[] toObjectArray() {
+        return new Object[]{accountNumber, monthlyAmount, rate, tenureMonths, startDate, holderName};
     }
-    public String toCSV() {
-        return monthlyDeposit + "," + rate + "," + months;
-    }
-    public static RecurringDeposit fromCSV(String line) {
-        String[] p = line.split(",");
-        return new RecurringDeposit(Double.parseDouble(p[0]), Double.parseDouble(p[1]), Integer.parseInt(p[2]));
-    }
-    private List<RecurringDeposit> recurringDeposits = new ArrayList<>();
 
-public void saveRecurringDeposits(String filename) {
-    try (PrintWriter pw = new PrintWriter(new FileWriter(filename))) {
-        for (RecurringDeposit rd : recurringDeposits) pw.println(rd.toCSV());
-    } catch (IOException e) { e.printStackTrace(); }
-}
-
-public void loadRecurringDeposits(String filename) {
-    recurringDeposits.clear();
-    try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
-        String line;
-        while ((line = br.readLine()) != null)
-            recurringDeposits.add(RecurringDeposit.fromCSV(line));
-    } catch (IOException e) { System.out.println("No Recurring Deposit file found."); }
-}
-
+    public String getAccountNumber() { return accountNumber; }
+    public double getMonthlyAmount() { return monthlyAmount; }
+    public double getRate() { return rate; }
+    public int getTenureMonths() { return tenureMonths; }
+    public String getStartDate() { return startDate; }
+    public String getHolderName() { return holderName; }
 }

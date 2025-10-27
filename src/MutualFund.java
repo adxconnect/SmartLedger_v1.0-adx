@@ -29,4 +29,13 @@ public class MutualFund {
             Integer.parseInt(p[2])    // years
         );
     }
+    public double getAmount() { return amount; }
+public double getAnnualRate() { return expectedRate; }
+public int getYears() { return years; }
+// Add this method to compute maturity value:
+public double getMaturityAmount() {
+    // Compound Interest: A = P * (1 + r/100) ^ n
+    return amount * Math.pow(1 + expectedRate/100, years);
+}
+
 }

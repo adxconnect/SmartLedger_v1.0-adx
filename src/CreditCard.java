@@ -1,5 +1,6 @@
 package src;
 public class CreditCard {
+    
     private String cardName;
     private double limit, expenses, amountToPay;
     private int daysLeftToPay;
@@ -68,5 +69,18 @@ public class CreditCard {
                " | Days Left to Pay: " + daysLeftToPay +
                " | Available Credit: ₹" + availableCredit();
     }
+    public String getCardName() {
+    return cardName;
+}
+public double getLimit() {
+    return limit;
+}
+public double getExpenses() {
+    return expenses;
+}
+public double getAmountToPay() {
+    return amountToPay;
+}
+
     
 }

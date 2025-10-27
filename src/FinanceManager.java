@@ -12,7 +12,7 @@ import java.util.Map;
 import java.lang.reflect.InvocationTargetException;
 import src.db.DBHelper;
 import java.sql.*;
-
+import java.util.*;
 
 public class FinanceManager {
     private List<Transaction> transactions = new ArrayList<>();
@@ -112,6 +112,39 @@ public void showMonthlySummary(String month) {
     System.out.println("Total Expense: ₹" + totalExpense);
     System.out.println("Net Balance: ₹" + (totalIncome - totalExpense));
 }
+public void saveSavingsAccount(SavingsAccount sa) throws SQLException {
+    String sql = "INSERT INTO savings_accounts (account_number, account_type, balance, holder_name, bank_name, ifsc_code) VALUES (?, ?, ?, ?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setString(1, sa.getAccountNumber());
+        ps.setString(2, sa.getAccountType());
+        ps.setDouble(3, sa.getBalance());
+        ps.setString(4, sa.getHolderName());
+        ps.setString(5, sa.getBankName());
+        ps.setString(6, sa.getIfscCode());
+        ps.executeUpdate();
+    }
+}
+public List<SavingsAccount> getAllSavingsAccounts() throws SQLException {
+    List<SavingsAccount> accounts = new ArrayList<>();
+    String sql = "SELECT * FROM savings_accounts";
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+            accounts.add(new SavingsAccount(
+                rs.getInt("id"),
+                rs.getString("account_number"),
+                rs.getString("account_type"),
+                rs.getDouble("balance"),
+                rs.getString("holder_name"),
+                rs.getString("bank_name"),
+                rs.getString("ifsc_code")
+            ));
+        }
+    }
+    return accounts;
+}
+
+
 
 // Category-wise summary
 public void showCategorySummary() {
@@ -279,7 +312,7 @@ public void addCreditCardExpense(int index, double amount) {
 
 public void saveRecurringDeposits(String filename) {
     try (PrintWriter pw = new PrintWriter(new FileWriter(filename))) {
-        for (RecurringDeposit rd : recurringDeposits) pw.println(rd.toCSV());
+        for (RecurringDeposit rd : recurringDeposits) pw.println(rd.toString());
     } catch (IOException e) { e.printStackTrace(); }
 }
 
@@ -287,15 +320,28 @@ public void loadRecurringDeposits(String filename) {
     recurringDeposits.clear();
     try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
         String line;
-        while ((line = br.readLine()) != null)
-            recurringDeposits.add(RecurringDeposit.fromCSV(line));
+        while ((line = br.readLine()) != null) {
+            // Parse CSV line manually since fromCSV method doesn't exist
+            String[] parts = line.split(",");
+            if (parts.length >= 6) {
+                recurringDeposits.add(new RecurringDeposit(
+                    0, // id - use 0 as default
+                    parts[0], // account number
+                    Double.parseDouble(parts[1]), // monthly amount
+                    Double.parseDouble(parts[2]), // rate
+                    Integer.parseInt(parts[3]), // tenure months
+                    parts[4], // start date
+                    parts[5] // holder name
+                ));
+            }
+        }
     } catch (IOException e) { System.out.println("No Recurring Deposit file found."); }
 }
 
 public void saveFixedDeposits(String filename) {
     try (PrintWriter pw = new PrintWriter(new FileWriter(filename))) {
         for (FixedDeposit fd : fixedDeposits)
-            pw.println(fd.toCSV());
+            pw.println(fd.toString());
     } catch (IOException e) {
         e.printStackTrace();
     }
@@ -305,8 +351,21 @@ public void loadFixedDeposits(String filename) {
     fixedDeposits.clear();
     try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
         String line;
-        while ((line = br.readLine()) != null)
-            fixedDeposits.add(FixedDeposit.fromCSV(line));
+        while ((line = br.readLine()) != null) {
+            // Parse CSV line manually since fromCSV method doesn't exist
+            String[] parts = line.split(",");
+            if (parts.length >= 6) {
+                fixedDeposits.add(new FixedDeposit(
+                    0, // id - use 0 as default
+                    parts[0], // account number
+                    Double.parseDouble(parts[1]), // principal
+                    Double.parseDouble(parts[2]), // rate
+                    Integer.parseInt(parts[3]), // tenure months
+                    parts[4], // start date
+                    parts[5] // holder name
+                ));
+            }
+        }
     } catch (IOException e) {
         System.out.println("No Fixed Deposit file found.");
     }
@@ -400,6 +459,152 @@ public void loadGoldSilverInvestments(String filename) {
             ps.executeUpdate();
         }
     }
+    // In FinanceManager.java
+public void saveFixedDeposit(FixedDeposit fd) throws SQLException {
+    String sql = "INSERT INTO fixed_deposits (account_number, principal, rate, tenure_months, start_date, holder_name) VALUES (?, ?, ?, ?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setString(1, fd.getAccountNumber());
+        ps.setDouble(2, fd.getPrincipal());
+        ps.setDouble(3, fd.getRate());
+        ps.setInt(4, fd.getTenureMonths());
+        ps.setString(5, fd.getStartDate());
+        ps.setString(6, fd.getHolderName());
+        ps.executeUpdate();
+    }
+}
+
+public List<FixedDeposit> getAllFixedDeposits() throws SQLException {
+    List<FixedDeposit> deposits = new ArrayList<>();
+    String sql = "SELECT * FROM fixed_deposits";
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+            deposits.add(new FixedDeposit(
+                rs.getInt("id"),
+                rs.getString("account_number"),
+                rs.getDouble("principal"),
+                rs.getDouble("rate"),
+                rs.getInt("tenure_months"),
+                rs.getString("start_date"),
+                rs.getString("holder_name")
+            ));
+        }
+    }
+    return deposits;
+}
+public void saveRecurringDeposit(RecurringDeposit rd) throws SQLException {
+    String sql = "INSERT INTO recurring_deposits (account_number, monthly_amount, rate, tenure_months, start_date, holder_name) VALUES (?, ?, ?, ?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setString(1, rd.getAccountNumber());
+        ps.setDouble(2, rd.getMonthlyAmount());
+        ps.setDouble(3, rd.getRate());
+        ps.setInt(4, rd.getTenureMonths());
+        ps.setString(5, rd.getStartDate());
+        ps.setString(6, rd.getHolderName());
+        ps.executeUpdate();
+    }
+}
+
+public List<RecurringDeposit> getAllRecurringDeposits() throws SQLException {
+    List<RecurringDeposit> deposits = new ArrayList<>();
+    String sql = "SELECT * FROM recurring_deposits";
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+            deposits.add(new RecurringDeposit(
+                rs.getInt("id"),
+                rs.getString("account_number"),
+                rs.getDouble("monthly_amount"),
+                rs.getDouble("rate"),
+                rs.getInt("tenure_months"),
+                rs.getString("start_date"),
+                rs.getString("holder_name")
+            ));
+        }
+    }
+    return deposits;
+}
+// Save a credit card in MySQL
+public void saveCreditCard(CreditCard cc) throws SQLException {
+    String sql = "INSERT INTO credit_cards (card_name, credit_limit, expenses, amount_to_pay, days_left) VALUES (?, ?, ?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setString(1, cc.getCardName());
+        ps.setDouble(2, cc.getLimit());
+        ps.setDouble(3, cc.getExpenses());
+        ps.setDouble(4, cc.getAmountToPay());
+        ps.setInt(5, cc.getDaysLeftToPay());
+        ps.executeUpdate();
+    }
+}
+
+// Get all credit cards from MySQL
+public List<CreditCard> getAllCreditCards() throws SQLException {
+    List<CreditCard> cards = new ArrayList<>();
+    String sql = "SELECT * FROM credit_cards";
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+            cards.add(new CreditCard(
+                rs.getString("card_name"),
+                rs.getDouble("credit_limit"),
+                rs.getDouble("expenses"),
+                rs.getDouble("amount_to_pay"),
+                rs.getInt("days_left")
+            ));
+        }
+    }
+    return cards;
+}
+public void saveGoldSilverInvestment(GoldSilverInvestment gs) throws SQLException {
+    String sql = "INSERT INTO gold_silver_investments (metal_type, weight, price_per_gram) VALUES (?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setString(1, gs.getMetalType());
+        ps.setDouble(2, gs.getWeight());
+        ps.setDouble(3, gs.getPricePerGram());
+        ps.executeUpdate();
+    }
+}
+
+public List<GoldSilverInvestment> getAllGoldSilverInvestments() throws SQLException {
+    List<GoldSilverInvestment> list = new ArrayList<>();
+    String sql = "SELECT * FROM gold_silver_investments";
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+            list.add(new GoldSilverInvestment(
+                rs.getString("metal_type"),
+                rs.getDouble("weight"),
+                rs.getDouble("price_per_gram")
+            ));
+        }
+    }
+    return list;
+}
+public void saveMutualFund(MutualFund mf) throws SQLException {
+    String sql = "INSERT INTO mutual_funds (amount, annual_rate, years) VALUES (?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setDouble(1, mf.getAmount());
+        ps.setDouble(2, mf.getAnnualRate());
+        ps.setInt(3, mf.getYears());
+        ps.executeUpdate();
+    }
+}
+
+public List<MutualFund> getAllMutualFunds() throws SQLException {
+    List<MutualFund> list = new ArrayList<>();
+    String sql = "SELECT * FROM mutual_funds";
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+            list.add(new MutualFund(
+                rs.getDouble("amount"),
+                rs.getDouble("annual_rate"),
+                rs.getInt("years")
+            ));
+        }
+    }
+    return list;
+}
 
 
 }
