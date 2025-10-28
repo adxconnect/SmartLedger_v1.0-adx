@@ -112,37 +112,69 @@ public void showMonthlySummary(String month) {
     System.out.println("Total Expense: ₹" + totalExpense);
     System.out.println("Net Balance: ₹" + (totalIncome - totalExpense));
 }
-public void saveSavingsAccount(SavingsAccount sa) throws SQLException {
-    String sql = "INSERT INTO savings_accounts (account_number, account_type, balance, holder_name, bank_name, ifsc_code) VALUES (?, ?, ?, ?, ?, ?)";
+
+// In src/FinanceManager.java
+
+    // --- NEW METHOD ---
+    public void saveBankAccount(BankAccount ba) throws SQLException {
+        String sql = "INSERT INTO bank_accounts (account_number, holder_name, bank_name, ifsc_code, balance, " +
+                     "account_type, interest_rate, annual_expense, " +
+                     "account_subtype, company_name, business_name) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+            ps.setString(1, ba.getAccountNumber());
+            ps.setString(2, ba.getHolderName());
+            ps.setString(3, ba.getBankName());
+            ps.setString(4, ba.getIfscCode());
+            ps.setDouble(5, ba.getBalance());
+            ps.setString(6, ba.getAccountType());
+            ps.setDouble(7, ba.getInterestRate());
+            ps.setDouble(8, ba.getAnnualExpense());
+            ps.setString(9, ba.getAccountSubtype());
+            ps.setString(10, ba.getCompanyName());
+            ps.setString(11, ba.getBusinessName());
+            
+            ps.executeUpdate();
+        }
+    }
+    // Add this method inside src/FinanceManager.java
+
+public void deleteBankAccount(int accountId) throws SQLException {
+    String sql = "DELETE FROM bank_accounts WHERE id = ?";
     try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
-        ps.setString(1, sa.getAccountNumber());
-        ps.setString(2, sa.getAccountType());
-        ps.setDouble(3, sa.getBalance());
-        ps.setString(4, sa.getHolderName());
-        ps.setString(5, sa.getBankName());
-        ps.setString(6, sa.getIfscCode());
+        ps.setInt(1, accountId);
         ps.executeUpdate();
     }
 }
-public List<SavingsAccount> getAllSavingsAccounts() throws SQLException {
-    List<SavingsAccount> accounts = new ArrayList<>();
-    String sql = "SELECT * FROM savings_accounts";
-    try (Statement stmt = dbHelper.getConnection().createStatement();
-         ResultSet rs = stmt.executeQuery(sql)) {
-        while (rs.next()) {
-            accounts.add(new SavingsAccount(
-                rs.getInt("id"),
-                rs.getString("account_number"),
-                rs.getString("account_type"),
-                rs.getDouble("balance"),
-                rs.getString("holder_name"),
-                rs.getString("bank_name"),
-                rs.getString("ifsc_code")
-            ));
+
+    // --- NEW METHOD ---
+    public List<BankAccount> getAllBankAccounts() throws SQLException {
+        List<BankAccount> accounts = new ArrayList<>();
+        String sql = "SELECT * FROM bank_accounts";
+        
+        try (Statement stmt = dbHelper.getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                accounts.add(new BankAccount(
+                    rs.getInt("id"),
+                    rs.getString("account_number"),
+                    rs.getString("holder_name"),
+                    rs.getString("bank_name"),
+                    rs.getString("ifsc_code"),
+                    rs.getDouble("balance"),
+                    rs.getString("account_type"),
+                    rs.getDouble("interest_rate"),
+                    rs.getDouble("annual_expense"),
+                    rs.getString("account_subtype"),
+                    rs.getString("company_name"),
+                    rs.getString("business_name")
+                ));
+            }
         }
+        return accounts;
     }
-    return accounts;
-}
 
 
 
@@ -206,14 +238,14 @@ public void checkBudgetStatus() {
         System.out.println("Good job! You are within budget.");
     }
 } 
-private List<SavingsAccount> savingsAccounts = new ArrayList<>();
+private List<BankAccount> savingsAccounts = new ArrayList<>();
 private List<FixedDeposit> fixedDeposits = new ArrayList<>();
 private List<RecurringDeposit> recurringDeposits = new ArrayList<>();
 private List<MutualFund> mutualFunds = new ArrayList<>();
 private List<CreditCard> creditCards = new ArrayList<>();
 private List<GoldSilverInvestment> goldSilverInvestments = new ArrayList<>();
 
-public void addSavingsAccount(SavingsAccount sa) { savingsAccounts.add(sa); }
+public void addSavingsAccount(BankAccount sa) { savingsAccounts.add(sa); }
 public void viewSavingsAccounts() { savingsAccounts.forEach(System.out::println); }
 
 public void addFixedDeposit(FixedDeposit fd) { fixedDeposits.add(fd); }
@@ -430,35 +462,53 @@ public void loadGoldSilverInvestments(String filename) {
  private DBHelper dbHelper;
     public FinanceManager() throws SQLException { dbHelper = new DBHelper(); }
 
-    public List<Transaction> getAllTransactions() throws SQLException {
-        List<Transaction> txs = new ArrayList<>();
-        String sql = "SELECT * FROM transactions";
-        try (Statement stmt = dbHelper.getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                txs.add(new Transaction(
-                    rs.getString("date"),
-                    rs.getString("category"),
-                    rs.getString("type"),
-                    rs.getDouble("amount"),
-                    rs.getString("description")
-                ));
-            }
-        }
-        return txs;
-    }
+    // In FinanceManager.java
+public List<Transaction> getAllTransactions() throws SQLException {
+    List<Transaction> txs = new ArrayList<>();
+    // Updated SQL query to select all new columns
+    String sql = "SELECT id, date, DATE_FORMAT(timestamp, '%Y-%m-%d %H:%i:%s') as timestamp_str, day, category, type, payment_method, payee, amount, description FROM transactions ORDER BY id DESC";
 
-    public void saveTransaction(Transaction t) throws SQLException {
-        String sql = "INSERT INTO transactions (date, category, type, amount, description) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
-            ps.setString(1, t.getDate());
-            ps.setString(2, t.getCategory());
-            ps.setString(3, t.getType());
-            ps.setDouble(4, t.getAmount());
-            ps.setString(5, t.getDescription());
-            ps.executeUpdate();
+    try (Statement stmt = dbHelper.getConnection().createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+
+        while (rs.next()) {
+            // Use the new "loading" constructor
+            txs.add(new Transaction(
+                rs.getInt("id"),
+                rs.getString("date"),
+                rs.getString("timestamp_str"), // Get the formatted timestamp
+                rs.getString("day"),
+                rs.getString("category"),
+                rs.getString("type"),
+                rs.getDouble("amount"),
+                rs.getString("description"),
+                rs.getString("payment_method"),
+                rs.getString("payee")
+            ));
         }
     }
+    return txs;
+}
+
+   // In FinanceManager.java
+public void saveTransaction(Transaction t) throws SQLException {
+    // Updated SQL query with new columns
+    String sql = "INSERT INTO transactions (date, category, type, amount, description, day, payment_method, payee) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+        ps.setString(1, t.getDate());
+        ps.setString(2, t.getCategory());
+        ps.setString(3, t.getType());
+        ps.setDouble(4, t.getAmount());
+        ps.setString(5, t.getDescription());
+
+        // Add new fields
+        ps.setString(6, t.getDay());
+        ps.setString(7, t.getPaymentMethod());
+        ps.setString(8, t.getPayee());
+
+        ps.executeUpdate();
+    }
+}
     // In FinanceManager.java
 public void saveFixedDeposit(FixedDeposit fd) throws SQLException {
     String sql = "INSERT INTO fixed_deposits (account_number, principal, rate, tenure_months, start_date, holder_name) VALUES (?, ?, ?, ?, ?, ?)";

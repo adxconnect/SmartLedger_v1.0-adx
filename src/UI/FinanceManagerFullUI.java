@@ -9,15 +9,22 @@ import src.FixedDeposit;
 import src.GoldSilverInvestment;
 import src.MutualFund;
 import src.RecurringDeposit;
-import src.SavingsAccount;
+import src.BankAccount;
 import src.Transaction;
 import java.sql.SQLException;
 import java.util.List;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.border.EmptyBorder;
 
 public class FinanceManagerFullUI extends JFrame {
     private FinanceManager manager;
     private DefaultTableModel transactionModel, bankModel, fdModel, rdModel, ccModel, gssModel, mfModel;
     private JTable transactionTable, bankTable, fdTable;
+
+    private JList<BankAccount> bankAccountList;
+    private DefaultListModel<BankAccount> bankListModel;
+    private JPanel bankDetailPanel;
 
     public FinanceManagerFullUI() {
         setTitle("Finance Manager - MySQL Edition");
@@ -36,7 +43,7 @@ public class FinanceManagerFullUI extends JFrame {
         add(tabs);
 
         // ----- TRANSACTIONS PANEL -----
-        String[] tcols = {"Date", "Category", "Type", "Amount", "Description"};
+        String[] tcols = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount"};
         transactionModel = new DefaultTableModel(tcols, 0);
         transactionTable = new JTable(transactionModel);
         JPanel tPanel = new JPanel(new BorderLayout());
@@ -47,17 +54,66 @@ public class FinanceManagerFullUI extends JFrame {
         tabs.addTab("Transactions", tPanel);
         refreshTransactions();
 
-        // ----- BANK ACCOUNTS PANEL (Empty for now) -----
-        String[] bcols = {"Account Number", "Account Type", "Balance", "Holder", "Bank Name", "IFSC"};
-        bankModel = new DefaultTableModel(bcols, 0);
-        bankTable = new JTable(bankModel);
-        JPanel bPanel = new JPanel(new BorderLayout());
-        bPanel.add(new JScrollPane(bankTable), BorderLayout.CENTER);
-        JButton addBankBtn = new JButton("Add Account");
-        addBankBtn.addActionListener(e -> openSavingsAccountDialog());
-        bPanel.add(addBankBtn, BorderLayout.SOUTH);
-        tabs.addTab("Bank Accounts", bPanel);
-        refreshBanks();
+        // In src/UI/FinanceManagerFullUI.java constructor
+
+// ----- BANK ACCOUNTS PANEL (NEW MASTER-DETAIL VIEW) -----
+
+// 1. Create the main panel
+JPanel bPanel = new JPanel(new BorderLayout());
+
+// 2. Create the Split Pane (this splits the UI left and right)
+JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+splitPane.setDividerLocation(200); // 200 pixels for the left-side list
+
+// 3. Create the Left-Side List (Master List)
+bankListModel = new DefaultListModel<>();
+bankAccountList = new JList<>(bankListModel);
+bankAccountList.setFont(new Font("Arial", Font.PLAIN, 14));
+bankAccountList.setBorder(new EmptyBorder(5, 5, 5, 5));
+
+// 4. Create the Right-Side Panel (Detail View)
+bankDetailPanel = new JPanel(); // This panel will hold the details
+bankDetailPanel.setLayout(new BorderLayout());
+bankDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+// 5. Add list and detail panel to the split pane
+splitPane.setLeftComponent(new JScrollPane(bankAccountList));
+splitPane.setRightComponent(bankDetailPanel);
+
+bPanel.add(splitPane, BorderLayout.CENTER);
+
+// 6. Create the bottom button panel
+JPanel bankButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+
+JButton addBankBtn = new JButton("Add New Account");
+addBankBtn.addActionListener(e -> openBankAccountDialog());
+
+JButton deleteBankBtn = new JButton("Delete Selected Account");
+deleteBankBtn.addActionListener(e -> deleteSelectedAccount()); // New action
+
+bankButtonPanel.add(addBankBtn);
+bankButtonPanel.add(deleteBankBtn);
+
+bPanel.add(bankButtonPanel, BorderLayout.SOUTH);
+
+// 7. Add the main panel to the tabs
+tabs.addTab("Bank Accounts", bPanel);
+
+// 8. Add a listener to update details when we click an item
+bankAccountList.addListSelectionListener(new ListSelectionListener() {
+    @Override
+    public void valueChanged(ListSelectionEvent e) {
+        if (!e.getValueIsAdjusting()) {
+            BankAccount selected = bankAccountList.getSelectedValue();
+            if (selected != null) {
+                showAccountDetails(selected);
+            }
+        }
+    }
+});
+
+// 9. Load the initial data
+refreshBankAccounts();
 
 String[] fdcols = {"Account Number", "Principal", "Rate", "Tenure (months)", "Start Date", "Holder"};
 fdModel = new DefaultTableModel(fdcols, 0);
@@ -118,87 +174,264 @@ refreshMutualFunds();
 
     }
 
-    private void refreshTransactions() {
-        transactionModel.setRowCount(0);
-        try {
-            List<Transaction> txs = manager.getAllTransactions();
-            for (Transaction t : txs) {
-                transactionModel.addRow(new Object[]{t.getDate(), t.getCategory(), t.getType(), t.getAmount(), t.getDescription()});
-            }
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "ErrorLoading: " + e.getMessage());
+    // In FinanceManagerFullUI.java
+private void refreshTransactions() {
+    transactionModel.setRowCount(0); // Clear the table
+    try {
+        List<Transaction> txs = manager.getAllTransactions();
+        for (Transaction t : txs) {
+            // Add new data in the correct column order
+            transactionModel.addRow(new Object[]{
+                t.getId(),
+                t.getDate(),
+                t.getTimestamp(),
+                t.getDay(),
+                t.getPaymentMethod(),
+                t.getCategory(),
+                t.getType(),
+                t.getPayee(),
+                t.getDescription(),
+                t.getAmount()
+            });
         }
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "ErrorLoading: " + e.getMessage());
     }
+}
 
-    private void openTransactionDialog() {
-        JDialog dlg = new JDialog(this, "New Transaction", true);
-        dlg.setLayout(new GridLayout(6, 2));
-        JTextField dateF = new JTextField();
-        JTextField catF = new JTextField();
-        JTextField typeF = new JTextField();
-        JTextField amtF = new JTextField();
-        JTextField descF = new JTextField();
-        dlg.add(new JLabel("Date")); dlg.add(dateF);
-        dlg.add(new JLabel("Category")); dlg.add(catF);
-        dlg.add(new JLabel("Type (Income/Expense)")); dlg.add(typeF);
-        dlg.add(new JLabel("Amount")); dlg.add(amtF);
-        dlg.add(new JLabel("Description")); dlg.add(descF);
-        JButton ok = new JButton("Save"), cancel = new JButton("Cancel");
-        dlg.add(ok); dlg.add(cancel);
-        ok.addActionListener(ev -> {
-            try {
-                Transaction t = new Transaction(
-                        dateF.getText(),
-                        catF.getText(),
-                        typeF.getText(),
-                        Double.parseDouble(amtF.getText()),
-                        descF.getText()
-                );
-                manager.saveTransaction(t);
-                dlg.dispose();
-                refreshTransactions();
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dlg, "Invalid input: " + ex.getMessage());
-            }
-        });
-        cancel.addActionListener(_ -> dlg.dispose());
-        dlg.pack();
-        dlg.setLocationRelativeTo(this);
-        dlg.setVisible(true);
-    }
-    private void openSavingsAccountDialog() {
-    JDialog dlg = new JDialog(this, "Add Bank Account", true);
-    dlg.setLayout(new GridLayout(7,2));
-    JTextField accF = new JTextField();
-    JTextField typeF = new JTextField();
-    JTextField balF = new JTextField();
-    JTextField holderF = new JTextField();
-    JTextField bankF = new JTextField();
-    JTextField ifscF = new JTextField();
-    dlg.add(new JLabel("Account Number")); dlg.add(accF);
-    dlg.add(new JLabel("Account Type (Savings/Current)")); dlg.add(typeF);
-    dlg.add(new JLabel("Balance")); dlg.add(balF);
-    dlg.add(new JLabel("Holder Name")); dlg.add(holderF);
-    dlg.add(new JLabel("Bank Name")); dlg.add(bankF);
-    dlg.add(new JLabel("IFSC Code")); dlg.add(ifscF);
+    // In FinanceManagerFullUI.java
+private void openTransactionDialog() {
+    JDialog dlg = new JDialog(this, "New Transaction", true);
+    // We have more fields, so we need more rows (8)
+    dlg.setLayout(new GridLayout(8, 2, 5, 5)); // (rows, cols, hgap, vgap)
+
+    // Create new UI components
+    JTextField dateF = new JTextField("28-10-2025"); // (Example format)
+    JTextField catF = new JTextField();
+
+    // Dropdown for Income/Expense
+    String[] types = {"Expense", "Income"};
+    JComboBox<String> typeF = new JComboBox<>(types);
+
+    // --- This is your requested dropdown ---
+    String[] paymentMethods = {"UPI", "CASH", "CARD"};
+    JComboBox<String> paymentMethodF = new JComboBox<>(paymentMethods);
+
+    JTextField payeeF = new JTextField(); // New field for Payee
+    JTextField amtF = new JTextField();
+    JTextField descF = new JTextField();
+
+    // Add components to the dialog in order
+    dlg.add(new JLabel("Date (DD-MM-YYYY)"));  dlg.add(dateF);
+    dlg.add(new JLabel("Category"));           dlg.add(catF);
+    dlg.add(new JLabel("Type (Income/Expense)")); dlg.add(typeF);
+    dlg.add(new JLabel("Payment Method"));     dlg.add(paymentMethodF); // New
+    dlg.add(new JLabel("Payee"));               dlg.add(payeeF);        // New
+    dlg.add(new JLabel("Amount"));              dlg.add(amtF);
+    dlg.add(new JLabel("Description"));         dlg.add(descF);
+
     JButton ok = new JButton("Save"), cancel = new JButton("Cancel");
-    dlg.add(ok); dlg.add(cancel);
-    ok.addActionListener(_ -> {
+    dlg.add(ok);
+    dlg.add(cancel);
+
+    // --- Update the Save button's logic ---
+    ok.addActionListener(ev -> {
         try {
-            SavingsAccount sa = new SavingsAccount(
-                accF.getText(), typeF.getText(), Double.parseDouble(balF.getText()),
-                holderF.getText(), bankF.getText(), ifscF.getText()
+            // Get values from the new dropdowns and fields
+            String paymentMethod = (String) paymentMethodF.getSelectedItem();
+            String type = (String) typeF.getSelectedItem();
+            String payee = payeeF.getText();
+
+            // Use our new Transaction constructor
+            Transaction t = new Transaction(
+                    dateF.getText(),
+                    catF.getText(),
+                    type,
+                    Double.parseDouble(amtF.getText()),
+                    descF.getText(),
+                    paymentMethod,
+                    payee
             );
-            manager.saveSavingsAccount(sa);
+
+            manager.saveTransaction(t); // Save to DB
             dlg.dispose();
-            // Add refreshBanks() to reload table from DB
-            refreshBanks();
+            refreshTransactions(); // Refresh the table
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(dlg, "Invalid input: " + ex.getMessage());
         }
     });
+
+    cancel.addActionListener(_ -> dlg.dispose());
+
+    dlg.pack(); // Sizes the dialog automatically
+    dlg.setLocationRelativeTo(this);
+    dlg.setVisible(true);
+}
+// In src/UI/FinanceManagerFullUI.java
+private void refreshBankAccounts() {
+    bankListModel.clear(); // Clear the list
+    try {
+        List<BankAccount> accounts = manager.getAllBankAccounts();
+        for (BankAccount acc : accounts) {
+            bankListModel.addElement(acc); // Add accounts to the list
+        }
+    } catch (Exception e) {
+        JOptionPane.showMessageDialog(this, "ErrorLoading Bank Accounts: " + e.getMessage());
+    }
+}
+// In src/UI/FinanceManagerFullUI.java
+private void openBankAccountDialog() {
+    JDialog dlg = new JDialog(this, "Add New Bank Account", true);
+    dlg.setLayout(new BorderLayout(10, 10));
+
+    // --- Panel for all fields ---
+    JPanel fieldsPanel = new JPanel();
+    fieldsPanel.setLayout(new GridLayout(0, 2, 5, 5));
+    fieldsPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+    // --- Common Fields ---
+    JTextField accNumF = new JTextField();
+    JTextField holderF = new JTextField();
+    JTextField bankF = new JTextField();
+    JTextField ifscF = new JTextField();
+    JTextField balanceF = new JTextField("0.0");
+
+    // --- Type Selection ---
+    String[] accTypes = {"Savings", "Current"};
+    JComboBox<String> typeCombo = new JComboBox<>(accTypes);
+
+    // --- Savings-Only Fields ---
+    JLabel rateLabel = new JLabel("Interest Rate (%)");
+    JTextField rateF = new JTextField("0.0");
+    JLabel expenseLabel = new JLabel("Annual Expense (for interest calc)");
+    JTextField expenseF = new JTextField("0.0");
+
+    // --- Current-Only Fields ---
+    JLabel subtypeLabel = new JLabel("Current Account Type");
+    String[] subTypes = {"Salary", "Business"};
+    JComboBox<String> subtypeCombo = new JComboBox<>(subTypes);
+
+    JLabel companyLabel = new JLabel("Company Name");
+    JTextField companyF = new JTextField();
+
+    JLabel businessLabel = new JLabel("Business Name");
+    JTextField businessF = new JTextField();
+
+    // --- Add Common Fields First ---
+    fieldsPanel.add(new JLabel("Account Type:"));
+    fieldsPanel.add(typeCombo);
+    fieldsPanel.add(new JLabel("Bank Name:"));
+    fieldsPanel.add(bankF);
+    fieldsPanel.add(new JLabel("Account Number:"));
+    fieldsPanel.add(accNumF);
+    fieldsPanel.add(new JLabel("Holder Name:"));
+    fieldsPanel.add(holderF);
+    fieldsPanel.add(new JLabel("IFSC Code:"));
+    fieldsPanel.add(ifscF);
+    fieldsPanel.add(new JLabel("Current Balance:"));
+    fieldsPanel.add(balanceF);
+
+    // --- Add Specific Fields ---
+    fieldsPanel.add(rateLabel); fieldsPanel.add(rateF);
+    fieldsPanel.add(expenseLabel); fieldsPanel.add(expenseF);
+
+    fieldsPanel.add(subtypeLabel); fieldsPanel.add(subtypeCombo);
+    fieldsPanel.add(companyLabel); fieldsPanel.add(companyF);
+    fieldsPanel.add(businessLabel); fieldsPanel.add(businessF);
+
+    // --- Logic to Show/Hide Fields ---
+    typeCombo.addActionListener(e -> {
+        String selected = (String) typeCombo.getSelectedItem();
+        boolean isSavings = "Savings".equals(selected);
+
+        rateLabel.setVisible(isSavings);
+        rateF.setVisible(isSavings);
+        expenseLabel.setVisible(isSavings);
+        expenseF.setVisible(isSavings);
+
+        subtypeLabel.setVisible(!isSavings);
+        subtypeCombo.setVisible(!isSavings);
+
+        // Trigger the sub-type combo's logic
+        subtypeCombo.getActionListeners()[0].actionPerformed(null);
+    });
+
+    subtypeCombo.addActionListener(e -> {
+        boolean isSavings = "Savings".equals(typeCombo.getSelectedItem());
+        if (!isSavings) {
+            String subSelected = (String) subtypeCombo.getSelectedItem();
+            boolean isSalary = "Salary".equals(subSelected);
+            companyLabel.setVisible(isSalary);
+            companyF.setVisible(isSalary);
+            businessLabel.setVisible(!isSalary);
+            businessF.setVisible(!isSalary);
+        } else {
+            companyLabel.setVisible(false);
+            companyF.setVisible(false);
+            businessLabel.setVisible(false);
+            businessF.setVisible(false);
+        }
+    });
+
+    // --- Buttons Panel ---
+    JPanel buttonPanel = new JPanel();
+    JButton ok = new JButton("Save"), cancel = new JButton("Cancel");
+    buttonPanel.add(ok);
+    buttonPanel.add(cancel);
+
+    dlg.add(fieldsPanel, BorderLayout.CENTER);
+    dlg.add(buttonPanel, BorderLayout.SOUTH);
+
+    // --- Save Logic ---
+    ok.addActionListener(_ -> {
+        try {
+            // Get all values, set 0 or "" for non-applicable ones
+            String accountType = (String) typeCombo.getSelectedItem();
+            double balance = Double.parseDouble(balanceF.getText());
+
+            double interestRate = 0.0;
+            double annualExpense = 0.0;
+            if ("Savings".equals(accountType)) {
+                interestRate = Double.parseDouble(rateF.getText());
+                annualExpense = Double.parseDouble(expenseF.getText());
+            }
+
+            String accountSubtype = "";
+            String companyName = "";
+            String businessName = "";
+            if ("Current".equals(accountType)) {
+                accountSubtype = (String) subtypeCombo.getSelectedItem();
+                if ("Salary".equals(accountSubtype)) {
+                    companyName = companyF.getText();
+                } else {
+                    businessName = businessF.getText();
+                }
+            }
+
+            // Use the new BankAccount constructor
+            BankAccount ba = new BankAccount(
+                accNumF.getText(), holderF.getText(), bankF.getText(), ifscF.getText(), balance,
+                accountType, interestRate, annualExpense,
+                accountSubtype, companyName, businessName
+            );
+
+            manager.saveBankAccount(ba);
+            dlg.dispose();
+            refreshBankAccounts(); // Refresh the new list
+
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(dlg, "Invalid input: " + ex.getMessage());
+        }
+    });
+
     cancel.addActionListener(ev -> dlg.dispose());
-    dlg.pack(); dlg.setLocationRelativeTo(this); dlg.setVisible(true);
+
+    // --- Initialize View ---
+    typeCombo.setSelectedItem("Savings");
+
+    dlg.pack();
+    dlg.setLocationRelativeTo(this);
+    dlg.setVisible(true);
 }
 // Also inside your FinanceManagerFullUI class:
 private void openFixedDepositDialog() {
@@ -246,16 +479,6 @@ private void refreshFixedDeposits() {
     }
 }
 
-private void refreshBanks() {
-    bankModel.setRowCount(0);
-    try {
-        for (SavingsAccount sa : manager.getAllSavingsAccounts()) {
-            bankModel.addRow(sa.toObjectArray());
-        }
-    } catch (Exception e) {
-        JOptionPane.showMessageDialog(this, "ErrorLoading: " + e.getMessage());
-    }
-}
 private void openRecurringDepositDialog() {
     JDialog dlg = new JDialog(this, "Add Recurring Deposit", true);
     dlg.setLayout(new GridLayout(7, 2));
@@ -419,6 +642,108 @@ private void openMutualFundDialog() {
     dlg.pack(); dlg.setLocationRelativeTo(this); dlg.setVisible(true);
 }
 
+/**
+ * This method builds the beautiful detail panel on the right side
+ * based on which account is selected.
+ */
+private void showAccountDetails(BankAccount acc) {
+    bankDetailPanel.removeAll(); // Clear old details
+
+    // Use a 1-column grid to stack details nicely
+    JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10));
+
+    // --- Title (Bank Name) ---
+    JLabel title = new JLabel(acc.getBankName());
+    title.setFont(new Font("Arial", Font.BOLD, 24));
+    detailGrid.add(title);
+
+    // --- Sub-Title (Account Type) ---
+    String accType = acc.getAccountType();
+    if ("Current".equals(accType)) {
+        accType += " (" + acc.getAccountSubtype() + ")";
+    }
+    JLabel subTitle = new JLabel(accType + " Account");
+    subTitle.setFont(new Font("Arial", Font.ITALIC, 18));
+    detailGrid.add(subTitle);
+
+    // --- Balance ---
+    JLabel balanceLabel = new JLabel(String.format("Balance: ₹%.2f", acc.getBalance()));
+    balanceLabel.setFont(new Font("Arial", Font.BOLD, 20));
+    detailGrid.add(balanceLabel);
+
+    // --- Common Details ---
+    detailGrid.add(new JSeparator());
+    detailGrid.add(new JLabel("Holder: " + acc.getHolderName()));
+    detailGrid.add(new JLabel("Account #: " + acc.getAccountNumber()));
+    detailGrid.add(new JLabel("IFSC: " + acc.getIfscCode()));
+
+    // --- Specific Details ---
+    if ("Savings".equals(acc.getAccountType())) {
+        detailGrid.add(new JSeparator());
+        detailGrid.add(new JLabel("Interest Rate: " + acc.getInterestRate() + "%"));
+        detailGrid.add(new JLabel("Annual Expenses: ₹" + acc.getAnnualExpense()));
+
+        // Calculated Field
+        double interestAmount = acc.getEstimatedAnnualInterest();
+        JLabel calcLabel = new JLabel(String.format("Estimated Annual Interest: ₹%.2f", interestAmount));
+        calcLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        detailGrid.add(calcLabel);
+
+    } else if ("Current".equals(acc.getAccountType())) {
+        detailGrid.add(new JSeparator());
+        if ("Salary".equals(acc.getAccountSubtype())) {
+            detailGrid.add(new JLabel("Company: " + acc.getCompanyName()));
+        } else if ("Business".equals(acc.getAccountSubtype())) {
+            detailGrid.add(new JLabel("Business: " + acc.getBusinessName()));
+        }
+    }
+
+    bankDetailPanel.add(detailGrid, BorderLayout.NORTH);
+
+    // Refresh the panel
+    bankDetailPanel.revalidate();
+    bankDetailPanel.repaint();
+}
+// Add this new method to src/UI/FinanceManagerFullUI.java
+
+private void deleteSelectedAccount() {
+    // 1. Get the selected account from the list
+    BankAccount selected = bankAccountList.getSelectedValue();
+
+    // 2. Check if anything is selected
+    if (selected == null) {
+        JOptionPane.showMessageDialog(this, "Please select an account to delete.", "No Account Selected", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    // 3. Show a confirmation dialog
+    int choice = JOptionPane.showConfirmDialog(
+        this, 
+        "Are you sure you want to delete the account:\n" + selected.toString() + "?", 
+        "Confirm Delete", 
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.QUESTION_MESSAGE
+    );
+
+    // 4. If they clicked "Yes", proceed with deletion
+    if (choice == JOptionPane.YES_OPTION) {
+        try {
+            // Call the new method in FinanceManager
+            manager.deleteBankAccount(selected.getId());
+
+            // Refresh the list
+            refreshBankAccounts();
+
+            // Clear the detail panel
+            bankDetailPanel.removeAll();
+            bankDetailPanel.revalidate();
+            bankDetailPanel.repaint();
+
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error deleting account: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+}
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new FinanceManagerFullUI().setVisible(true));
