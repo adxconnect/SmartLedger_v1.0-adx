@@ -1,5 +1,5 @@
 package src;
-public class CreditCard {
+public class Card {
     
     private String cardName;
     private double limit, expenses, amountToPay;
@@ -9,7 +9,7 @@ public class CreditCard {
     }
     public int getDaysLeftToPay() { return daysLeftToPay; }
 
-    public CreditCard(String cardName, double limit, double expenses, double amountToPay, int daysLeftToPay) {
+    public Card(String cardName, double limit, double expenses, double amountToPay, int daysLeftToPay) {
         this.cardName = cardName;
         this.limit = limit;
         this.expenses = expenses;
@@ -44,14 +44,14 @@ public class CreditCard {
         return cardName + "," + limit + "," + expenses + "," + amountToPay + "," + daysLeftToPay;
     }
 
-    public static CreditCard fromCSV(String line) {
+    public static Card fromCSV(String line) {
         String[] parts = line.split("\t", -1);
         if(parts.length < 5) {
         System.out.println("Skipping corrupted credit card line: " + line);
         // Return a dummy credit card or throw your own exception
-        return new CreditCard("", 0, 0, 0, 0);
+        return new Card("", 0, 0, 0, 0);
     }
-        return new CreditCard(
+        return new Card(
             parts[0],
             Double.parseDouble(parts[1]),
             Double.parseDouble(parts[2]),

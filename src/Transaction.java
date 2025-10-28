@@ -1,9 +1,15 @@
 package src;
 
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.LinkedHashMap; // We want to keep the months in order
+import java.util.List;
+import java.util.Map;
 
 public class Transaction {
     // New fields
