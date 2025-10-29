@@ -1,4 +1,6 @@
 package src.UI;
+// We'll also add a placeholder for the dialog we will create
+// import src.UI.AddEditTaxProfileDialog;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeEvent;
@@ -19,9 +21,12 @@ import src.Investment;
 // Removed src.RecycleBinDialog import (using specific ones now)
 import src.Transaction;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.StringJoiner;
+
 import src.UI.InvestmentRecycleBinDialog;
 import src.Deposit; // Import for Deposit class
 import src.UI.AddEditTaxProfileDialog;
@@ -33,9 +38,29 @@ import src.UI.ShowOtpDialog;
 import src.UI.EnterOtpDialog;
 import src.UI.SensitiveCardDetailsDialog;
 import src.TaxProfile;
-// We'll also add a placeholder for the dialog we will create
-// import src.UI.AddEditTaxProfileDialog;
+import src.Loan;
+// We'll also add placeholders for the dialogs
+import src.UI.AddEditLoanDialog;
+import src.UI.LoanRecycleBinDialog;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintWriter;
+
+// Imports for Excel (Apache POI)
+// Removed Excel (Apache POI) imports as XLSX export is no longer supported
+// Imports for PDF (iText)
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.Phrase;
+import com.itextpdf.text.pdf.PdfPCell;
+import com.itextpdf.text.pdf.PdfPTable;
+import com.itextpdf.text.pdf.PdfWriter;
+import com.itextpdf.text.FontFactory;
+import com.itextpdf.text.BaseColor;
+import com.itextpdf.text.Element;
 
 public class FinanceManagerFullUI extends JFrame {
     private FinanceManager manager;
@@ -68,6 +93,10 @@ public class FinanceManagerFullUI extends JFrame {
     private JList<TaxProfile> taxProfileList;
     private DefaultListModel<TaxProfile> taxProfileListModel;
     private JPanel taxDetailPanel;
+    // --- Loan Tab Variables ---
+private JList<Loan> loanList;
+private DefaultListModel<Loan> loanListModel;
+private JPanel loanDetailPanel;
 
 
     public FinanceManagerFullUI() {
@@ -107,6 +136,8 @@ public class FinanceManagerFullUI extends JFrame {
         JButton addTxnBtn = new JButton("Add Transaction");
         JButton deleteTxnBtn = new JButton("Delete Selected Transaction");
         JButton recycleBinBtn = new JButton("Recycle Bin");
+        JButton exportButton = new JButton("Export to File...");
+        tTopPanel.add(exportButton);
         tBottomPanel.add(addTxnBtn);
         tBottomPanel.add(deleteTxnBtn);
         tBottomPanel.add(recycleBinBtn);
@@ -120,6 +151,7 @@ public class FinanceManagerFullUI extends JFrame {
         deleteMonthButton.addActionListener(e -> deleteSelectedMonth());
         deleteYearButton.addActionListener(e -> deleteSelectedYear());
         monthTabs.addChangeListener(e -> deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0));
+        exportButton.addActionListener(e -> openExportDialog());
         // Initial Load
         loadYearFilter();
         refreshTransactions();
@@ -133,7 +165,7 @@ public class FinanceManagerFullUI extends JFrame {
         splitPane.setDividerLocation(200);
         bankListModel = new DefaultListModel<>();
         bankAccountList = new JList<>(bankListModel);
-        bankAccountList.setFont(new Font("Arial", Font.PLAIN, 14));
+        bankAccountList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
         bankAccountList.setBorder(new EmptyBorder(5, 5, 5, 5));
         bankDetailPanel = new JPanel(new BorderLayout());
         bankDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -166,7 +198,7 @@ public class FinanceManagerFullUI extends JFrame {
         depositSplitPane.setDividerLocation(200);
         depositListModel = new DefaultListModel<>();
         depositList = new JList<>(depositListModel);
-        depositList.setFont(new Font("Arial", Font.PLAIN, 14));
+        depositList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
         depositList.setBorder(new EmptyBorder(5, 5, 5, 5));
         depositSplitPane.setLeftComponent(new JScrollPane(depositList));
         depositDetailPanel = new JPanel(new BorderLayout());
@@ -204,7 +236,7 @@ public class FinanceManagerFullUI extends JFrame {
         investmentSplitPane.setDividerLocation(220);
         investmentListModel = new DefaultListModel<>();
         investmentList = new JList<>(investmentListModel);
-        investmentList.setFont(new Font("Arial", Font.PLAIN, 14));
+        investmentList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
         investmentList.setBorder(new EmptyBorder(5, 5, 5, 5));
         investmentSplitPane.setLeftComponent(new JScrollPane(investmentList));
 
@@ -253,7 +285,7 @@ taxSplitPane.setDividerLocation(220); // Adjust as needed
 // --- Left Side: List of Tax Profiles ---
 taxProfileListModel = new DefaultListModel<>();
 taxProfileList = new JList<>(taxProfileListModel);
-taxProfileList.setFont(new Font("Arial", Font.PLAIN, 14));
+taxProfileList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
 taxProfileList.setBorder(new EmptyBorder(5, 5, 5, 5));
 taxSplitPane.setLeftComponent(new JScrollPane(taxProfileList));
 
@@ -289,7 +321,57 @@ deleteTaxProfileBtn.addActionListener(e -> deleteSelectedTaxProfile()); // New m
 
 // Load initial data
 refreshTaxProfiles(); // New method
+// =========================================================
+// ===         NEW LOANS / EMI PANEL (MASTER-DETAIL)     ===
+// =========================================================
+JPanel lPanel = new JPanel(new BorderLayout());
 
+// --- Split Pane ---
+JSplitPane loanSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+loanSplitPane.setDividerLocation(220); // Adjust as needed
+
+// --- Left Side: List of Loans ---
+loanListModel = new DefaultListModel<>();
+loanList = new JList<>(loanListModel);
+loanList.setFont(new Font("Arial", Font.PLAIN, 14));
+loanList.setBorder(new EmptyBorder(5, 5, 5, 5));
+loanSplitPane.setLeftComponent(new JScrollPane(loanList));
+
+// --- Right Side: Detail Panel ---
+loanDetailPanel = new JPanel(new BorderLayout());
+loanDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+loanSplitPane.setRightComponent(loanDetailPanel);
+
+lPanel.add(loanSplitPane, BorderLayout.CENTER);
+
+// --- Bottom Button Panel ---
+JPanel loanButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+JButton addLoanBtn = new JButton("Add New Loan");
+JButton deleteLoanBtn = new JButton("Delete Selected Loan");
+JButton loanRecycleBinBtn = new JButton("Loan Recycle Bin");
+
+loanButtonPanel.add(addLoanBtn);
+loanButtonPanel.add(deleteLoanBtn);
+loanButtonPanel.add(loanRecycleBinBtn);
+lPanel.add(loanButtonPanel, BorderLayout.SOUTH);
+
+tabs.addTab("Loans / EMI", lPanel); // Add the new tab
+
+// --- Action Listeners ---
+loanList.addListSelectionListener(e -> {
+    if (!e.getValueIsAdjusting()) {
+        Loan selected = loanList.getSelectedValue();
+        showLoanDetails(selected); // New method we will add
+    }
+});
+
+addLoanBtn.addActionListener(e -> openAddEditLoanDialog(null)); // New method
+deleteLoanBtn.addActionListener(e -> deleteSelectedLoan()); // New method
+loanRecycleBinBtn.addActionListener(e -> openLoanRecycleBin()); // New method
+
+// Load initial data
+refreshLoans(); // New method
 // =========================================================
 // ===         NEW CARDS PANEL (MASTER-DETAIL)           ===
 // =========================================================
@@ -302,7 +384,7 @@ cardSplitPane.setDividerLocation(220); // Adjust width for card names
 // --- Left Side: List of Cards ---
 cardListModel = new DefaultListModel<>();
 cardList = new JList<>(cardListModel);
-cardList.setFont(new Font("Arial", Font.PLAIN, 14));
+cardList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
 cardList.setBorder(new EmptyBorder(5, 5, 5, 5));
 cardSplitPane.setLeftComponent(new JScrollPane(cardList));
 
@@ -526,15 +608,15 @@ refreshCards(); // Method to be added below
         } else {
             JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10));
             JLabel title = new JLabel(acc.getBankName());
-            title.setFont(new Font("Arial", Font.BOLD, 24));
+            title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 24));
             detailGrid.add(title);
             String accType = acc.getAccountType();
             if ("Current".equals(accType)) accType += " (" + acc.getAccountSubtype() + ")";
             JLabel subTitle = new JLabel(accType + " Account");
-            subTitle.setFont(new Font("Arial", Font.ITALIC, 18));
+            subTitle.setFont(new java.awt.Font("Arial", java.awt.Font.ITALIC, 18));
             detailGrid.add(subTitle);
             JLabel balanceLabel = new JLabel(String.format("Balance: ₹%.2f", acc.getBalance()));
-            balanceLabel.setFont(new Font("Arial", Font.BOLD, 20));
+            balanceLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 20));
             detailGrid.add(balanceLabel);
             detailGrid.add(new JSeparator());
             detailGrid.add(new JLabel("Holder: " + acc.getHolderName()));
@@ -546,7 +628,7 @@ refreshCards(); // Method to be added below
                 detailGrid.add(new JLabel("Annual Expenses: ₹" + acc.getAnnualExpense()));
                 double interestAmount = acc.getEstimatedAnnualInterest();
                 JLabel calcLabel = new JLabel(String.format("Estimated Annual Interest: ₹%.2f", interestAmount));
-                calcLabel.setFont(new Font("Arial", Font.BOLD, 14));
+                calcLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 14));
                 detailGrid.add(calcLabel);
             } else if ("Current".equals(acc.getAccountType())) {
                  detailGrid.add(new JSeparator());
@@ -739,7 +821,7 @@ refreshCards(); // Method to be added below
         JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10));
         String titleText = deposit.getDepositType() + ": " + (deposit.getHolderName() != null && !deposit.getHolderName().isEmpty() ? deposit.getHolderName() : (deposit.getDescription() != null && !deposit.getDescription().isEmpty() ? deposit.getDescription() : "Deposit #" + deposit.getId()));
         JLabel title = new JLabel(titleText);
-        title.setFont(new Font("Arial", Font.BOLD, 18));
+        title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
         detailGrid.add(title);
         detailGrid.add(new JSeparator());
         if (deposit.getGoal() != null && !deposit.getGoal().isEmpty()) detailGrid.add(new JLabel("Goal: " + deposit.getGoal()));
@@ -874,7 +956,7 @@ private void showCardDetails(Card card) {
     JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column
 
     JLabel title = new JLabel(card.getCardName());
-    title.setFont(new Font("Arial", Font.BOLD, 18));
+    title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
     detailGrid.add(title);
     detailGrid.add(new JLabel(card.getCardType()));
     detailGrid.add(new JLabel("Number: " + card.getMaskedCardNumber())); // Show masked number
@@ -1048,7 +1130,7 @@ public void refreshAfterCardRestore() {
             JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column layout
             String titleName = (inv.getDescription() != null && !inv.getDescription().isEmpty()) ? inv.getDescription() : inv.getTickerSymbol();
             JLabel title = new JLabel(titleName + " (" + inv.getAssetType() + ")");
-            title.setFont(new Font("Arial", Font.BOLD, 18));
+            title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
             detailGrid.add(title);
             detailGrid.add(new JLabel("Holder: " + inv.getHolderName()));
 
@@ -1068,11 +1150,11 @@ public void refreshAfterCardRestore() {
             JLabel pnlLabel = new JLabel(pnlText);
             // Set color based on profit or loss
             if (pnl > 0) {
-                pnlLabel.setForeground(new Color(0, 128, 0)); // Dark Green
+                pnlLabel.setForeground(new java.awt.Color(0, 128, 0)); // Dark Green
             } else if (pnl < 0) {
-                pnlLabel.setForeground(Color.RED);
+                pnlLabel.setForeground(java.awt.Color.RED);
             }
-            pnlLabel.setFont(new Font("Arial", Font.BOLD, 14));
+            pnlLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 14));
             detailGrid.add(pnlLabel);
 
             detailGrid.add(new JSeparator());
@@ -1220,7 +1302,7 @@ private void showTaxProfileDetails(TaxProfile tp) {
         JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column layout
 
         JLabel title = new JLabel(tp.getProfileName() + " (" + tp.getFinancialYear() + ")");
-        title.setFont(new Font("Arial", Font.BOLD, 18));
+        title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
         detailGrid.add(title);
         detailGrid.add(new JLabel("Profile Type: " + tp.getProfileType()));
 
@@ -1228,18 +1310,18 @@ private void showTaxProfileDetails(TaxProfile tp) {
 
         // --- Core Calculation Display ---
         JLabel grossLabel = new JLabel(String.format("Gross Income: ₹%.2f", tp.getGrossIncome()));
-        grossLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+        grossLabel.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
         detailGrid.add(grossLabel);
 
         JLabel deducLabel = new JLabel(String.format("Total Deductions: - ₹%.2f", tp.getTotalDeductions()));
-        deducLabel.setForeground(Color.RED);
-        deducLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+        deducLabel.setForeground(java.awt.Color.RED);
+        deducLabel.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
         detailGrid.add(deducLabel);
 
         detailGrid.add(new JSeparator());
 
         JLabel taxableLabel = new JLabel(String.format("Total Taxable Income: ₹%.2f", tp.getTaxableIncome()));
-        taxableLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        taxableLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 16));
         detailGrid.add(taxableLabel);
 
         detailGrid.add(new JSeparator());
@@ -1301,6 +1383,388 @@ private void deleteSelectedTaxProfile() {
             ex.printStackTrace();
         }
     }
+}
+/**
+     * 1. Shows a dialog to choose export options (Month/Year, Format).
+     */
+    private void openExportDialog() {
+        // --- Create the options panel ---
+        JPanel panel = new JPanel(new GridLayout(0, 1, 10, 10));
+        
+        // Option 1: Scope (Month vs. Year)
+        JRadioButton monthRadio = new JRadioButton("Export Current Month Only");
+        JRadioButton yearRadio = new JRadioButton("Export Entire Selected Year");
+        ButtonGroup scopeGroup = new ButtonGroup();
+        scopeGroup.add(monthRadio); scopeGroup.add(yearRadio);
+        monthRadio.setSelected(true);
+        
+        JPanel scopePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        scopePanel.setBorder(BorderFactory.createTitledBorder("Scope"));
+        scopePanel.add(monthRadio); scopePanel.add(yearRadio);
+
+    // Option 2: Format (CSV, PDF)
+    JRadioButton csvRadio = new JRadioButton("CSV (Comma Separated)");
+    JRadioButton pdfRadio = new JRadioButton("PDF Document");
+    ButtonGroup formatGroup = new ButtonGroup();
+    formatGroup.add(csvRadio); formatGroup.add(pdfRadio);
+    csvRadio.setSelected(true);
+        
+        JPanel formatPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    formatPanel.setBorder(BorderFactory.createTitledBorder("Format"));
+    formatPanel.add(csvRadio); formatPanel.add(pdfRadio);
+        
+        panel.add(scopePanel);
+        panel.add(formatPanel);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Export Options", 
+                                                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        
+        if (result != JOptionPane.OK_OPTION) {
+            return; // User cancelled
+        }
+
+        // --- Get selected options ---
+        String scope = monthRadio.isSelected() ? "Month" : "Year";
+    String format = csvRadio.isSelected() ? "CSV" : "PDF";
+        
+        // --- Get the data to export ---
+        List<Transaction> dataToExport = new ArrayList<>();
+        String defaultFilename = "";
+        
+        try {
+            if (scope.equals("Month")) {
+                JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
+                if (currentScrollPane == null) {
+                    JOptionPane.showMessageDialog(this, "No month tab selected.", "Export Error", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                JTable currentTable = (JTable) currentScrollPane.getViewport().getView();
+                String monthYear = (String) currentTable.getClientProperty("monthYear");
+                
+                // Get filtered/sorted data directly from the JTable
+                for (int i = 0; i < currentTable.getRowCount(); i++) {
+                    int modelRow = currentTable.convertRowIndexToModel(i);
+                    int transactionId = (int) currentTable.getModel().getValueAt(modelRow, 0); // Get ID from model
+                    
+                    // Find this transaction in the full list (this is inefficient but simple)
+                    // A better way would be to get the data directly from the table row
+                    // Let's just export what's visible in the table
+                     dataToExport.add(new Transaction(
+                         (int) currentTable.getValueAt(i, 0), // S.No (ID)
+                         (String) currentTable.getValueAt(i, 1), // Date
+                         (String) currentTable.getValueAt(i, 2), // Timestamp
+                         (String) currentTable.getValueAt(i, 3), // Day
+                         (String) currentTable.getValueAt(i, 5), // Category
+                         (String) currentTable.getValueAt(i, 6), // Type
+                         (Double) currentTable.getValueAt(i, 9), // Amount
+                         (String) currentTable.getValueAt(i, 8), // Description
+                         (String) currentTable.getValueAt(i, 4), // Payment Method
+                         (String) currentTable.getValueAt(i, 7)  // Payee
+                     ));
+                }
+                defaultFilename = getMonthName(monthYear) + "_Transactions";
+                
+            } else { // "Year"
+                String selectedYear = (String) yearComboBox.getSelectedItem();
+                if (selectedYear == null || selectedYear.equals("All Years")) {
+                     dataToExport = manager.getAllTransactionsForYear("All Years");
+                     defaultFilename = "All_Transactions";
+                } else {
+                     dataToExport = manager.getAllTransactionsForYear(selectedYear);
+                     defaultFilename = selectedYear + "_Transactions";
+                }
+            }
+            
+            if (dataToExport.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No transactions found to export.", "Info", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            
+            // --- Show Save Dialog ---
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Save Export File");
+            fileChooser.setSelectedFile(new File(defaultFilename + "." + format.toLowerCase()));
+            
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                
+                // --- Call the correct writer ---
+                if (format.equals("CSV")) {
+                    writeToCsv(dataToExport, file);
+                } else if (format.equals("PDF")) {
+                    writeToPdf(dataToExport, file);
+                }
+                JOptionPane.showMessageDialog(this, "Export successful!\nSaved to: " + file.getAbsolutePath(), "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+            }
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "An error occurred during export: " + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace();
+        }
+    }
+
+    // Excel (.xlsx) export removed by request — only CSV and PDF remain.
+
+    /**
+     * 3. Writes a List of Transactions to a .csv file.
+     */
+    private void writeToCsv(List<Transaction> data, File file) throws IOException {
+        String[] columns = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount"};
+        
+        try (PrintWriter pw = new PrintWriter(new FileWriter(file))) {
+            // Write header
+            pw.println(String.join(",", columns));
+            
+            // Write data
+            for (Transaction t : data) {
+                StringJoiner sj = new StringJoiner(",");
+                sj.add(String.valueOf(t.getId()));
+                sj.add("\"" + t.getDate() + "\"");
+                sj.add("\"" + t.getTimestamp() + "\"");
+                sj.add("\"" + t.getDay() + "\"");
+                sj.add("\"" + t.getPaymentMethod() + "\"");
+                sj.add("\"" + t.getCategory() + "\"");
+                sj.add("\"" + t.getType() + "\"");
+                sj.add("\"" + t.getPayee() + "\"");
+                // Escape quotes in description
+                String desc = t.getDescription().replace("\"", "\"\"");
+                sj.add("\"" + desc + "\"");
+                sj.add(String.valueOf(t.getAmount()));
+                pw.println(sj.toString());
+            }
+        }
+    }
+    
+    /**
+     * 4. Writes a List of Transactions to a .pdf file.
+     * Requires iText library.
+     */
+    private void writeToPdf(List<Transaction> data, File file) {
+        // --- PDF STUB ---
+        // This method requires the iText library (e.g., itextpdf-5.5.13.3.jar)
+        // in your /lib folder.
+        
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            Document document = new Document();
+            PdfWriter.getInstance(document, fos);
+            document.open();
+            
+            // Title
+            com.itextpdf.text.Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, BaseColor.BLACK);
+            document.add(new Paragraph("Transaction Report", titleFont));
+            document.add(new Paragraph(" ")); // Empty line
+            
+            // Create Table
+            String[] columns = {"S.No", "Date", "Category", "Type", "Payee", "Description", "Amount"};
+            PdfPTable table = new PdfPTable(columns.length);
+            table.setWidthPercentage(100);
+            
+            // Add Header
+            com.itextpdf.text.Font headFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD);
+            for (String header : columns) {
+                PdfPCell cell = new PdfPCell(new Phrase(header, headFont));
+                cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
+                cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                table.addCell(cell);
+            }
+            
+            // Add Data Rows
+            com.itextpdf.text.Font cellFont = FontFactory.getFont(FontFactory.HELVETICA, 8);
+            for (Transaction t : data) {
+                table.addCell(new Phrase(String.valueOf(t.getId()), cellFont));
+                table.addCell(new Phrase(t.getDate(), cellFont));
+                table.addCell(new Phrase(t.getCategory(), cellFont));
+                table.addCell(new Phrase(t.getType(), cellFont));
+                table.addCell(new Phrase(t.getPayee(), cellFont));
+                table.addCell(new Phrase(t.getDescription(), cellFont));
+                
+                // Align amount to the right
+                PdfPCell amountCell = new PdfPCell(new Phrase(String.format("%.2f", t.getAmount()), cellFont));
+                amountCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+                table.addCell(amountCell);
+            }
+            
+            document.add(table);
+            document.close();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error writing PDF file: " + e.getMessage() +
+                "\n\nMake sure the iText library (itextpdf.jar) is in your /lib folder.", 
+                "PDF Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    // ==================================================================
+// ===               LOAN / EMI UI METHODS                      ===
+// ==================================================================
+
+/**
+ * Refreshes the list of loans on the left side.
+ * Make this PUBLIC so dialogs can call it.
+ */
+public void refreshLoans() {
+    System.out.println("--- Refreshing Loans ---");
+    loanListModel.clear();
+    loanDetailPanel.removeAll();
+    loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    loanDetailPanel.revalidate();
+    loanDetailPanel.repaint();
+    try {
+        List<Loan> loans = manager.getAllLoans();
+        System.out.println("Fetched " + loans.size() + " loans.");
+        for (Loan l : loans) {
+            loanListModel.addElement(l);
+        }
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "Error loading loans: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        e.printStackTrace();
+    }
+}
+
+/**
+ * Shows calculated details for the selected loan.
+ */
+private void showLoanDetails(Loan loan) {
+    loanDetailPanel.removeAll();
+    if (loan == null) {
+        loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    } else {
+        JPanel detailGrid = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 5, 4, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
+
+        int row = 0;
+
+        // --- Title ---
+        JLabel title = new JLabel(loan.getLenderName() + " - " + loan.getLoanType());
+        title.setFont(new Font("Arial", Font.BOLD, 18));
+        gbc.gridx = 0; gbc.gridy = row++; gbc.gridwidth = 2;
+        detailGrid.add(title, gbc);
+
+        // --- EMI ---
+        JLabel emiLabel = new JLabel(String.format("Monthly EMI: ₹%.2f", loan.getEmiAmount()));
+        emiLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        emiLabel.setForeground(new Color(0, 100, 0)); // Dark green
+        gbc.gridy = row++;
+        detailGrid.add(emiLabel, gbc);
+
+        gbc.gridy = row++; gbc.insets = new Insets(5, 0, 5, 0);
+        detailGrid.add(new JSeparator(), gbc);
+        gbc.insets = new Insets(4, 5, 4, 5);
+
+        // --- Loan Details ---
+        gbc.gridwidth = 1; // Reset to 1 column
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Principal Amount:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", loan.getPrincipalAmount())), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Annual Interest Rate:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("%.2f %%", loan.getInterestRate())), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Tenure:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(loan.getTenureMonths() + " months"), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Start Date:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(loan.getStartDate() != null ? loan.getStartDate() : "N/A"), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Status:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(loan.getStatus()), gbc);
+        row++;
+
+        // --- Total Payment Details ---
+        gbc.gridy = row++; gbc.gridwidth = 2; gbc.insets = new Insets(5, 0, 5, 0);
+        detailGrid.add(new JSeparator(), gbc);
+        gbc.insets = new Insets(4, 5, 4, 5);
+        gbc.gridwidth = 1;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Principal Paid:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", loan.getPrincipalAmount())), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Interest Paid:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", loan.getTotalInterest())), gbc);
+        row++;
+
+        JLabel totalPayLabel = new JLabel(String.format("₹%.2f", loan.getTotalPayment()));
+        totalPayLabel.setFont(new Font("Arial", Font.BOLD, 12));
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Payment:"), gbc);
+        gbc.gridx = 1; detailGrid.add(totalPayLabel, gbc);
+        row++;
+
+        // --- Buttons ---
+        JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton editButton = new JButton("Edit / Mark as Paid");
+        editButton.addActionListener(e -> openAddEditLoanDialog(loan));
+        buttonSubPanel.add(editButton);
+
+        loanDetailPanel.add(detailGrid, BorderLayout.NORTH);
+        loanDetailPanel.add(buttonSubPanel, BorderLayout.CENTER);
+    }
+    loanDetailPanel.revalidate();
+    loanDetailPanel.repaint();
+}
+
+/**
+ * Opens the dialog to add/edit a loan (Placeholder).
+ */
+/**
+ * Opens the dialog to add/edit a loan.
+ */
+private void openAddEditLoanDialog(Loan loanToEdit) {
+    AddEditLoanDialog dialog = new AddEditLoanDialog(this, manager, loanToEdit, this);
+    dialog.setVisible(true);
+    // Refresh is handled by the dialog on success
+}
+
+/**
+ * Deletes the selected loan (moves to recycle bin).
+ */
+private void deleteSelectedLoan() {
+    Loan selected = loanList.getSelectedValue();
+    if (selected == null) {
+        JOptionPane.showMessageDialog(this, "Please select a loan to delete.", "No Selection", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    int choice = JOptionPane.showConfirmDialog(this,
+        "Move this loan to the recycle bin?\n" + selected.toString(),
+        "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+    if (choice == JOptionPane.YES_OPTION) {
+        try {
+            manager.moveLoanToRecycleBin(selected.getId());
+            refreshLoans(); // Refresh the list
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error deleting loan: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace();
+        }
+    }
+}
+
+/**
+ * Opens the Loan Recycle Bin dialog (Placeholder).
+ */
+/**
+ * Opens the Loan Recycle Bin dialog.
+ */
+private void openLoanRecycleBin() {
+     LoanRecycleBinDialog dialog = new LoanRecycleBinDialog(this, manager, this);
+     dialog.setVisible(true);
+     // The main list will refresh via the callback 'refreshAfterLoanRestore' if needed
+}
+
+/**
+ * Callback method for the Loan Recycle Bin dialog (Placeholder).
+ * Make sure this is PUBLIC.
+ */
+public void refreshAfterLoanRestore() {
+    System.out.println("Refreshing loans list after restore...");
+    refreshLoans();
 }
 
 } 

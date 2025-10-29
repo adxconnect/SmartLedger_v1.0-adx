@@ -8,9 +8,12 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import src.db.DBHelper;
 import java.sql.*;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import src.TaxProfile;
+import src.Loan;
 // Same-package types don't require imports
 
 public class FinanceManager {
@@ -365,7 +368,7 @@ public class FinanceManager {
             sql += "WHERE YEAR(date) = ? ";
         }
         
-        sql += "ORDER BY date DESC, id DESC";
+        sql += "ORDER BY date ASC, id ASC";
 
         try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
             
@@ -1508,6 +1511,264 @@ stmt.execute("CREATE TABLE IF NOT EXISTS tax_profiles (" +
             System.err.println("!!! ERROR deleting tax profile (SQL) !!!"); 
             e.printStackTrace(); 
             throw e; 
+        }
+    }
+    /**
+     * Fetches all transactions for a specific year as a single list.
+     * @param year The year to fetch (e.g., "2025")
+     * @return A List of all transactions for that year.
+     * @throws SQLException
+     */
+    public List<Transaction> getAllTransactionsForYear(String year) throws SQLException {
+        List<Transaction> transactions = new ArrayList<>();
+        String sql = "SELECT id, date, DATE_FORMAT(timestamp, '%Y-%m-%d %H:%i:%s') as timestamp_str, " +
+                     "day, category, type, payment_method, payee, amount, description " +
+                     "FROM transactions ";
+
+        if (year != null && !year.equals("All Years")) {
+            sql += "WHERE YEAR(date) = ? ";
+        }
+        sql += "ORDER BY date ASC, id ASC"; // Keep ascending order
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            if (year != null && !year.equals("All Years")) {
+                ps.setInt(1, Integer.parseInt(year));
+            }
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                try {
+                    java.sql.Date sqlDate = rs.getDate("date");
+                    String formattedDate = (sqlDate != null) ? dateFormat.format(sqlDate) : null;
+                    Transaction t = new Transaction(
+                        rs.getInt("id"), formattedDate, rs.getString("timestamp_str"), rs.getString("day"),
+                        rs.getString("category"), rs.getString("type"), rs.getDouble("amount"),
+                        rs.getString("description"), rs.getString("payment_method"), rs.getString("payee")
+                    );
+                    transactions.add(t);
+                } catch (Exception e) {
+                    System.err.println("!!! ERROR creating Transaction object from ResultSet in getAllTransactionsForYear !!!");
+                    e.printStackTrace();
+                }
+            }
+            rs.close();
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR executing SQL in getAllTransactionsForYear !!!");
+            e.printStackTrace();
+            throw e;
+        }
+        return transactions;
+    }
+    // ==================================================================
+    // ===         NEW LOAN / EMI METHODS                           ===
+    // ==================================================================
+
+    /**
+     * Saves a new loan to the database, including all calculated fields.
+     */
+    public void saveLoan(Loan loan) throws SQLException {
+        String sql = "INSERT INTO loans (lender_name, loan_type, principal_amount, interest_rate, " +
+                     "tenure_months, start_date, status, notes, " +
+                     "emi_amount, total_interest, total_payment) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, loan.getLenderName());
+            ps.setString(2, loan.getLoanType());
+            ps.setDouble(3, loan.getPrincipalAmount());
+            ps.setDouble(4, loan.getInterestRate());
+            ps.setInt(5, loan.getTenureMonths());
+
+            // Handle Date
+            if (loan.getStartDate() != null && !loan.getStartDate().isEmpty()) {
+                 try {
+                    LocalDate localDate = LocalDate.parse(loan.getStartDate(), DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                    ps.setDate(6, java.sql.Date.valueOf(localDate));
+                 } catch (Exception e) {
+                     System.err.println("Invalid loan start date format, setting to null: " + loan.getStartDate());
+                     ps.setNull(6, Types.DATE);
+                 }
+            } else {
+                ps.setNull(6, Types.DATE);
+            }
+            
+            ps.setString(7, "Active"); // Default status
+            ps.setString(8, loan.getNotes());
+            
+            // Add the calculated fields
+            ps.setDouble(9, loan.getEmiAmount());
+            ps.setDouble(10, loan.getTotalInterest());
+            ps.setDouble(11, loan.getTotalPayment());
+            
+            ps.executeUpdate();
+            
+            try (ResultSet generatedKeys = ps.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    // We can set the ID on the object if we add a setId method to Loan.java
+                    // loan.setId(generatedKeys.getInt(1)); 
+                }
+            }
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR saving loan (SQL) !!!"); 
+            e.printStackTrace(); throw e; 
+        }
+    }
+    
+    /**
+     * Fetches all loans from the database.
+     */
+    public List<Loan> getAllLoans() throws SQLException {
+        System.out.println("DEBUG: Entering getAllLoans...");
+        List<Loan> loans = new ArrayList<>();
+        String sql = "SELECT * FROM loans ORDER BY status, lender_name";
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                try {
+                    java.sql.Date sqlStartDate = rs.getDate("start_date");
+                    String formattedStartDate = (sqlStartDate != null) ? dateFormat.format(sqlStartDate) : null;
+                    
+                    Loan loan = new Loan(
+                        rs.getInt("id"),
+                        rs.getString("lender_name"),
+                        rs.getString("loan_type"),
+                        rs.getDouble("principal_amount"),
+                        rs.getDouble("interest_rate"),
+                        rs.getInt("tenure_months"),
+                        formattedStartDate,
+                        rs.getString("status"),
+                        rs.getString("notes"),
+                        rs.getDouble("emi_amount"),
+                        rs.getDouble("total_interest"),
+                        rs.getDouble("total_payment")
+                    );
+                    loans.add(loan);
+                } catch (Exception e) {
+                    System.err.println("!!! ERROR creating Loan object from ResultSet !!!");
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("DEBUG: Fetched " + loans.size() + " loans.");
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR executing SQL in getAllLoans !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+        return loans;
+    }
+    
+    /**
+     * Updates the status of a loan (e.g., to "Paid Off").
+     */
+    public void updateLoanStatus(int loanId, String newStatus) throws SQLException {
+        String sql = "UPDATE loans SET status = ? WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, loanId);
+            ps.executeUpdate();
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR updating loan status (SQL) !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+    }
+
+    /**
+     * Moves a loan to the recycle bin table.
+     */
+    public void moveLoanToRecycleBin(int loanId) throws SQLException {
+        String copySql = "INSERT INTO recycle_bin_loans SELECT *, NOW() FROM loans WHERE id = ?";
+        String deleteSql = "DELETE FROM loans WHERE id = ?";
+        
+        connection.setAutoCommit(false);
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, loanId);
+            deletePs.setInt(1, loanId);
+            
+            int copied = copyPs.executeUpdate();
+            if (copied == 0) throw new SQLException("Failed to copy loan to recycle bin, ID not found: " + loanId);
+            
+            deletePs.executeUpdate();
+            connection.commit();
+            
+        } catch (SQLException e) {
+            connection.rollback();
+            System.err.println("!!! ERROR moving loan to recycle bin !!!"); 
+            e.printStackTrace();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+    
+    /**
+     * Fetches recycled loans for the UI dialog.
+     */
+    public List<Map<String, Object>> getRecycledLoansForUI() throws SQLException {
+        List<Map<String, Object>> recycled = new ArrayList<>();
+        String sql = "SELECT id, loan_type, lender_name, principal_amount, " +
+                     "DATE_FORMAT(deleted_on, '%Y-%m-%d %H:%i:%s') as deleted_on_str " +
+                     "FROM recycle_bin_loans ORDER BY deleted_on DESC";
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                 Map<String, Object> data = new HashMap<>();
+                 data.put("id", rs.getInt("id"));
+                 data.put("loan_type", rs.getString("loan_type"));
+                 data.put("lender_name", rs.getString("lender_name"));
+                 data.put("principal_amount", rs.getDouble("principal_amount"));
+                 data.put("deleted_on_str", rs.getString("deleted_on_str"));
+                 recycled.add(data);
+            }
+        } catch (SQLException e) { System.err.println("!!! ERROR getting recycled loans !!!"); e.printStackTrace(); throw e; }
+        return recycled;
+    }
+
+    /**
+     * Restores a loan from the recycle bin.
+     */
+    public void restoreLoan(int loanId) throws SQLException {
+        String copySql = "INSERT INTO loans (id, lender_name, loan_type, principal_amount, interest_rate, tenure_months, start_date, emi_amount, total_interest, total_payment, status, notes) " +
+                       "SELECT id, lender_name, loan_type, principal_amount, interest_rate, tenure_months, start_date, emi_amount, total_interest, total_payment, status, notes " +
+                       "FROM recycle_bin_loans WHERE id = ?";
+        String deleteSql = "DELETE FROM recycle_bin_loans WHERE id = ?";
+        
+        connection.setAutoCommit(false);
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, loanId);
+            deletePs.setInt(1, loanId);
+            
+            copyPs.executeUpdate();
+            deletePs.executeUpdate();
+            
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            if (e.getErrorCode() == 1062) { // Handle duplicate key (already restored)
+                 System.out.println("Loan " + loanId + " already exists. Removing from recycle bin.");
+                 try (PreparedStatement deletePsOnly = connection.prepareStatement(deleteSql)) {
+                     deletePsOnly.setInt(1, loanId); deletePsOnly.executeUpdate(); conn.commit();
+                 } catch (SQLException ex) { conn.rollback(); throw ex; }
+            } else { throw e; }
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+
+    /**
+     * Permanently deletes a loan from the recycle bin.
+     */
+    public void permanentlyDeleteLoan(int loanId) throws SQLException {
+        String sql = "DELETE FROM recycle_bin_loans WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, loanId);
+            ps.executeUpdate();
         }
     }
 }
