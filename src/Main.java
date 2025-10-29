@@ -1,6 +1,9 @@
-package src;
+/*package src;
 import java.util.Scanner;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 // Import the BankAccount class
 import src.BankAccount;
 import java.util.List;
@@ -183,11 +186,33 @@ public class Main {
                 }
                 case 22 -> { // Add Credit Card (File)
                     System.out.print("Enter card name: "); String name = sc.nextLine();
+                    System.out.print("Enter card type: "); String cardType = sc.nextLine();
+                    System.out.print("Enter card number: "); String number = sc.nextLine();
+                    System.out.print("Enter valid from date: "); String validFrom = sc.nextLine();
+                    System.out.print("Enter valid thru date: "); String validThru = sc.nextLine();
+                    System.out.print("Enter CVV: "); String cvv = sc.nextLine();
                     System.out.print("Enter credit limit: "); double limit = sc.nextDouble();
                     System.out.print("Enter current expenses: "); double expenses = sc.nextDouble();
                     System.out.print("Enter amount to pay: "); double amountToPay = sc.nextDouble();
                     System.out.print("Enter days left to pay: "); int daysLeft = sc.nextInt(); sc.nextLine();
-                    Card card = new Card(name, limit, expenses, amountToPay, daysLeft);
+                    // Inside case 22 in Main.java, replace the old Card constructor call
+
+String creationDate = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE); // YYYY-MM-DD
+Card card = new Card(
+    name,         // Card Name (collected)
+    cardType,     // "Credit Card" or "Debit Card" (collected)
+    number,       // Card Number (collected)
+    validFrom,    // Valid From (collected, might be empty)
+    validThru,    // Valid Through (collected)
+    cvv,          // CVV (collected)
+    null,         // Front Image Path (null for console)
+    null,         // Back Image Path (null for console)
+    limit,        // Credit Limit (collected, 0 if Debit)
+    expenses,     // Current Expenses (collected, 0 if Debit)
+    amountToPay,  // Amount To Pay (collected, 0 if Debit)
+    daysLeft,     // Days Left (collected, 0 if Debit)
+    creationDate  // Generated creation date
+);
                     manager.addCreditCard(card);
                     System.out.println("Credit Card added to list!");
                 }
@@ -226,4 +251,4 @@ public class Main {
 
         sc.close();
     }
-}
+}*/

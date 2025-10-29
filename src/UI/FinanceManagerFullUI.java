@@ -22,12 +22,17 @@ import src.Transaction;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+
 import src.Deposit; // Import for Deposit class
 
 // Added missing imports for dialogs
 import src.UI.AddEditDepositDialog;
 import src.UI.GullakDialog;
 import src.UI.RecycleBinDialog; // Transaction Recycle Bin Dialog
+import src.UI.ShowOtpDialog;
+import src.UI.EnterOtpDialog;
+import src.UI.SensitiveCardDetailsDialog;
 
 
 public class FinanceManagerFullUI extends JFrame {
@@ -49,8 +54,12 @@ public class FinanceManagerFullUI extends JFrame {
     private JPanel depositDetailPanel;
 
     // --- Other Tab Variables (Models) ---
-    private DefaultTableModel ccModel, gssModel, mfModel;
+    private DefaultTableModel gssModel, mfModel;
     // Removed fdModel, rdModel
+    // --- Cards Tab Variables ---
+    private JList<Card> cardList;
+    private DefaultListModel<Card> cardListModel;
+    private JPanel cardDetailPanel;
 
 
     public FinanceManagerFullUI() {
@@ -179,20 +188,58 @@ public class FinanceManagerFullUI extends JFrame {
         // Initial Load
         refreshDeposits();
 
+// =========================================================
+// ===         NEW CARDS PANEL (MASTER-DETAIL)           ===
+// =========================================================
+JPanel cPanel = new JPanel(new BorderLayout());
 
-        // =========================================================
-        // ===         OTHER PANELS (CREDIT CARDS etc.)          ===
-        // =========================================================
-        String[] cccols = {"Card Name", "Credit Limit", "Expenses", "Amount To Pay", "Days Left"};
-        ccModel = new DefaultTableModel(cccols, 0);
-        JTable ccTable = new JTable(ccModel);
-        JPanel ccPanel = new JPanel(new BorderLayout());
-        ccPanel.add(new JScrollPane(ccTable), BorderLayout.CENTER);
-        JButton addCCBtn = new JButton("Add Credit Card");
-        ccPanel.add(addCCBtn, BorderLayout.SOUTH);
-        tabs.addTab("Credit Cards", ccPanel);
-        addCCBtn.addActionListener(e -> openCreditCardDialog());
-        refreshCreditCards();
+// --- Split Pane ---
+JSplitPane cardSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+cardSplitPane.setDividerLocation(220); // Adjust width for card names
+
+// --- Left Side: List of Cards ---
+cardListModel = new DefaultListModel<>();
+cardList = new JList<>(cardListModel);
+cardList.setFont(new Font("Arial", Font.PLAIN, 14));
+cardList.setBorder(new EmptyBorder(5, 5, 5, 5));
+cardSplitPane.setLeftComponent(new JScrollPane(cardList));
+
+// --- Right Side: Detail Panel ---
+cardDetailPanel = new JPanel(new BorderLayout());
+cardDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+cardSplitPane.setRightComponent(cardDetailPanel);
+
+cPanel.add(cardSplitPane, BorderLayout.CENTER);
+
+// --- Bottom Button Panel ---
+JPanel cardButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+JButton addCardBtn = new JButton("Add New Card");
+JButton deleteCardBtn = new JButton("Delete Selected Card");
+JButton cardRecycleBinBtn = new JButton("Card Recycle Bin");
+
+cardButtonPanel.add(addCardBtn);
+cardButtonPanel.add(deleteCardBtn);
+cardButtonPanel.add(cardRecycleBinBtn);
+cPanel.add(cardButtonPanel, BorderLayout.SOUTH);
+
+tabs.addTab("Cards", cPanel); // Renamed tab
+
+// --- Action Listeners ---
+cardList.addListSelectionListener(e -> {
+    if (!e.getValueIsAdjusting()) {
+        Card selected = cardList.getSelectedValue();
+        showCardDetails(selected); // Method to be added below
+    }
+});
+
+addCardBtn.addActionListener(e -> openAddEditCardDialog(null)); // Method stub below
+deleteCardBtn.addActionListener(e -> deleteSelectedCard()); // Method to be added below
+cardRecycleBinBtn.addActionListener(e -> openCardRecycleBin()); // Method stub below
+
+// Load initial data
+refreshCards(); // Method to be added below
+
 
         String[] gssCols = {"Metal Type", "Weight (g)", "Price/g", "Total Value"};
         gssModel = new DefaultTableModel(gssCols, 0);
@@ -441,14 +488,131 @@ public class FinanceManagerFullUI extends JFrame {
     }
 
     private void openBankAccountDialog() {
-        // Assume AddEditBankAccountDialog exists and handles logic
-        // For brevity, keeping placeholder logic here, replace if needed
-        JOptionPane.showMessageDialog(this, "Bank Account Dialog Placeholder");
-         // Example call if you have the dialog:
-         // AddEditBankAccountDialog dialog = new AddEditBankAccountDialog(this, manager, null); // null for adding
-         // dialog.setVisible(true);
-         // refreshBankAccounts();
-    }
+    JDialog dlg = new JDialog(this, "Add New Bank Account", true);
+    dlg.setLayout(new BorderLayout(10, 10));
+
+    // --- Panel for all fields ---
+    JPanel fieldsPanel = new JPanel();
+    fieldsPanel.setLayout(new GridLayout(0, 2, 5, 5)); // Use GridLayout
+    fieldsPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+    // --- Common Fields ---
+    JTextField accNumF = new JTextField();
+    JTextField holderF = new JTextField();
+    JTextField bankF = new JTextField();
+    JTextField ifscF = new JTextField();
+    JTextField balanceF = new JTextField("0.0");
+
+    // --- Type Selection ---
+    String[] accTypes = {"Savings", "Current"};
+    JComboBox<String> typeCombo = new JComboBox<>(accTypes);
+
+    // --- Savings-Only Fields ---
+    JLabel rateLabel = new JLabel("Interest Rate (%)");
+    JTextField rateF = new JTextField("0.0");
+    JLabel expenseLabel = new JLabel("Annual Expense (for interest calc)");
+    JTextField expenseF = new JTextField("0.0");
+
+    // --- Current-Only Fields ---
+    JLabel subtypeLabel = new JLabel("Current Account Type");
+    String[] subTypes = {"Salary", "Business"};
+    JComboBox<String> subtypeCombo = new JComboBox<>(subTypes);
+    JLabel companyLabel = new JLabel("Company Name");
+    JTextField companyF = new JTextField();
+    JLabel businessLabel = new JLabel("Business Name");
+    JTextField businessF = new JTextField();
+
+    // --- Add Common Fields First ---
+    fieldsPanel.add(new JLabel("Account Type:")); fieldsPanel.add(typeCombo);
+    fieldsPanel.add(new JLabel("Bank Name:")); fieldsPanel.add(bankF);
+    fieldsPanel.add(new JLabel("Account Number:")); fieldsPanel.add(accNumF);
+    fieldsPanel.add(new JLabel("Holder Name:")); fieldsPanel.add(holderF);
+    fieldsPanel.add(new JLabel("IFSC Code:")); fieldsPanel.add(ifscF);
+    fieldsPanel.add(new JLabel("Current Balance:")); fieldsPanel.add(balanceF);
+
+    // --- Add Specific Fields ---
+    fieldsPanel.add(rateLabel); fieldsPanel.add(rateF);
+    fieldsPanel.add(expenseLabel); fieldsPanel.add(expenseF);
+    fieldsPanel.add(subtypeLabel); fieldsPanel.add(subtypeCombo);
+    fieldsPanel.add(companyLabel); fieldsPanel.add(companyF);
+    fieldsPanel.add(businessLabel); fieldsPanel.add(businessF);
+
+    // --- Logic to Show/Hide Fields ---
+    ActionListener typeListener = e -> { // Create listener separately
+        String selected = (String) typeCombo.getSelectedItem();
+        boolean isSavings = "Savings".equals(selected);
+        rateLabel.setVisible(isSavings); rateF.setVisible(isSavings);
+        expenseLabel.setVisible(isSavings); expenseF.setVisible(isSavings);
+        subtypeLabel.setVisible(!isSavings); subtypeCombo.setVisible(!isSavings);
+        // Trigger sub-type logic only if type changed and listener exists
+         if (subtypeCombo.getActionListeners().length > 0) {
+             subtypeCombo.getActionListeners()[0].actionPerformed(null); // Trigger dependent visibility
+         }
+         dlg.pack(); // Repack dialog when visibility changes
+    };
+    typeCombo.addActionListener(typeListener); // Add listener
+
+    ActionListener subtypeListener = e -> { // Create listener separately
+        boolean isSavings = "Savings".equals(typeCombo.getSelectedItem());
+        boolean makeVisible = !isSavings; // Only make these visible if it's Current
+        String subSelected = (String) subtypeCombo.getSelectedItem();
+        boolean isSalary = "Salary".equals(subSelected);
+
+        companyLabel.setVisible(makeVisible && isSalary);
+        companyF.setVisible(makeVisible && isSalary);
+        businessLabel.setVisible(makeVisible && !isSalary);
+        businessF.setVisible(makeVisible && !isSalary);
+         dlg.pack(); // Repack dialog when visibility changes
+    };
+     subtypeCombo.addActionListener(subtypeListener); // Add listener
+
+    // --- Buttons Panel ---
+    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+    JButton ok = new JButton("Save"), cancel = new JButton("Cancel");
+    buttonPanel.add(ok); buttonPanel.add(cancel);
+
+    dlg.add(fieldsPanel, BorderLayout.CENTER);
+    dlg.add(buttonPanel, BorderLayout.SOUTH);
+
+    // --- Save Logic ---
+    ok.addActionListener(_ -> {
+        try {
+            String accountType = (String) typeCombo.getSelectedItem();
+            double balance = Double.parseDouble(balanceF.getText());
+            double interestRate = 0.0, annualExpense = 0.0;
+            String accountSubtype = "", companyName = "", businessName = "";
+
+            if ("Savings".equals(accountType)) {
+                interestRate = Double.parseDouble(rateF.getText());
+                annualExpense = Double.parseDouble(expenseF.getText());
+            } else { // Current
+                accountSubtype = (String) subtypeCombo.getSelectedItem();
+                if ("Salary".equals(accountSubtype)) companyName = companyF.getText();
+                else businessName = businessF.getText();
+            }
+
+            BankAccount ba = new BankAccount(
+                accNumF.getText(), holderF.getText(), bankF.getText(), ifscF.getText(), balance,
+                accountType, interestRate, annualExpense,
+                accountSubtype, companyName, businessName
+            );
+            manager.saveBankAccount(ba);
+            dlg.dispose();
+            refreshBankAccounts(); // Refresh the main list
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(dlg, "Invalid input: " + ex.getMessage());
+            ex.printStackTrace(); // Print detailed error to console
+        }
+    });
+    cancel.addActionListener(ev -> dlg.dispose());
+
+    // --- Initialize View ---
+     typeListener.actionPerformed(null); // Call listener once to set initial visibility
+
+    dlg.pack(); // Pack initially
+    dlg.setLocationRelativeTo(this);
+    dlg.setVisible(true);
+}
 
     private void deleteSelectedAccount() {
         BankAccount selected = bankAccountList.getSelectedValue();
@@ -574,8 +738,7 @@ public class FinanceManagerFullUI extends JFrame {
 
     // --- OTHER REFRESH/DIALOG METHODS ---
 
-    private void openCreditCardDialog() { /* ... Keep your existing implementation ... */ }
-    private void refreshCreditCards() { /* ... Keep your existing implementation ... */ }
+    
     private void openGoldSilverDialog() { /* ... Keep your existing implementation ... */ }
     private void refreshGoldSilver() { /* ... Keep your existing implementation ... */ }
     private void openMutualFundDialog() { /* ... Keep your existing implementation ... */ }
@@ -600,5 +763,186 @@ public class FinanceManagerFullUI extends JFrame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new FinanceManagerFullUI().setVisible(true));
     }
+    // =========================================================
+// ===         NEW CARD UI METHODS                       ===
+// =========================================================
+
+/**
+ * Refreshes the list of cards on the left side.
+ * Make sure this is PUBLIC so dialogs can call it.
+ */
+public void refreshCards() {
+    System.out.println("--- Refreshing Cards ---"); // Add log
+    cardListModel.clear();
+    cardDetailPanel.removeAll(); // Clear details
+    cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    cardDetailPanel.revalidate();
+    cardDetailPanel.repaint();
+    try {
+        List<Card> cards = manager.getAllCards(); // Use the new method from FinanceManager
+        System.out.println("Fetched " + cards.size() + " cards."); // Add log
+        for (Card c : cards) {
+            cardListModel.addElement(c);
+        }
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "Error loading cards: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        e.printStackTrace(); // Print detailed error
+    } catch (Exception e) {
+         JOptionPane.showMessageDialog(this, "Unexpected error refreshing cards: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+         e.printStackTrace(); // Print detailed error
+    }
+     System.out.println("--- Finished Refreshing Cards ---"); // Add log
+}
+
+/**
+ * Shows basic card details and buttons on the right side.
+ * Sensitive details will require OTP verification later.
+ */
+private void showCardDetails(Card card) {
+    cardDetailPanel.removeAll();
+    if (card == null) {
+        cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        cardDetailPanel.revalidate(); cardDetailPanel.repaint();
+        return;
+    }
+
+    JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column
+
+    JLabel title = new JLabel(card.getCardName());
+    title.setFont(new Font("Arial", Font.BOLD, 18));
+    detailGrid.add(title);
+    detailGrid.add(new JLabel(card.getCardType()));
+    detailGrid.add(new JLabel("Number: " + card.getMaskedCardNumber())); // Show masked number
+    detailGrid.add(new JLabel("Valid Thru: " + (card.getValidThrough() != null ? card.getValidThrough() : "N/A")));
+
+    detailGrid.add(new JSeparator());
+
+    if ("Credit Card".equals(card.getCardType())) {
+        detailGrid.add(new JLabel(String.format("Limit: ₹%.2f", card.getCreditLimit())));
+        detailGrid.add(new JLabel(String.format("Current Spend: ₹%.2f", card.getCurrentExpenses())));
+        detailGrid.add(new JLabel(String.format("Amount Due: ₹%.2f", card.getAmountToPay())));
+        detailGrid.add(new JLabel("Days Until Due: " + card.getDaysLeftToPay()));
+        detailGrid.add(new JSeparator());
+    }
+
+    // --- Buttons for Actions ---
+    JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    JButton viewSensitiveButton = new JButton("View Full Details (Requires OTP)");
+    JButton editButton = new JButton("Edit Basic Info");
+
+    buttonSubPanel.add(viewSensitiveButton);
+    buttonSubPanel.add(editButton);
+
+    // --- Action Listeners for Buttons ---
+    viewSensitiveButton.addActionListener(e -> showSensitiveCardDetailsWithOTP(card)); // Placeholder below
+    editButton.addActionListener(e -> openAddEditCardDialog(card)); // Placeholder below
+
+    cardDetailPanel.add(detailGrid, BorderLayout.NORTH);
+    cardDetailPanel.add(buttonSubPanel, BorderLayout.CENTER); // Add buttons below details
+
+    cardDetailPanel.revalidate();
+    cardDetailPanel.repaint();
+}
+
+ /**
+  * Securely shows sensitive card details after OTP verification.
+  * Generates a 6-digit OTP (simulated delivery), enforces 2-minute TTL and 3 attempts.
+  */
+ private void showSensitiveCardDetailsWithOTP(Card card) {
+     try {
+         // Generate OTP and TTL window
+         String otp = String.format("%06d", new Random().nextInt(1_000_000));
+         long issuedAt = System.currentTimeMillis();
+         final long ttlMs = 2L * 60L * 1000L; // 2 minutes
+
+         // Show OTP (simulated delivery)
+         ShowOtpDialog otpDialog = new ShowOtpDialog(this, otp);
+         otpDialog.setVisible(true);
+
+         int attempts = 0;
+         final int maxAttempts = 3;
+         while (attempts < maxAttempts) {
+             if (System.currentTimeMillis() - issuedAt > ttlMs) {
+                 JOptionPane.showMessageDialog(this, "OTP expired. Please try again.", "OTP Expired", JOptionPane.WARNING_MESSAGE);
+                 return;
+             }
+
+             EnterOtpDialog enter = new EnterOtpDialog(this);
+             enter.setVisible(true);
+             String entered = enter.getEnteredOtp();
+             if (entered == null) { // Cancelled
+                 return;
+             }
+
+             if (otp.equals(entered)) {
+                 SensitiveCardDetailsDialog details = new SensitiveCardDetailsDialog(this, card);
+                 details.setVisible(true);
+                 return;
+             } else {
+                 attempts++;
+                 int left = maxAttempts - attempts;
+                 JOptionPane.showMessageDialog(this,
+                         left > 0 ? ("Incorrect OTP. Attempts left: " + left) : "Incorrect OTP. No attempts left.",
+                         "OTP Incorrect",
+                         JOptionPane.ERROR_MESSAGE);
+             }
+         }
+     } catch (Exception ex) {
+         JOptionPane.showMessageDialog(this, "Error during OTP verification: " + ex.getMessage(), "OTP Error", JOptionPane.ERROR_MESSAGE);
+     }
+ }
+
+/**
+ * Opens the dialog to add a new card or edit an existing one (Placeholder).
+ */
+private void openAddEditCardDialog(Card cardToEdit) {
+    // We are now calling the real dialog
+    AddEditCardDialog dialog = new AddEditCardDialog(this, manager, cardToEdit, this);
+    dialog.setVisible(true);
+    // Refresh is handled by the dialog itself upon successful save.
+}
+
+/**
+ * Deletes the selected card and moves it to the recycle bin.
+ */
+private void deleteSelectedCard() {
+    Card selected = cardList.getSelectedValue();
+    if (selected == null) {
+        JOptionPane.showMessageDialog(this, "Please select a card to delete.", "No Selection", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    int choice = JOptionPane.showConfirmDialog(this,
+        "Move this card to the recycle bin?\n" + selected.toString(),
+        "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+    if (choice == JOptionPane.YES_OPTION) {
+        try {
+            manager.moveCardToRecycleBin(selected.getId()); // Use the new method from FinanceManager
+            refreshCards(); // Refresh the list in the UI
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error deleting card: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace(); // Print detailed error
+        }
+    }
+}
+
+/**
+ * Opens the Card Recycle Bin dialog (Placeholder).
+ */
+private void openCardRecycleBin() {
+    // We are now calling the real dialog
+    CardRecycleBinDialog dialog = new CardRecycleBinDialog(this, manager, this);
+    dialog.setVisible(true);
+    // Refresh (after restore) is handled by the dialog itself.
+}
+/**
+ * Callback method for the Card Recycle Bin dialog (Placeholder).
+ * Make sure this is PUBLIC.
+ */
+public void refreshAfterCardRestore() {
+    System.out.println("Refreshing cards list after restore...");
+    refreshCards();
+}
 
 } // End of FinanceManagerFullUI class

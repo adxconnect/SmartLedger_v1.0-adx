@@ -6,26 +6,20 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
-import java.lang.reflect.InvocationTargetException;
 import src.db.DBHelper;
 import java.sql.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-
-// Import for the new method
-import java.util.LinkedHashMap;
-import src.Deposit;
-
+// Same-package types don't require imports
 
 public class FinanceManager {
     private List<Transaction> transactions = new ArrayList<>();
     private DBHelper dbHelper;
+    
 
     public FinanceManager() throws SQLException { 
-        dbHelper = new DBHelper(); 
+        dbHelper = new DBHelper();
+        this.cards = new ArrayList<>(); 
     }
 
     // --- Transaction (File) Methods (for console app) ---
@@ -172,7 +166,7 @@ public class FinanceManager {
 
     // --- Old In-Memory Lists (for console app) ---
     private List<MutualFund> mutualFunds = new ArrayList<>();
-    private List<Card> creditCards = new ArrayList<>();
+    private List<Card> cards = new ArrayList<>();
     private List<GoldSilverInvestment> goldSilverInvestments = new ArrayList<>();
     
     // --- Bank Account (Database) Methods ---
@@ -262,46 +256,55 @@ public class FinanceManager {
     // --- Fixed Deposit (Database) Methods ---
    
 
-    // --- Credit Card (Database) Methods ---
-    public void saveCreditCard(Card cc) throws SQLException {
-        String sql = "INSERT INTO credit_cards (card_name, credit_limit, expenses, amount_to_pay, days_left) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
-            ps.setString(1, cc.getCardName());
-            ps.setDouble(2, cc.getLimit());
-            ps.setDouble(3, cc.getExpenses());
-            ps.setDouble(4, cc.getAmountToPay());
-            ps.setInt(5, cc.getDaysLeftToPay());
-            ps.executeUpdate();
-        }
-    }
+    // --- Card (Database) Methods ---
+    public void saveCard(Card card) throws SQLException {
+        System.out.println("DEBUG: Saving card: " + card.getCardName());
+        String sql = "INSERT INTO cards (unique_id, card_name, card_type, card_number, valid_from, valid_through, cvv, " +
+                     "front_image_path, back_image_path, credit_limit, current_expenses, amount_to_pay, days_left_to_pay, creation_date) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    public List<Card> getAllCreditCards() throws SQLException {
-        List<Card> cards = new ArrayList<>();
-        String sql = "SELECT * FROM credit_cards";
-        try (Statement stmt = dbHelper.getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                cards.add(new Card(
-                    rs.getString("card_name"),
-                    rs.getDouble("credit_limit"),
-                    rs.getDouble("expenses"),
-                    rs.getDouble("amount_to_pay"),
-                    rs.getInt("days_left")
-                ));
+        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, java.util.UUID.randomUUID().toString());
+            ps.setString(2, card.getCardName());
+            ps.setString(3, card.getCardType());
+            ps.setString(4, card.getCardNumber());
+            ps.setString(5, card.getValidFrom());
+            ps.setString(6, card.getValidThrough());
+            ps.setString(7, card.getCvv());
+            ps.setString(8, card.getFrontImagePath());
+            ps.setString(9, card.getBackImagePath());
+
+            // Credit fields: only set for Credit Card, else NULL
+            boolean isCredit = "Credit Card".equals(card.getCardType());
+            if (isCredit) {
+                ps.setDouble(10, card.getCreditLimit());
+                ps.setDouble(11, card.getCurrentExpenses());
+                ps.setDouble(12, card.getAmountToPay());
+                ps.setInt(13, card.getDaysLeftToPay());
+            } else {
+                ps.setNull(10, Types.DOUBLE);
+                ps.setNull(11, Types.DOUBLE);
+                ps.setNull(12, Types.DOUBLE);
+                ps.setNull(13, Types.INTEGER);
             }
-        }
-        return cards;
-    }
-    public void addCreditCard(Card cc) { creditCards.add(cc); }
-    public void viewCreditCards() { creditCards.forEach(System.out::println); }
-    public void makeCreditCardPayment(int index, double amount) {
-        if(index >= 0 && index < creditCards.size()) {
-            creditCards.get(index).makePayment(amount);
-        }
-    }
-    public void addCreditCardExpense(int index, double amount) {
-        if(index >= 0 && index < creditCards.size()) {
-            creditCards.get(index).addExpense(amount);
+
+            // creation_date as DATE (YYYY-MM-DD)
+            java.sql.Date created = null;
+            try {
+                if (card.getCreationDate() != null) {
+                    java.time.LocalDate ld = java.time.LocalDate.parse(card.getCreationDate());
+                    created = java.sql.Date.valueOf(ld);
+                }
+            } catch (Exception ignore) { /* leave as null */ }
+            if (created != null) ps.setDate(14, created); else ps.setNull(14, Types.DATE);
+
+            ps.executeUpdate();
+
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                if (keys.next()) {
+                    card.setId(keys.getInt(1));
+                }
+            }
         }
     }
 
@@ -371,8 +374,7 @@ public class FinanceManager {
     public void loadRecurringDeposits(String filename) { /* ... */ }
     public void saveFixedDeposits(String filename) { /* ... */ }
     public void loadFixedDeposits(String filename) { /* ... */ }
-    public void saveCreditCards(String filename) { /* ... */ }
-    public void loadCreditCards(String filename) { /* ... */ }
+
     public void saveMutualFunds(String filename) { /* ... */ }
     public void loadMutualFunds(String filename) { /* ... */ }
     public void saveGoldSilverInvestments(String filename) { /* ... */ }
@@ -969,4 +971,154 @@ public class FinanceManager {
         }
         return recycled;
     }
+     public List<Card> getAllCards() throws SQLException {
+        System.out.println("DEBUG: Entering getAllCards...");
+        List<Card> currentCards = new ArrayList<>();
+        String sql = "SELECT id, unique_id, card_name, card_type, card_number, valid_from, valid_through, cvv, front_image_path, back_image_path, credit_limit, current_expenses, amount_to_pay, days_left_to_pay, creation_date FROM cards ORDER BY card_name";
+        try (Statement stmt = dbHelper.getConnection().createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                 try {
+                     java.sql.Date sqlCreationDate = rs.getDate("creation_date");
+                     String formattedCreationDate = (sqlCreationDate == null) ? null : sqlCreationDate.toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+                     Card card = new Card(
+                         rs.getInt("id"), rs.getString("unique_id"), rs.getString("card_name"), rs.getString("card_type"),
+                         rs.getString("card_number"), rs.getString("valid_from"), rs.getString("valid_through"), rs.getString("cvv"),
+                         rs.getString("front_image_path"), rs.getString("back_image_path"), rs.getDouble("credit_limit"),
+                         rs.getDouble("current_expenses"), rs.getDouble("amount_to_pay"), rs.getInt("days_left_to_pay"),
+                         formattedCreationDate
+                     );
+                     currentCards.add(card);
+                 } catch (Exception e) { System.err.println("!!! ERROR creating Card object from ResultSet !!!"); e.printStackTrace(); }
+            }
+             System.out.println("DEBUG: Fetched " + currentCards.size() + " cards.");
+        } catch (SQLException e) { System.err.println("!!! ERROR getting all cards (SQL) !!!"); e.printStackTrace(); throw e; }
+        this.cards = currentCards; // Update the class member list
+        return currentCards;
+    }
+    public void updateCard(Card card) throws SQLException {
+        System.out.println("DEBUG: Updating card ID " + card.getId());
+        String sql = "UPDATE cards SET card_name = ?, card_number = ?, valid_from = ?, valid_through = ?, cvv = ?, " +
+                     "front_image_path = ?, back_image_path = ?, credit_limit = ?, current_expenses = ?, amount_to_pay = ?, days_left_to_pay = ? " +
+                     "WHERE id = ?";
+        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+            ps.setString(1, card.getCardName());
+            ps.setString(2, card.getCardNumber());
+            ps.setString(3, card.getValidFrom());
+            ps.setString(4, card.getValidThrough());
+            ps.setString(5, card.getCvv());
+            ps.setString(6, card.getFrontImagePath());
+            ps.setString(7, card.getBackImagePath());
+
+            boolean isCredit = "Credit Card".equals(card.getCardType());
+            if (isCredit) {
+                ps.setDouble(8, card.getCreditLimit());
+                ps.setDouble(9, card.getCurrentExpenses());
+                ps.setDouble(10, card.getAmountToPay());
+                ps.setInt(11, card.getDaysLeftToPay());
+            } else {
+                ps.setNull(8, Types.DOUBLE);
+                ps.setNull(9, Types.DOUBLE);
+                ps.setNull(10, Types.DOUBLE);
+                ps.setNull(11, Types.INTEGER);
+            }
+
+            ps.setInt(12, card.getId());
+            ps.executeUpdate();
+        }
+    }
+
+    public void moveCardToRecycleBin(int cardId) throws SQLException {
+        System.out.println("DEBUG: Moving card ID " + cardId + " to recycle bin");
+        String copySql = "INSERT INTO recycle_bin_cards (original_id, unique_id, card_name, card_type, card_number, valid_from, valid_through, cvv, " +
+                         "front_image_path, back_image_path, credit_limit, current_expenses, amount_to_pay, days_left_to_pay, creation_date, deleted_on) " +
+                         "SELECT id, unique_id, card_name, card_type, card_number, valid_from, valid_through, cvv, front_image_path, back_image_path, " +
+                         "credit_limit, current_expenses, amount_to_pay, days_left_to_pay, creation_date, NOW() FROM cards WHERE id = ?";
+        String deleteSql = "DELETE FROM cards WHERE id = ?";
+
+        Connection conn = dbHelper.getConnection();
+        boolean oldAuto = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (PreparedStatement copyPs = conn.prepareStatement(copySql);
+             PreparedStatement delPs = conn.prepareStatement(deleteSql)) {
+            copyPs.setInt(1, cardId);
+            delPs.setInt(1, cardId);
+            copyPs.executeUpdate();
+            delPs.executeUpdate();
+            conn.commit();
+        } catch (SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(oldAuto);
+        }
+    }
+
+    public List<Map<String, Object>> getRecycledCardsForUI() throws SQLException {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String sql = "SELECT original_id, card_type, card_name, card_number, valid_through, " +
+                     "DATE_FORMAT(deleted_on, '%Y-%m-%d %H:%i:%s') AS deleted_on_str FROM recycle_bin_cards ORDER BY deleted_on DESC";
+        try (Statement stmt = dbHelper.getConnection().createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("original_id", rs.getInt("original_id"));
+                row.put("card_type", rs.getString("card_type"));
+                row.put("card_name", rs.getString("card_name"));
+                String num = rs.getString("card_number");
+                String masked = (num == null || num.length() < 4) ? "**** **** ****" : ("**** **** **** " + num.substring(num.length() - 4));
+                row.put("masked_card_number", masked);
+                row.put("valid_through", rs.getString("valid_through"));
+                row.put("deleted_on_str", rs.getString("deleted_on_str"));
+                list.add(row);
+            }
+        }
+        return list;
+    }
+
+    public void restoreCard(int originalCardId) throws SQLException {
+        System.out.println("DEBUG: Restoring card original ID " + originalCardId);
+        String copySql = "INSERT INTO cards (id, unique_id, card_name, card_type, card_number, valid_from, valid_through, cvv, " +
+                         "front_image_path, back_image_path, credit_limit, current_expenses, amount_to_pay, days_left_to_pay, creation_date) " +
+                         "SELECT original_id, unique_id, card_name, card_type, card_number, valid_from, valid_through, cvv, front_image_path, back_image_path, " +
+                         "credit_limit, current_expenses, amount_to_pay, days_left_to_pay, creation_date FROM recycle_bin_cards WHERE original_id = ?";
+        String deleteSql = "DELETE FROM recycle_bin_cards WHERE original_id = ?";
+
+        Connection conn = dbHelper.getConnection();
+        boolean oldAuto = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (PreparedStatement copyPs = conn.prepareStatement(copySql);
+             PreparedStatement delPs = conn.prepareStatement(deleteSql)) {
+            copyPs.setInt(1, originalCardId);
+            delPs.setInt(1, originalCardId);
+            copyPs.executeUpdate();
+            delPs.executeUpdate();
+            conn.commit();
+        } catch (SQLException e) {
+            conn.rollback();
+            if (e.getErrorCode() == 1062) { // Duplicate key
+                // If already exists in main table, just delete from recycle bin
+                try (PreparedStatement delPsOnly = conn.prepareStatement(deleteSql)) {
+                    delPsOnly.setInt(1, originalCardId);
+                    delPsOnly.executeUpdate();
+                    conn.commit();
+                } catch (SQLException ex) {
+                    conn.rollback();
+                    throw ex;
+                }
+            } else {
+                throw e;
+            }
+        } finally {
+            conn.setAutoCommit(oldAuto);
+        }
+    }
+
+    public void permanentlyDeleteCard(int originalCardId) throws SQLException {
+        String sql = "DELETE FROM recycle_bin_cards WHERE original_id = ?";
+        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
+            ps.setInt(1, originalCardId);
+            ps.executeUpdate();
+        }
+    }
+
+
 }
