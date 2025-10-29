@@ -1,5 +1,5 @@
 package src;
-
+import src.Investment;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -10,16 +10,20 @@ import src.db.DBHelper;
 import java.sql.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import src.TaxProfile;
 // Same-package types don't require imports
 
 public class FinanceManager {
     private List<Transaction> transactions = new ArrayList<>();
     private DBHelper dbHelper;
+    private Connection connection;
     
 
     public FinanceManager() throws SQLException { 
         dbHelper = new DBHelper();
-        this.cards = new ArrayList<>(); 
+        connection = dbHelper.getConnection();
+        this.cards = new ArrayList<>();
+        createTables();
     }
 
     // --- Transaction (File) Methods (for console app) ---
@@ -165,9 +169,8 @@ public class FinanceManager {
     }
 
     // --- Old In-Memory Lists (for console app) ---
-    private List<MutualFund> mutualFunds = new ArrayList<>();
+
     private List<Card> cards = new ArrayList<>();
-    private List<GoldSilverInvestment> goldSilverInvestments = new ArrayList<>();
     
     // --- Bank Account (Database) Methods ---
     public void saveBankAccount(BankAccount ba) throws SQLException {
@@ -309,64 +312,7 @@ public class FinanceManager {
     }
 
 
-    // --- Gold/Silver (Database) Methods ---
-    public void saveGoldSilverInvestment(GoldSilverInvestment gs) throws SQLException {
-        String sql = "INSERT INTO gold_silver_investments (metal_type, weight, price_per_gram) VALUES (?, ?, ?)";
-        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
-            ps.setString(1, gs.getMetalType());
-            ps.setDouble(2, gs.getWeight());
-            ps.setDouble(3, gs.getPricePerGram());
-            ps.executeUpdate();
-        }
-    }
-
-    public List<GoldSilverInvestment> getAllGoldSilverInvestments() throws SQLException {
-        List<GoldSilverInvestment> list = new ArrayList<>();
-        String sql = "SELECT * FROM gold_silver_investments";
-        try (Statement stmt = dbHelper.getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                list.add(new GoldSilverInvestment(
-                    rs.getString("metal_type"),
-                    rs.getDouble("weight"),
-                    rs.getDouble("price_per_gram")
-                ));
-            }
-        }
-        return list;
-    }
-    public void addGoldSilverInvestment(GoldSilverInvestment gs) { goldSilverInvestments.add(gs); }
-    public void viewGoldSilverInvestments() { goldSilverInvestments.forEach(System.out::println); }
-
-
-    // --- Mutual Fund (Database) Methods ---
-    public void saveMutualFund(MutualFund mf) throws SQLException {
-        String sql = "INSERT INTO mutual_funds (amount, annual_rate, years) VALUES (?, ?, ?)";
-        try (PreparedStatement ps = dbHelper.getConnection().prepareStatement(sql)) {
-            ps.setDouble(1, mf.getAmount());
-            ps.setDouble(2, mf.getAnnualRate());
-            ps.setInt(3, mf.getYears());
-            ps.executeUpdate();
-        }
-    }
-
-    public List<MutualFund> getAllMutualFunds() throws SQLException {
-        List<MutualFund> list = new ArrayList<>();
-        String sql = "SELECT * FROM mutual_funds";
-        try (Statement stmt = dbHelper.getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                list.add(new MutualFund(
-                    rs.getDouble("amount"),
-                    rs.getDouble("annual_rate"),
-                    rs.getInt("years")
-                ));
-            }
-        }
-        return list;
-    }
-    public void addMutualFund(MutualFund mf) { mutualFunds.add(mf); }
-    public void viewMutualFunds() { mutualFunds.forEach(System.out::println); }
+   
 
 
     // --- File-Saving Methods (for console app) ---
@@ -374,11 +320,6 @@ public class FinanceManager {
     public void loadRecurringDeposits(String filename) { /* ... */ }
     public void saveFixedDeposits(String filename) { /* ... */ }
     public void loadFixedDeposits(String filename) { /* ... */ }
-
-    public void saveMutualFunds(String filename) { /* ... */ }
-    public void loadMutualFunds(String filename) { /* ... */ }
-    public void saveGoldSilverInvestments(String filename) { /* ... */ }
-    public void loadGoldSilverInvestments(String filename) { /* ... */ }
 
     // --- CONSOLE APP'S DEPRECATED BANK METHODS ---
     public void addSavingsAccount(BankAccount sa) { /* ... */ }
@@ -1120,5 +1061,453 @@ public class FinanceManager {
         }
     }
 
+    // ==================================================================
+    // ===         NEW INVESTMENT METHODS                           ===
+    // ==================================================================
 
+    /**
+     * Saves a new investment record to the database.
+     */
+    public void saveInvestment(Investment inv) throws SQLException {
+        String sql = "INSERT INTO investments (asset_type, holder_name, description, goal, start_date, " +
+                     "account_details, ticker_symbol, exchange, quantity, initial_unit_cost, " +
+                     "current_unit_price, property_address, tenure_years, interest_rate) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, inv.getAssetType());
+            ps.setString(2, inv.getHolderName());
+            ps.setString(3, inv.getDescription());
+            ps.setString(4, inv.getGoal());
+            
+            // Handle Date
+            if (inv.getStartDate() != null && !inv.getStartDate().isEmpty()) {
+                // Assuming start date is passed as dd-MM-yyyy
+                java.time.LocalDate localDate = java.time.LocalDate.parse(inv.getStartDate(), java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                ps.setDate(5, java.sql.Date.valueOf(localDate));
+            } else {
+                ps.setNull(5, Types.DATE);
+            }
+            
+            ps.setString(6, inv.getAccountDetails());
+            ps.setString(7, inv.getTickerSymbol());
+            ps.setString(8, inv.getExchange());
+            ps.setDouble(9, inv.getQuantity());
+            ps.setDouble(10, inv.getInitialUnitCost());
+            ps.setDouble(11, inv.getCurrentUnitPrice()); // Initial save might have current price = initial
+            ps.setString(12, inv.getPropertyAddress());
+            ps.setInt(13, inv.getTenureYears());
+            ps.setDouble(14, inv.getInterestRate());
+            
+            ps.executeUpdate();
+            
+            try (ResultSet generatedKeys = ps.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    inv.setId(generatedKeys.getInt(1)); // Set the new ID back on the object
+                }
+            }
+        } catch (java.time.format.DateTimeParseException e) {
+            System.err.println("!!! ERROR parsing date in saveInvestment !!!");
+            e.printStackTrace();
+            throw new SQLException("Invalid date format. Expected dd-MM-yyyy.", e);
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR saving investment (SQL) !!!"); 
+            e.printStackTrace(); throw e; 
+        } catch (Exception e) { 
+            System.err.println("!!! UNEXPECTED ERROR saving investment !!!"); 
+            e.printStackTrace(); throw new SQLException("Unexpected error saving investment.", e); 
+        }
+    }
+    
+    /**
+     * Updates an existing investment record in the database.
+     * Used for editing details or updating the current price.
+     */
+    public void updateInvestment(Investment inv) throws SQLException {
+        String sql = "UPDATE investments SET " +
+                     "asset_type = ?, holder_name = ?, description = ?, goal = ?, start_date = ?, " +
+                     "account_details = ?, ticker_symbol = ?, exchange = ?, quantity = ?, " +
+                     "initial_unit_cost = ?, current_unit_price = ?, property_address = ?, " +
+                     "tenure_years = ?, interest_rate = ? " +
+                     "WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, inv.getAssetType());
+            ps.setString(2, inv.getHolderName());
+            ps.setString(3, inv.getDescription());
+            ps.setString(4, inv.getGoal());
+            if (inv.getStartDate() != null && !inv.getStartDate().isEmpty()) {
+                java.time.LocalDate localDate = java.time.LocalDate.parse(inv.getStartDate(), java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                ps.setDate(5, java.sql.Date.valueOf(localDate));
+            } else { ps.setNull(5, Types.DATE); }
+            ps.setString(6, inv.getAccountDetails());
+            ps.setString(7, inv.getTickerSymbol());
+            ps.setString(8, inv.getExchange());
+            ps.setDouble(9, inv.getQuantity());
+            ps.setDouble(10, inv.getInitialUnitCost());
+            ps.setDouble(11, inv.getCurrentUnitPrice());
+            ps.setString(12, inv.getPropertyAddress());
+            ps.setInt(13, inv.getTenureYears());
+            ps.setDouble(14, inv.getInterestRate());
+            ps.setInt(15, inv.getId()); // WHERE clause
+            
+            ps.executeUpdate();
+        } catch (java.time.format.DateTimeParseException e) {
+            System.err.println("!!! ERROR parsing date in updateInvestment !!!");
+            e.printStackTrace();
+            throw new SQLException("Invalid date format. Expected dd-MM-yyyy.", e);
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR updating investment (SQL) !!!"); 
+            e.printStackTrace(); throw e; 
+        } catch (Exception e) { 
+            System.err.println("!!! UNEXPECTED ERROR updating investment !!!"); 
+            e.printStackTrace(); throw new SQLException("Unexpected error updating investment.", e); 
+        }
+    }
+
+    /**
+     * Fetches all investments from the database.
+     */
+    public List<Investment> getAllInvestments() throws SQLException {
+        System.out.println("DEBUG: Entering getAllInvestments...");
+        List<Investment> investments = new ArrayList<>();
+        String sql = "SELECT * FROM investments ORDER BY holder_name, description";
+        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("dd-MM-yyyy");
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                try {
+                    java.sql.Date sqlStartDate = rs.getDate("start_date");
+                    String formattedStartDate = (sqlStartDate != null) ? dateFormat.format(sqlStartDate) : null;
+                    
+                    Investment inv = new Investment(
+                        rs.getInt("id"),
+                        rs.getString("asset_type"),
+                        rs.getString("holder_name"),
+                        rs.getString("description"),
+                        rs.getString("goal"),
+                        formattedStartDate,
+                        rs.getString("account_details"),
+                        rs.getString("ticker_symbol"),
+                        rs.getString("exchange"),
+                        rs.getDouble("quantity"),
+                        rs.getDouble("initial_unit_cost"),
+                        rs.getDouble("current_unit_price"),
+                        rs.getString("property_address"),
+                        rs.getInt("tenure_years"),
+                        rs.getDouble("interest_rate")
+                    );
+                    investments.add(inv);
+                } catch (Exception e) { System.err.println("!!! ERROR creating Investment object from ResultSet !!!"); e.printStackTrace(); }
+            }
+             System.out.println("DEBUG: Fetched " + investments.size() + " investments.");
+        } catch (SQLException e) { System.err.println("!!! ERROR executing SQL in getAllInvestments !!!"); e.printStackTrace(); throw e; }
+        return investments;
+    }
+
+    /**
+     * Moves an investment to the recycle bin table.
+     */
+    public void moveInvestmentToRecycleBin(int investmentId) throws SQLException {
+        String copySql = "INSERT INTO recycle_bin_investments SELECT *, NOW() FROM investments WHERE id = ?";
+        String deleteSql = "DELETE FROM investments WHERE id = ?";
+        
+        connection.setAutoCommit(false);
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, investmentId);
+            deletePs.setInt(1, investmentId);
+            
+            int copied = copyPs.executeUpdate();
+            if (copied == 0) throw new SQLException("Failed to copy investment to recycle bin, ID not found: " + investmentId);
+            
+            deletePs.executeUpdate();
+            
+            connection.commit();
+            System.out.println("DEBUG: Successfully moved investment ID " + investmentId + " to recycle bin.");
+        } catch (SQLException e) {
+            connection.rollback();
+            System.err.println("!!! ERROR moving investment to recycle bin !!!"); e.printStackTrace();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+
+    /**
+     * Fetches recycled investments for the UI dialog.
+     */
+    public List<Map<String, Object>> getRecycledInvestmentsForUI() throws SQLException {
+        List<Map<String, Object>> recycled = new ArrayList<>();
+        String sql = "SELECT id, asset_type, holder_name, description, " +
+                     "DATE_FORMAT(deleted_on, '%Y-%m-%d %H:%i:%s') as deleted_on_str " +
+                     "FROM recycle_bin_investments ORDER BY deleted_on DESC";
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                 Map<String, Object> data = new HashMap<>();
+                 data.put("id", rs.getInt("id"));
+                 data.put("asset_type", rs.getString("asset_type"));
+                 data.put("holder_name", rs.getString("holder_name"));
+                 data.put("description", rs.getString("description"));
+                 data.put("deleted_on_str", rs.getString("deleted_on_str"));
+                 recycled.add(data);
+            }
+        } catch (SQLException e) { System.err.println("!!! ERROR getting recycled investments !!!"); e.printStackTrace(); throw e; }
+        return recycled;
+    }
+
+    /**
+     * Restores an investment from the recycle bin.
+     */
+    public void restoreInvestment(int investmentId) throws SQLException {
+        String copySql = "INSERT INTO investments (id, asset_type, holder_name, description, goal, start_date, account_details, ticker_symbol, exchange, quantity, initial_unit_cost, current_unit_price, property_address, tenure_years, interest_rate, last_updated) " +
+                       "SELECT id, asset_type, holder_name, description, goal, start_date, account_details, ticker_symbol, exchange, quantity, initial_unit_cost, current_unit_price, property_address, tenure_years, interest_rate, last_updated " +
+                       "FROM recycle_bin_investments WHERE id = ?";
+        String deleteSql = "DELETE FROM recycle_bin_investments WHERE id = ?";
+        
+        connection.setAutoCommit(false);
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, investmentId);
+            deletePs.setInt(1, investmentId);
+            
+            copyPs.executeUpdate();
+            deletePs.executeUpdate();
+            
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            if (e.getErrorCode() == 1062) { // Handle duplicate key (already restored)
+                 System.out.println("Investment " + investmentId + " already exists. Removing from recycle bin.");
+                 try (PreparedStatement deletePsOnly = connection.prepareStatement(deleteSql)) {
+                     deletePsOnly.setInt(1, investmentId); deletePsOnly.executeUpdate(); connection.commit();
+                 } catch (SQLException ex) { connection.rollback(); throw ex; }
+            } else { throw e; }
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+
+    /**
+     * Permanently deletes an investment from the recycle bin.
+     */
+    public void permanentlyDeleteInvestment(int investmentId) throws SQLException {
+        String sql = "DELETE FROM recycle_bin_investments WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, investmentId);
+            ps.executeUpdate();
+        }
+    }
+    
+    /**
+     * Updates only the current unit price of the given investment ID.
+     * Useful for quick price refreshes from the UI.
+     */
+    public void updateInvestmentCurrentPrice(int investmentId, double newPrice) throws SQLException {
+        String sql = "UPDATE investments SET current_unit_price = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setDouble(1, newPrice);
+            ps.setInt(2, investmentId);
+            ps.executeUpdate();
+        }
+    }
+    // ==================================================================
+    // ===         TABLE CREATION (If needed on startup)              ===
+    // ==================================================================
+     private void createTables() throws SQLException {
+         try (Statement stmt = connection.createStatement()) {
+             System.out.println("Checking/Creating database tables...");
+             
+             // Inside private void createTables()
+stmt.execute("CREATE TABLE IF NOT EXISTS tax_profiles (" +
+    "id INT AUTO_INCREMENT PRIMARY KEY," +
+    "profile_name VARCHAR(100) NOT NULL," +
+    "profile_type VARCHAR(50) NOT NULL," +
+    "financial_year VARCHAR(10) NOT NULL," +
+    "gross_income DECIMAL(15, 2) DEFAULT 0.00," +
+    "total_deductions DECIMAL(15, 2) DEFAULT 0.00," +
+    "taxable_income DECIMAL(15, 2) DEFAULT 0.00," +
+    "tax_paid DECIMAL(15, 2) DEFAULT 0.00," +
+    "notes TEXT," + 
+    "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
+")");
+             
+             
+             // --- KEEP EXISTING TABLES ---
+             stmt.execute("CREATE TABLE IF NOT EXISTS transactions (id INT AUTO_INCREMENT PRIMARY KEY, date DATE NOT NULL, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, day VARCHAR(20), payment_method VARCHAR(20), category VARCHAR(100), type VARCHAR(20) NOT NULL, payee VARCHAR(100), description TEXT, amount DECIMAL(10, 2) NOT NULL)");
+             stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_transactions (id INT PRIMARY KEY, timestamp TIMESTAMP, date DATE, day VARCHAR(20), payment_method VARCHAR(20), category VARCHAR(100), type VARCHAR(20), payee VARCHAR(100), description TEXT, amount DECIMAL(10, 2), deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+             stmt.execute("CREATE TABLE IF NOT EXISTS bank_accounts (id INT AUTO_INCREMENT PRIMARY KEY, account_number VARCHAR(50) NOT NULL, holder_name VARCHAR(100), bank_name VARCHAR(100), ifsc_code VARCHAR(20), balance DECIMAL(15, 2) DEFAULT 0.00, account_type VARCHAR(20) NOT NULL, interest_rate DECIMAL(5, 2), annual_expense DECIMAL(15, 2), account_subtype VARCHAR(20), company_name VARCHAR(100), business_name VARCHAR(100))");
+             stmt.execute("CREATE TABLE IF NOT EXISTS deposits (id INT AUTO_INCREMENT PRIMARY KEY, deposit_type VARCHAR(20) NOT NULL, holder_name VARCHAR(100), description TEXT, goal VARCHAR(255), creation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, account_number VARCHAR(50), principal_amount DECIMAL(15, 2), monthly_amount DECIMAL(15, 2), interest_rate DECIMAL(5, 2), tenure INT, tenure_unit VARCHAR(10), start_date DATE, current_total DECIMAL(15, 2), last_updated TIMESTAMP NULL, count_500 INT DEFAULT 0, count_200 INT DEFAULT 0, count_100 INT DEFAULT 0, count_50 INT DEFAULT 0, count_20 INT DEFAULT 0, count_10 INT DEFAULT 0, count_5 INT DEFAULT 0, count_2 INT DEFAULT 0, count_1 INT DEFAULT 0, gullak_due_amount DECIMAL(15, 2) DEFAULT 0.00)");
+             stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_deposits (id INT NOT NULL PRIMARY KEY, deposit_type VARCHAR(20) NOT NULL, holder_name VARCHAR(100), description TEXT, goal VARCHAR(255), creation_date TIMESTAMP, account_number VARCHAR(50), principal_amount DECIMAL(15, 2), monthly_amount DECIMAL(15, 2), interest_rate DECIMAL(5, 2), tenure INT, tenure_unit VARCHAR(10), start_date DATE, current_total DECIMAL(15, 2), last_updated TIMESTAMP NULL, count_500 INT DEFAULT 0, count_200 INT DEFAULT 0, count_100 INT DEFAULT 0, count_50 INT DEFAULT 0, count_20 INT DEFAULT 0, count_10 INT DEFAULT 0, count_5 INT DEFAULT 0, count_2 INT DEFAULT 0, count_1 INT DEFAULT 0, gullak_due_amount DECIMAL(15, 2) DEFAULT 0.00, deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+             stmt.execute("CREATE TABLE IF NOT EXISTS cards (id INT AUTO_INCREMENT PRIMARY KEY, unique_id VARCHAR(36) UNIQUE NOT NULL, card_name VARCHAR(100) NOT NULL, card_type VARCHAR(20) NOT NULL, card_number VARCHAR(16) NOT NULL, valid_from VARCHAR(5), valid_through VARCHAR(5) NOT NULL, cvv VARCHAR(4) NOT NULL, front_image_path VARCHAR(255), back_image_path VARCHAR(255), credit_limit DECIMAL(15, 2), current_expenses DECIMAL(15, 2), amount_to_pay DECIMAL(15, 2), days_left_to_pay INT, creation_date DATE)");
+             stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_cards (recycle_id INT AUTO_INCREMENT PRIMARY KEY, original_id INT NOT NULL, unique_id VARCHAR(36) NOT NULL, card_name VARCHAR(100) NOT NULL, card_type VARCHAR(20) NOT NULL, card_number VARCHAR(16) NOT NULL, valid_from VARCHAR(5), valid_through VARCHAR(5) NOT NULL, cvv VARCHAR(4) NOT NULL, front_image_path VARCHAR(255), back_image_path VARCHAR(255), credit_limit DECIMAL(15, 2), current_expenses DECIMAL(15, 2), amount_to_pay DECIMAL(15, 2), days_left_to_pay INT, creation_date DATE, deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+
+             // --- REMOVE OLD INVESTMENT TABLES ---
+             stmt.execute("DROP TABLE IF EXISTS gold_silver_investments;");
+             stmt.execute("DROP TABLE IF EXISTS mutual_funds;");
+             
+             // --- ADD NEW INVESTMENT TABLES ---
+             stmt.execute("CREATE TABLE IF NOT EXISTS investments (" +
+                "id INT AUTO_INCREMENT PRIMARY KEY," +
+                "asset_type VARCHAR(50) NOT NULL," +
+                "holder_name VARCHAR(100)," +
+                "description VARCHAR(255)," +
+                "goal VARCHAR(255)," +
+                "start_date DATE," +
+                "account_details TEXT," +
+                "ticker_symbol VARCHAR(20)," +
+                "exchange VARCHAR(20)," +
+                "quantity DECIMAL(20, 8) DEFAULT 0.0," +
+                "initial_unit_cost DECIMAL(15, 2) DEFAULT 0.0," +
+                "current_unit_price DECIMAL(15, 2) DEFAULT 0.0," +
+                "property_address TEXT," +
+                "tenure_years INT," +
+                "interest_rate DECIMAL(5, 2)," +
+                "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
+             ")");
+             
+             stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_investments (" +
+                "id INT NOT NULL PRIMARY KEY," +
+                "asset_type VARCHAR(50) NOT NULL," +
+                "holder_name VARCHAR(100)," +
+                "description VARCHAR(255)," +
+                "goal VARCHAR(255)," +
+                "start_date DATE," +
+                "account_details TEXT," +
+                "ticker_symbol VARCHAR(20)," +
+                "exchange VARCHAR(20)," +
+                "quantity DECIMAL(20, 8) DEFAULT 0.0," +
+                "initial_unit_cost DECIMAL(15, 2) DEFAULT 0.0," +
+                "current_unit_price DECIMAL(15, 2) DEFAULT 0.0," +
+                "property_address TEXT," +
+                "tenure_years INT," +
+                "interest_rate DECIMAL(5, 2)," +
+                "last_updated TIMESTAMP," +
+                "deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+             ")");
+
+             System.out.println("Tables checked/created/updated.");
+         }
+     }
+     // ==================================================================
+    // ===         NEW TAX PROFILE METHODS                          ===
+    // ==================================================================
+
+    /**
+     * Saves a new tax profile to the database.
+     */
+    public void saveTaxProfile(TaxProfile tp) throws SQLException {
+        String sql = "INSERT INTO tax_profiles (profile_name, profile_type, financial_year, " +
+                     "gross_income, total_deductions, taxable_income, tax_paid, notes) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, tp.getProfileName());
+            ps.setString(2, tp.getProfileType());
+            ps.setString(3, tp.getFinancialYear());
+            ps.setDouble(4, tp.getGrossIncome());
+            ps.setDouble(5, tp.getTotalDeductions());
+            ps.setDouble(6, tp.getTaxableIncome()); // Store the calculated value
+            ps.setDouble(7, tp.getTaxPaid());
+            ps.setString(8, tp.getNotes());
+            
+            ps.executeUpdate();
+            
+            try (ResultSet generatedKeys = ps.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    // We don't set the ID on the object here,
+                    // but we could if the model had a setId() method.
+                }
+            }
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR saving tax profile (SQL) !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+    }
+
+    /**
+     * Fetches all tax profiles from the database.
+     */
+    public List<TaxProfile> getAllTaxProfiles() throws SQLException {
+        System.out.println("DEBUG: Entering getAllTaxProfiles...");
+        List<TaxProfile> profiles = new ArrayList<>();
+        String sql = "SELECT * FROM tax_profiles ORDER BY financial_year DESC, profile_name";
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                try {
+                    TaxProfile tp = new TaxProfile(
+                        rs.getInt("id"),
+                        rs.getString("profile_name"),
+                        rs.getString("profile_type"),
+                        rs.getString("financial_year"),
+                        rs.getDouble("gross_income"),
+                        rs.getDouble("total_deductions"),
+                        rs.getDouble("taxable_income"),
+                        rs.getDouble("tax_paid"),
+                        rs.getString("notes")
+                    );
+                    profiles.add(tp);
+                } catch (Exception e) {
+                    System.err.println("!!! ERROR creating TaxProfile object from ResultSet !!!");
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("DEBUG: Fetched " + profiles.size() + " tax profiles.");
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR executing SQL in getAllTaxProfiles !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+        return profiles;
+    }
+
+    /**
+     * Updates an existing tax profile in the database.
+     */
+    public void updateTaxProfile(TaxProfile tp) throws SQLException {
+        // Re-calculate taxable income before saving
+        tp.calculateTaxableIncome();
+        
+        String sql = "UPDATE tax_profiles SET " +
+                     "profile_name = ?, profile_type = ?, financial_year = ?, " +
+                     "gross_income = ?, total_deductions = ?, taxable_income = ?, " +
+                     "tax_paid = ?, notes = ? " +
+                     "WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, tp.getProfileName());
+            ps.setString(2, tp.getProfileType());
+            ps.setString(3, tp.getFinancialYear());
+            ps.setDouble(4, tp.getGrossIncome());
+            ps.setDouble(5, tp.getTotalDeductions());
+            ps.setDouble(6, tp.getTaxableIncome()); // Store updated calculation
+            ps.setDouble(7, tp.getTaxPaid());
+            ps.setString(8, tp.getNotes());
+            ps.setInt(9, tp.getId()); // WHERE clause
+            
+            ps.executeUpdate();
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR updating tax profile (SQL) !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+    }
+
+    /**
+     * Deletes a tax profile from the database (Hard Delete).
+     */
+    public void deleteTaxProfile(int profileId) throws SQLException {
+        String sql = "DELETE FROM tax_profiles WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, profileId);
+            ps.executeUpdate();
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR deleting tax profile (SQL) !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+    }
 }

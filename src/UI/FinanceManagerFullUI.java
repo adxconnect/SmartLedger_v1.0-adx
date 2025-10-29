@@ -11,21 +11,20 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 // Removed duplicate RecycleBinDialog import
 import src.UI.DepositRecycleBinDialog; // Import for Deposit Recycle Bin
-
+import src.UI.AddEditInvestmentDialog;
 import src.BankAccount;
 import src.Card;
 import src.FinanceManager;
-import src.GoldSilverInvestment;
-import src.MutualFund;
+import src.Investment;
 // Removed src.RecycleBinDialog import (using specific ones now)
 import src.Transaction;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-
+import src.UI.InvestmentRecycleBinDialog;
 import src.Deposit; // Import for Deposit class
-
+import src.UI.AddEditTaxProfileDialog;
 // Added missing imports for dialogs
 import src.UI.AddEditDepositDialog;
 import src.UI.GullakDialog;
@@ -33,6 +32,9 @@ import src.UI.RecycleBinDialog; // Transaction Recycle Bin Dialog
 import src.UI.ShowOtpDialog;
 import src.UI.EnterOtpDialog;
 import src.UI.SensitiveCardDetailsDialog;
+import src.TaxProfile;
+// We'll also add a placeholder for the dialog we will create
+// import src.UI.AddEditTaxProfileDialog;
 
 
 public class FinanceManagerFullUI extends JFrame {
@@ -53,13 +55,19 @@ public class FinanceManagerFullUI extends JFrame {
     private DefaultListModel<Deposit> depositListModel;
     private JPanel depositDetailPanel;
 
-    // --- Other Tab Variables (Models) ---
-    private DefaultTableModel gssModel, mfModel;
-    // Removed fdModel, rdModel
-    // --- Cards Tab Variables ---
+    // --- Investment Tab Variables ---
+    private JList<Investment> investmentList;
+    private DefaultListModel<Investment> investmentListModel;
+    private JPanel investmentDetailPanel;
+
     private JList<Card> cardList;
     private DefaultListModel<Card> cardListModel;
     private JPanel cardDetailPanel;
+    // --- Taxation Tab Variables ---
+
+    private JList<TaxProfile> taxProfileList;
+    private DefaultListModel<TaxProfile> taxProfileListModel;
+    private JPanel taxDetailPanel;
 
 
     public FinanceManagerFullUI() {
@@ -188,6 +196,100 @@ public class FinanceManagerFullUI extends JFrame {
         // Initial Load
         refreshDeposits();
 
+        // =========================================================
+        // ===         INVESTMENTS PANEL                         ===
+        // =========================================================
+        JPanel iPanel = new JPanel(new BorderLayout());
+        JSplitPane investmentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        investmentSplitPane.setDividerLocation(220);
+        investmentListModel = new DefaultListModel<>();
+        investmentList = new JList<>(investmentListModel);
+        investmentList.setFont(new Font("Arial", Font.PLAIN, 14));
+        investmentList.setBorder(new EmptyBorder(5, 5, 5, 5));
+        investmentSplitPane.setLeftComponent(new JScrollPane(investmentList));
+
+        investmentDetailPanel = new JPanel(new BorderLayout());
+        investmentDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        investmentSplitPane.setRightComponent(investmentDetailPanel);
+
+        iPanel.add(investmentSplitPane, BorderLayout.CENTER);
+
+        JPanel investmentButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JButton addInvestmentBtn = new JButton("Add Investment");
+        JButton deleteInvestmentBtn = new JButton("Delete Selected");
+        JButton investmentRecycleBinBtn = new JButton("Investment Recycle Bin");
+        investmentButtonPanel.add(addInvestmentBtn);
+        investmentButtonPanel.add(deleteInvestmentBtn);
+        investmentButtonPanel.add(investmentRecycleBinBtn);
+        iPanel.add(investmentButtonPanel, BorderLayout.SOUTH);
+
+        tabs.addTab("Investments", iPanel);
+
+        // Actions
+        investmentList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                Investment selected = investmentList.getSelectedValue();
+                showInvestmentDetails(selected);
+            }
+        });
+        addInvestmentBtn.addActionListener(e -> openAddEditInvestmentDialog(null));
+        deleteInvestmentBtn.addActionListener(e -> deleteSelectedInvestment());
+        investmentRecycleBinBtn.addActionListener(e -> openInvestmentRecycleBin());
+
+        // Initial load
+        refreshInvestments();
+
+
+        // =========================================================
+// ===         NEW TAXATION PANEL (MASTER-DETAIL)        ===
+// =========================================================
+JPanel taxPanel = new JPanel(new BorderLayout());
+
+// --- Split Pane ---
+JSplitPane taxSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+taxSplitPane.setDividerLocation(220); // Adjust as needed
+
+// --- Left Side: List of Tax Profiles ---
+taxProfileListModel = new DefaultListModel<>();
+taxProfileList = new JList<>(taxProfileListModel);
+taxProfileList.setFont(new Font("Arial", Font.PLAIN, 14));
+taxProfileList.setBorder(new EmptyBorder(5, 5, 5, 5));
+taxSplitPane.setLeftComponent(new JScrollPane(taxProfileList));
+
+// --- Right Side: Detail Panel ---
+taxDetailPanel = new JPanel(new BorderLayout());
+taxDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+taxDetailPanel.add(new JLabel("Select a tax profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+taxSplitPane.setRightComponent(taxDetailPanel);
+
+taxPanel.add(taxSplitPane, BorderLayout.CENTER);
+
+// --- Bottom Button Panel ---
+JPanel taxButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+JButton addTaxProfileBtn = new JButton("Add New Tax Profile");
+JButton deleteTaxProfileBtn = new JButton("Delete Selected Profile");
+
+taxButtonPanel.add(addTaxProfileBtn);
+taxButtonPanel.add(deleteTaxProfileBtn);
+taxPanel.add(taxButtonPanel, BorderLayout.SOUTH);
+
+tabs.addTab("Taxation", taxPanel); // Add the new tab
+
+// --- Action Listeners ---
+taxProfileList.addListSelectionListener(e -> {
+    if (!e.getValueIsAdjusting()) {
+        TaxProfile selected = taxProfileList.getSelectedValue();
+        showTaxProfileDetails(selected); // New method we will add
+    }
+});
+
+addTaxProfileBtn.addActionListener(e -> openAddEditTaxProfileDialog(null)); // New method
+deleteTaxProfileBtn.addActionListener(e -> deleteSelectedTaxProfile()); // New method
+
+// Load initial data
+refreshTaxProfiles(); // New method
+
 // =========================================================
 // ===         NEW CARDS PANEL (MASTER-DETAIL)           ===
 // =========================================================
@@ -241,27 +343,7 @@ cardRecycleBinBtn.addActionListener(e -> openCardRecycleBin()); // Method stub b
 refreshCards(); // Method to be added below
 
 
-        String[] gssCols = {"Metal Type", "Weight (g)", "Price/g", "Total Value"};
-        gssModel = new DefaultTableModel(gssCols, 0);
-        JTable gssTable = new JTable(gssModel);
-        JPanel gssPanel = new JPanel(new BorderLayout());
-        gssPanel.add(new JScrollPane(gssTable), BorderLayout.CENTER);
-        JButton addGSSBtn = new JButton("Add Gold/Silver");
-        gssPanel.add(addGSSBtn, BorderLayout.SOUTH);
-        tabs.addTab("Gold/Silver Investments", gssPanel);
-        addGSSBtn.addActionListener(e -> openGoldSilverDialog());
-        refreshGoldSilver();
-
-        String[] mfCols = {"Amount Invested", "Annual Rate (%)", "Years", "Maturity Value"};
-        mfModel = new DefaultTableModel(mfCols, 0);
-        JTable mfTable = new JTable(mfModel);
-        JPanel mfPanel = new JPanel(new BorderLayout());
-        mfPanel.add(new JScrollPane(mfTable), BorderLayout.CENTER);
-        JButton addMFBtn = new JButton("Add Mutual Fund");
-        mfPanel.add(addMFBtn, BorderLayout.SOUTH);
-        tabs.addTab("Mutual Funds", mfPanel);
-        addMFBtn.addActionListener(e -> openMutualFundDialog());
-        refreshMutualFunds();
+    
     } // End of Constructor
 
     // --- TRANSACTION METHODS ---
@@ -739,26 +821,9 @@ refreshCards(); // Method to be added below
     // --- OTHER REFRESH/DIALOG METHODS ---
 
     
-    private void openGoldSilverDialog() { /* ... Keep your existing implementation ... */ }
-    private void refreshGoldSilver() { /* ... Keep your existing implementation ... */ }
-    private void openMutualFundDialog() { /* ... Keep your existing implementation ... */ }
-
-    // --- refreshMutualFunds --- (Ensure methods below are OUTSIDE this one)
-    private void refreshMutualFunds() {
-        mfModel.setRowCount(0);
-        try {
-            for (MutualFund mf : manager.getAllMutualFunds()) {
-                mfModel.addRow(new Object[]{
-                    mf.getAmount(), mf.getAnnualRate(), mf.getYears(),
-                    mf.getMaturityAmount()
-                });
-            }
-        } catch(Exception e) {
-            JOptionPane.showMessageDialog(this, "Error loading: " + e.getMessage());
-        }
-    } // <<<--- MAKE SURE THIS BRACE '}' IS HERE, CLOSING refreshMutualFunds
 
 
+   
     // --- Main Method ---
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new FinanceManagerFullUI().setVisible(true));
@@ -944,5 +1009,298 @@ public void refreshAfterCardRestore() {
     System.out.println("Refreshing cards list after restore...");
     refreshCards();
 }
+// =========================================================
+    // ===         NEW INVESTMENT UI METHODS                 ===
+    // =========================================================
 
-} // End of FinanceManagerFullUI class
+    /**
+     * Refreshes the list of investments on the left side.
+     * Make this PUBLIC so dialogs can call it.
+     */
+    public void refreshInvestments() {
+        System.out.println("--- Refreshing Investments ---");
+        investmentListModel.clear();
+        investmentDetailPanel.removeAll(); // Clear details
+        investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        investmentDetailPanel.revalidate();
+        investmentDetailPanel.repaint();
+        try {
+            List<Investment> investments = manager.getAllInvestments();
+            System.out.println("Fetched " + investments.size() + " investments.");
+            for (Investment inv : investments) {
+                investmentListModel.addElement(inv);
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading investments: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
+         System.out.println("--- Finished Refreshing Investments ---");
+    }
+
+    /**
+     * Shows calculated details for the selected investment on the right panel.
+     */
+    private void showInvestmentDetails(Investment inv) {
+        investmentDetailPanel.removeAll();
+        if (inv == null) {
+            investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        } else {
+            JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column layout
+            String titleName = (inv.getDescription() != null && !inv.getDescription().isEmpty()) ? inv.getDescription() : inv.getTickerSymbol();
+            JLabel title = new JLabel(titleName + " (" + inv.getAssetType() + ")");
+            title.setFont(new Font("Arial", Font.BOLD, 18));
+            detailGrid.add(title);
+            detailGrid.add(new JLabel("Holder: " + inv.getHolderName()));
+
+            detailGrid.add(new JSeparator());
+            
+            // Calculated Values
+            double initialCost = inv.getTotalInitialCost();
+            double currentValue = inv.getTotalCurrentValue();
+            double pnl = inv.getProfitOrLoss();
+            double pnlPercent = inv.getProfitOrLossPercentage();
+
+            detailGrid.add(new JLabel(String.format("Total Initial Cost: ₹%.2f", initialCost)));
+            detailGrid.add(new JLabel(String.format("Total Current Value: ₹%.2f", currentValue)));
+            
+            // Profit/Loss Label
+            String pnlText = String.format("Profit/Loss: ₹%.2f (%.2f%%)", pnl, pnlPercent);
+            JLabel pnlLabel = new JLabel(pnlText);
+            // Set color based on profit or loss
+            if (pnl > 0) {
+                pnlLabel.setForeground(new Color(0, 128, 0)); // Dark Green
+            } else if (pnl < 0) {
+                pnlLabel.setForeground(Color.RED);
+            }
+            pnlLabel.setFont(new Font("Arial", Font.BOLD, 14));
+            detailGrid.add(pnlLabel);
+
+            detailGrid.add(new JSeparator());
+            
+            // Unit Details (if applicable)
+            if (inv.getQuantity() > 0) {
+                detailGrid.add(new JLabel(String.format("Quantity: %.4f units", inv.getQuantity())));
+                detailGrid.add(new JLabel(String.format("Avg. Cost Price: ₹%.2f /unit", inv.getInitialUnitCost())));
+                detailGrid.add(new JLabel(String.format("Current Price: ₹%.2f /unit", inv.getCurrentUnitPrice())));
+            }
+
+            // --- Buttons for Actions ---
+            JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+            JButton updatePriceButton = new JButton("Update Current Price");
+            JButton editButton = new JButton("Edit Details");
+            buttonSubPanel.add(updatePriceButton);
+            buttonSubPanel.add(editButton);
+
+            // --- Action Listeners for Buttons ---
+            editButton.addActionListener(e -> openAddEditInvestmentDialog(inv)); // Open edit dialog
+            updatePriceButton.addActionListener(e -> openUpdatePriceDialog(inv)); // New method stub
+
+            investmentDetailPanel.add(detailGrid, BorderLayout.NORTH);
+            investmentDetailPanel.add(buttonSubPanel, BorderLayout.CENTER);
+        }
+        investmentDetailPanel.revalidate();
+        investmentDetailPanel.repaint();
+    }
+
+    /**
+     * Opens a dialog to manually update the current price of an asset.
+     */
+    private void openUpdatePriceDialog(Investment inv) {
+        String currentPriceStr = JOptionPane.showInputDialog(
+            this,
+            "Enter new Current Unit Price for:\n" + inv.getDescription(),
+            "Update Price",
+            JOptionPane.QUESTION_MESSAGE
+        );
+
+        if (currentPriceStr != null && !currentPriceStr.isEmpty()) {
+            try {
+                double newPrice = Double.parseDouble(currentPriceStr);
+                // Update the investment's current unit price through the manager
+                manager.updateInvestmentCurrentPrice(inv.getId(), newPrice);
+                refreshInvestments(); // Refresh the entire list
+                // Re-select the item to show updated details
+                investmentList.setSelectedValue(inv, true);
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, "Invalid price. Please enter a number.", "Error", JOptionPane.ERROR_MESSAGE);
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Failed to update price: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Opens the dialog to add a new investment or edit an existing one (Placeholder).
+     */
+    private void openAddEditInvestmentDialog(Investment investmentToEdit) {
+    AddEditInvestmentDialog dialog = new AddEditInvestmentDialog(this, manager, investmentToEdit, this);
+    dialog.setVisible(true);
+    // Refresh is handled by the dialog on success
+}
+
+    /**
+     * Deletes the selected investment and moves it to the recycle bin.
+     */
+    private void deleteSelectedInvestment() {
+        Investment selected = investmentList.getSelectedValue();
+        if (selected == null) {
+            JOptionPane.showMessageDialog(this, "Please select an investment to delete.", "No Selection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int choice = JOptionPane.showConfirmDialog(this,
+            "Move this investment to the recycle bin?\n" + selected.toString(),
+            "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+        if (choice == JOptionPane.YES_OPTION) {
+            try {
+                manager.moveInvestmentToRecycleBin(selected.getId());
+                refreshInvestments(); // Refresh the list
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error deleting investment: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Opens the Investment Recycle Bin dialog (Placeholder).
+     */
+    private void openInvestmentRecycleBin() {
+     InvestmentRecycleBinDialog dialog = new InvestmentRecycleBinDialog(this, manager, this);
+     dialog.setVisible(true);
+     // The main list will refresh via the callback 'refreshAfterInvestmentRestore' if needed
+}
+
+    /**
+     * Callback method for the Investment Recycle Bin dialog (Placeholder).
+     * Make sure this is PUBLIC.
+     */
+    public void refreshAfterInvestmentRestore() {
+        System.out.println("Refreshing investments list after restore...");
+        refreshInvestments();
+    }
+    
+// ==================================================================
+// ===               TAXATION UI METHODS                          ===
+// ==================================================================
+
+/**
+ * Refreshes the list of tax profiles on the left side.
+ * Make this PUBLIC so dialogs can call it.
+ */
+public void refreshTaxProfiles() {
+    System.out.println("--- Refreshing Tax Profiles ---");
+    taxProfileListModel.clear();
+    taxDetailPanel.removeAll();
+    taxDetailPanel.add(new JLabel("Select a profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    taxDetailPanel.revalidate();
+    taxDetailPanel.repaint();
+    try {
+        List<TaxProfile> profiles = manager.getAllTaxProfiles();
+        System.out.println("Fetched " + profiles.size() + " tax profiles.");
+        for (TaxProfile tp : profiles) {
+            taxProfileListModel.addElement(tp);
+        }
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "Error loading tax profiles: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        e.printStackTrace();
+    }
+}
+
+/**
+ * Shows calculated details for the selected tax profile.
+ */
+private void showTaxProfileDetails(TaxProfile tp) {
+    taxDetailPanel.removeAll();
+    if (tp == null) {
+        taxDetailPanel.add(new JLabel("Select a profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    } else {
+        JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column layout
+
+        JLabel title = new JLabel(tp.getProfileName() + " (" + tp.getFinancialYear() + ")");
+        title.setFont(new Font("Arial", Font.BOLD, 18));
+        detailGrid.add(title);
+        detailGrid.add(new JLabel("Profile Type: " + tp.getProfileType()));
+
+        detailGrid.add(new JSeparator());
+
+        // --- Core Calculation Display ---
+        JLabel grossLabel = new JLabel(String.format("Gross Income: ₹%.2f", tp.getGrossIncome()));
+        grossLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+        detailGrid.add(grossLabel);
+
+        JLabel deducLabel = new JLabel(String.format("Total Deductions: - ₹%.2f", tp.getTotalDeductions()));
+        deducLabel.setForeground(Color.RED);
+        deducLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+        detailGrid.add(deducLabel);
+
+        detailGrid.add(new JSeparator());
+
+        JLabel taxableLabel = new JLabel(String.format("Total Taxable Income: ₹%.2f", tp.getTaxableIncome()));
+        taxableLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        detailGrid.add(taxableLabel);
+
+        detailGrid.add(new JSeparator());
+
+        JLabel taxPaidLabel = new JLabel(String.format("Tax Already Paid (TDS, etc.): ₹%.2f", tp.getTaxPaid()));
+        detailGrid.add(taxPaidLabel);
+
+        if (tp.getNotes() != null && !tp.getNotes().isEmpty()) {
+            detailGrid.add(new JSeparator());
+            JTextArea notesArea = new JTextArea("Notes:\n" + tp.getNotes());
+            notesArea.setEditable(false);
+            notesArea.setLineWrap(true);
+            notesArea.setWrapStyleWord(true);
+            detailGrid.add(notesArea);
+        }
+
+        // --- Buttons ---
+        JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton editButton = new JButton("Edit Profile");
+        editButton.addActionListener(e -> openAddEditTaxProfileDialog(tp));
+        buttonSubPanel.add(editButton);
+
+        taxDetailPanel.add(detailGrid, BorderLayout.NORTH);
+        taxDetailPanel.add(buttonSubPanel, BorderLayout.CENTER);
+    }
+    taxDetailPanel.revalidate();
+    taxDetailPanel.repaint();
+}
+
+/**
+ * Opens the dialog to add/edit a tax profile (Placeholder).
+ */
+private void openAddEditTaxProfileDialog(TaxProfile profileToEdit) {
+    AddEditTaxProfileDialog dialog = new AddEditTaxProfileDialog(this, manager, profileToEdit, this);
+    dialog.setVisible(true);
+    // Refresh is handled by the dialog on success
+}
+
+/**
+ * Deletes the selected tax profile.
+ */
+private void deleteSelectedTaxProfile() {
+    TaxProfile selected = taxProfileList.getSelectedValue();
+    if (selected == null) {
+        JOptionPane.showMessageDialog(this, "Please select a profile to delete.", "No Selection", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    int choice = JOptionPane.showConfirmDialog(this,
+        "Are you sure you want to permanently delete this tax profile?\n" + selected.toString(),
+        "Confirm Permanent Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+    if (choice == JOptionPane.YES_OPTION) {
+        try {
+            manager.deleteTaxProfile(selected.getId());
+            refreshTaxProfiles(); // Refresh the list
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error deleting profile: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace();
+        }
+    }
+}
+
+} 
