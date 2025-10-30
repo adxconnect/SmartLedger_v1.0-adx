@@ -39,6 +39,7 @@ import src.UI.EnterOtpDialog;
 import src.UI.SensitiveCardDetailsDialog;
 import src.TaxProfile;
 import src.Loan;
+import src.SummaryData;
 // We'll also add placeholders for the dialogs
 import src.UI.AddEditLoanDialog;
 import src.UI.LoanRecycleBinDialog;
@@ -48,11 +49,15 @@ import java.io.FileWriter;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 // Imports for Excel (Apache POI)
 // Removed Excel (Apache POI) imports as XLSX export is no longer supported
 // Imports for PDF (iText)
 import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.Phrase;
 import com.itextpdf.text.pdf.PdfPCell;
@@ -99,6 +104,19 @@ public class FinanceManagerFullUI extends JFrame {
 private JList<Loan> loanList;
 private DefaultListModel<Loan> loanListModel;
 private JPanel loanDetailPanel;
+
+    // --- Summary Tab Variables ---
+    private JTextField summaryCompanyField;
+    private JTextField summaryDesignationField;
+    private JTextField summaryHolderField;
+    private JComboBox<String> summaryYearCombo;
+    private JButton summaryRefreshButton;
+    private JButton summaryExportCsvButton;
+    private JButton summaryExportPdfButton;
+    private JTextArea summaryOverviewArea;
+    private SummaryData currentSummarySnapshot;
+    private boolean summaryTabInitialized = false;
+    private static final DateTimeFormatter SUMMARY_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
 
 
     public FinanceManagerFullUI() {
@@ -446,6 +464,11 @@ cardRecycleBinBtn.addActionListener(e -> openCardRecycleBin()); // Method stub b
 // Load initial data
 refreshCards(); // Method to be added below
 
+    // =========================================================
+    // ===         SUMMARY & REPORTS PANEL                  ===
+    // =========================================================
+    initSummaryTab(tabs);
+
 
     
     } // End of Constructor
@@ -461,6 +484,7 @@ refreshCards(); // Method to be added below
             if (previouslySelected != null && years.contains(previouslySelected)) {
                 yearComboBox.setSelectedItem(previouslySelected);
             }
+            loadSummaryYearChoices();
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading years: " + e.getMessage());
         }
@@ -469,7 +493,9 @@ refreshCards(); // Method to be added below
     private void refreshTransactions() {
         monthTabs.removeAll();
         String selectedYear = (String) yearComboBox.getSelectedItem();
-        if (selectedYear == null) return;
+            if (selectedYear == null) {
+                return;
+            }
         try {
             Map<String, List<Transaction>> groupedData = manager.getTransactionsGroupedByMonth(selectedYear);
             String[] tcols = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount"};
@@ -512,9 +538,8 @@ refreshCards(); // Method to be added below
         String q = query.trim();
         if (q.isEmpty()) { sorter.setRowFilter(null); return; }
 
-        // Case-insensitive contains match
-        String pattern = java.util.regex.Pattern.quote(q);
-        javax.swing.RowFilter<DefaultTableModel, Object> filter;
+    // Case-insensitive contains match
+    javax.swing.RowFilter<DefaultTableModel, Object> filter;
 
         // Column mapping to model indices
         String[] labels = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount"};
@@ -543,6 +568,705 @@ refreshCards(); // Method to be added below
             };
         }
         sorter.setRowFilter(filter);
+    }
+
+    private void initSummaryTab(JTabbedPane tabs) {
+        JPanel summaryPanel = new JPanel(new BorderLayout(10, 10));
+        summaryPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        JPanel inputPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        summaryCompanyField = new JTextField(20);
+        summaryDesignationField = new JTextField(18);
+        summaryHolderField = new JTextField(20);
+        summaryYearCombo = new JComboBox<>();
+        summaryRefreshButton = new JButton("Generate Summary");
+        summaryExportCsvButton = new JButton("Export CSV");
+        summaryExportPdfButton = new JButton("Export PDF");
+        summaryExportCsvButton.setEnabled(false);
+        summaryExportPdfButton.setEnabled(false);
+
+        int row = 0;
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Company:"), gbc);
+        gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryCompanyField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Designation:"), gbc);
+        gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryDesignationField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Report Holder:"), gbc);
+        gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryHolderField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Transaction Year:"), gbc);
+        gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryYearCombo, gbc);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonPanel.add(summaryRefreshButton);
+        buttonPanel.add(summaryExportCsvButton);
+        buttonPanel.add(summaryExportPdfButton);
+
+        gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 2;
+        inputPanel.add(buttonPanel, gbc);
+
+        summaryOverviewArea = new JTextArea(24, 80);
+        summaryOverviewArea.setEditable(false);
+        summaryOverviewArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        summaryOverviewArea.setLineWrap(true);
+        summaryOverviewArea.setWrapStyleWord(true);
+        summaryOverviewArea.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+
+        summaryPanel.add(inputPanel, BorderLayout.NORTH);
+        summaryPanel.add(new JScrollPane(summaryOverviewArea), BorderLayout.CENTER);
+
+        loadSummaryYearChoices();
+
+        summaryRefreshButton.addActionListener(e -> regenerateSummary());
+        summaryExportCsvButton.addActionListener(e -> exportSummaryAsCsv());
+        summaryExportPdfButton.addActionListener(e -> exportSummaryAsPdf());
+        summaryYearCombo.addActionListener(e -> { if (summaryTabInitialized) regenerateSummary(); });
+
+        tabs.addTab("Summary & Reports", summaryPanel);
+
+        summaryTabInitialized = true;
+        regenerateSummary();
+    }
+
+    private void loadSummaryYearChoices() {
+        if (summaryYearCombo == null) return;
+        try {
+            List<String> years = manager.getAvailableYears();
+            summaryYearCombo.removeAllItems();
+            for (String year : years) {
+                summaryYearCombo.addItem(year);
+            }
+            if (summaryYearCombo.getItemCount() > 0) {
+                summaryYearCombo.setSelectedIndex(0);
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error loading summary years: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void regenerateSummary() {
+        if (!summaryTabInitialized) {
+            return;
+        }
+        try {
+            String company = summaryCompanyField != null ? summaryCompanyField.getText() : "";
+            String designation = summaryDesignationField != null ? summaryDesignationField.getText() : "";
+            String holder = summaryHolderField != null ? summaryHolderField.getText() : "";
+            String year = summaryYearCombo != null ? (String) summaryYearCombo.getSelectedItem() : "All Years";
+
+            SummaryData summary = manager.buildSummaryData(company, designation, holder, year);
+            currentSummarySnapshot = summary;
+            renderSummary(summary);
+            summaryExportCsvButton.setEnabled(true);
+            summaryExportPdfButton.setEnabled(true);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Unable to prepare summary: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            renderSummary(null);
+        }
+    }
+
+    private void renderSummary(SummaryData data) {
+        if (summaryOverviewArea == null) {
+            return;
+        }
+        if (data == null) {
+            summaryOverviewArea.setText("Summary unavailable. Please try generating again.");
+            summaryExportCsvButton.setEnabled(false);
+            summaryExportPdfButton.setEnabled(false);
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        String holder = defaultIfEmpty(data.getHolderName(), "N/A");
+        String designation = defaultIfEmpty(data.getDesignation(), "N/A");
+        String company = defaultIfEmpty(data.getCompanyName(), "N/A");
+
+        sb.append("Prepared For : ").append(holder);
+        if (!isBlank(designation) && !"N/A".equals(designation)) {
+            sb.append(" (" + designation + ")");
+        }
+        sb.append(System.lineSeparator());
+        if (!isBlank(company) && !"N/A".equals(company)) {
+            sb.append("Company      : ").append(company).append(System.lineSeparator());
+        }
+        LocalDateTime generated = data.getGeneratedAt();
+        if (generated != null) {
+            sb.append("Generated On : ").append(generated.format(SUMMARY_TIMESTAMP_FORMAT)).append(System.lineSeparator());
+        }
+        sb.append(System.lineSeparator());
+
+        appendSection(sb, "Transactions Overview");
+        SummaryData.TransactionSummary txn = data.getTransactions();
+        sb.append(String.format("  Total Entries     : %d%n", txn.getTotalCount()));
+        sb.append(String.format("  Total Income      : %s%n", formatCurrency(txn.getTotalIncome())));
+        sb.append(String.format("  Total Expense     : %s%n", formatCurrency(txn.getTotalExpense())));
+        sb.append(String.format("  Net Balance       : %s%n", formatCurrency(txn.getNetBalance())));
+
+        appendSection(sb, "Bank Accounts");
+        SummaryData.BankSummary bank = data.getBank();
+        sb.append(String.format("  Accounts          : %d%n", bank.getAccountCount()));
+        sb.append(String.format("  Unique Holders    : %d%n", bank.getUniqueHolderCount()));
+        sb.append(String.format("  Total Balance     : %s%n", formatCurrency(bank.getTotalBalance())));
+        if (!isBlank(bank.getTopAccountLabel())) {
+            sb.append(String.format("  Top Account       : %s (%s)%n", bank.getTopAccountLabel(), formatCurrency(bank.getTopAccountBalance())));
+        }
+
+        appendSection(sb, "Deposits");
+        SummaryData.DepositSummary deposits = data.getDeposits();
+        sb.append(String.format("  Total Deposits    : %d%n", deposits.getTotalCount()));
+        sb.append(String.format("  FD Principal      : %s%n", formatCurrency(deposits.getTotalFdPrincipal())));
+        sb.append(String.format("  FD Maturity Est.  : %s%n", formatCurrency(deposits.getTotalFdMaturityEstimate())));
+        sb.append(String.format("  RD Contributions  : %s%n", formatCurrency(deposits.getTotalRdContribution())));
+        sb.append(String.format("  RD Maturity Est.  : %s%n", formatCurrency(deposits.getTotalRdMaturityEstimate())));
+        sb.append(String.format("  Gullak Balance    : %s%n", formatCurrency(deposits.getTotalGullakBalance())));
+        sb.append(String.format("  Gullak Due        : %s%n", formatCurrency(deposits.getTotalGullakDue())));
+        if (!deposits.getMaturityHighlights().isEmpty()) {
+            sb.append("  Upcoming Maturities:" + System.lineSeparator());
+            for (SummaryData.DepositSummary.MaturityInfo info : deposits.getMaturityHighlights()) {
+                sb.append(String.format("    - %s | Due %s | Principal %s | Value %s%n",
+                        info.getLabel(),
+                        info.getMaturityDateLabel(),
+                        formatCurrency(info.getPrincipalValue()),
+                        formatCurrency(info.getMaturityValue())));
+            }
+        }
+
+        appendSection(sb, "Investments");
+        SummaryData.InvestmentSummary investments = data.getInvestments();
+        sb.append(String.format("  Total Assets      : %d%n", investments.getTotalCount()));
+        sb.append(String.format("  Initial Value     : %s%n", formatCurrency(investments.getTotalInitialValue())));
+        sb.append(String.format("  Current Value     : %s%n", formatCurrency(investments.getTotalCurrentValue())));
+        sb.append(String.format("  Net P/L           : %s%n", formatCurrency(investments.getTotalProfitOrLoss())));
+        if (!investments.getTopPerformers().isEmpty()) {
+            sb.append("  Top Performers:" + System.lineSeparator());
+            for (SummaryData.InvestmentSummary.InvestmentHighlight hi : investments.getTopPerformers()) {
+                sb.append(String.format("    - %s [%s] : %s (%+.2f%%)%n",
+                        defaultIfEmpty(hi.getLabel(), "Asset"),
+                        defaultIfEmpty(hi.getAssetType(), "N/A"),
+                        formatCurrency(hi.getCurrentValue()),
+                        hi.getProfitOrLossPercentage()));
+            }
+        }
+
+        appendSection(sb, "Loans");
+        SummaryData.LoanSummary loans = data.getLoans();
+        sb.append(String.format("  Total Loans       : %d%n", loans.getTotalCount()));
+        sb.append(String.format("  Active Loans      : %d%n", loans.getActiveCount()));
+        sb.append(String.format("  Closed Loans      : %d%n", loans.getPaidOffCount()));
+        sb.append(String.format("  Principal Issued  : %s%n", formatCurrency(loans.getTotalPrincipal())));
+        sb.append(String.format("  Principal O/S     : %s%n", formatCurrency(loans.getTotalPrincipalOutstanding())));
+        sb.append(String.format("  Principal Repaid  : %s%n", formatCurrency(loans.getTotalPrincipalPaidOff())));
+        sb.append(String.format("  Total Monthly EMI : %s%n", formatCurrency(loans.getTotalMonthlyEmi())));
+        sb.append(String.format("  Outstanding Pay   : %s%n", formatCurrency(loans.getTotalRepayableOutstanding())));
+        if (!loans.getKeyLoans().isEmpty()) {
+            sb.append("  Key Loans:" + System.lineSeparator());
+            for (SummaryData.LoanSummary.LoanHighlight hl : loans.getKeyLoans()) {
+                sb.append(String.format("    - %s [%s] : EMI %s | Principal %s | Total %s%n",
+                        defaultIfEmpty(hl.getLabel(), "Loan"),
+                        defaultIfEmpty(hl.getStatus(), "Status"),
+                        formatCurrency(hl.getEmiAmount()),
+                        formatCurrency(hl.getPrincipalAmount()),
+                        formatCurrency(hl.getTotalRepayable())));
+            }
+        }
+
+        appendSection(sb, "Cards");
+        SummaryData.CardSummary cards = data.getCards();
+        sb.append(String.format("  Total Cards       : %d%n", cards.getTotalCount()));
+        sb.append(String.format("  Credit Cards      : %d%n", cards.getCreditCardCount()));
+        sb.append(String.format("  Debit Cards       : %d%n", cards.getDebitCardCount()));
+        sb.append(String.format("  Credit Limit      : %s%n", formatCurrency(cards.getTotalCreditLimit())));
+        sb.append(String.format("  Credit Used       : %s%n", formatCurrency(cards.getTotalCreditUsed())));
+        sb.append(String.format("  Credit Available  : %s%n", formatCurrency(cards.getTotalCreditAvailable())));
+        sb.append(String.format("  Total Amount Due  : %s%n", formatCurrency(cards.getTotalCreditDue())));
+        if (!cards.getKeyCards().isEmpty()) {
+            sb.append("  High Due Cards:" + System.lineSeparator());
+            for (SummaryData.CardSummary.CardHighlight ch : cards.getKeyCards()) {
+                sb.append(String.format("    - %s [%s] : Limit %s | Available %s | Due %s%n",
+                        defaultIfEmpty(ch.getCardName(), "Card"),
+                        defaultIfEmpty(ch.getCardType(), "Type"),
+                        formatCurrency(ch.getCreditLimit()),
+                        formatCurrency(ch.getAvailableCredit()),
+                        formatCurrency(ch.getAmountDue())));
+            }
+        }
+
+        appendSection(sb, "Tax Profiles");
+        SummaryData.TaxSummary tax = data.getTax();
+        sb.append(String.format("  Profiles          : %d%n", tax.getProfileCount()));
+        sb.append(String.format("  Gross Income      : %s%n", formatCurrency(tax.getTotalGrossIncome())));
+        sb.append(String.format("  Deductions        : %s%n", formatCurrency(tax.getTotalDeductions())));
+        sb.append(String.format("  Taxable Income    : %s%n", formatCurrency(tax.getTotalTaxableIncome())));
+        sb.append(String.format("  Tax Paid          : %s%n", formatCurrency(tax.getTotalTaxPaid())));
+        if (!isBlank(tax.getLatestFinancialYear())) {
+            sb.append(String.format("  Latest Year       : %s | Taxable %s | Tax Paid %s%n",
+                    tax.getLatestFinancialYear(),
+                    formatCurrency(tax.getLatestYearTaxable()),
+                    formatCurrency(tax.getLatestYearTaxPaid())));
+        }
+        if (!tax.getKeyProfiles().isEmpty()) {
+            sb.append("  Key Profiles:" + System.lineSeparator());
+            for (SummaryData.TaxSummary.TaxProfileHighlight th : tax.getKeyProfiles()) {
+                sb.append(String.format("    - %s (%s) : Taxable %s | Paid %s%n",
+                        defaultIfEmpty(th.getProfileName(), "Profile"),
+                        defaultIfEmpty(th.getFinancialYear(), "Year"),
+                        formatCurrency(th.getTaxableIncome()),
+                        formatCurrency(th.getTaxPaid())));
+            }
+        }
+
+        summaryOverviewArea.setText(sb.toString());
+        summaryOverviewArea.setCaretPosition(0);
+    }
+
+    private void exportSummaryAsCsv() {
+        if (currentSummarySnapshot == null) {
+            JOptionPane.showMessageDialog(this, "Please generate the summary before exporting.", "Summary Required", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Save Summary CSV");
+        chooser.setSelectedFile(new File(buildDefaultSummaryFilename("csv")));
+
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File target = ensureExtension(chooser.getSelectedFile(), ".csv");
+            try {
+                writeSummaryToCsv(currentSummarySnapshot, target);
+                JOptionPane.showMessageDialog(this, "Summary exported to \"" + target.getAbsolutePath() + "\"", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Unable to export CSV: " + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void exportSummaryAsPdf() {
+        if (currentSummarySnapshot == null) {
+            JOptionPane.showMessageDialog(this, "Please generate the summary before exporting.", "Summary Required", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Save Summary PDF");
+        chooser.setSelectedFile(new File(buildDefaultSummaryFilename("pdf")));
+
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File target = ensureExtension(chooser.getSelectedFile(), ".pdf");
+            try {
+                writeSummaryToPdf(currentSummarySnapshot, target);
+                JOptionPane.showMessageDialog(this, "Summary exported to \"" + target.getAbsolutePath() + "\"", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Unable to export PDF: " + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void writeSummaryToCsv(SummaryData data, File file) throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            writer.println("Header,Value");
+            writer.printf("Company,%s%n", escapeCsv(defaultIfEmpty(data.getCompanyName(), "")));
+            writer.printf("Designation,%s%n", escapeCsv(defaultIfEmpty(data.getDesignation(), "")));
+            writer.printf("Holder,%s%n", escapeCsv(defaultIfEmpty(data.getHolderName(), "")));
+            writer.printf("Generated At,%s%n", data.getGeneratedAt() != null ? data.getGeneratedAt().format(SUMMARY_TIMESTAMP_FORMAT) : "");
+
+            writer.println();
+            writer.println("Transactions");
+            SummaryData.TransactionSummary txn = data.getTransactions();
+            writer.printf("Total Entries,%d%n", txn.getTotalCount());
+            writer.printf("Total Income,%s%n", formatCurrency(txn.getTotalIncome()));
+            writer.printf("Total Expense,%s%n", formatCurrency(txn.getTotalExpense()));
+            writer.printf("Net Balance,%s%n", formatCurrency(txn.getNetBalance()));
+
+            writer.println();
+            writer.println("Bank Accounts");
+            SummaryData.BankSummary bank = data.getBank();
+            writer.printf("Accounts,%d%n", bank.getAccountCount());
+            writer.printf("Unique Holders,%d%n", bank.getUniqueHolderCount());
+            writer.printf("Total Balance,%s%n", formatCurrency(bank.getTotalBalance()));
+            writer.printf("Top Account,%s%n", escapeCsv(defaultIfEmpty(bank.getTopAccountLabel(), "")));
+            writer.printf("Top Account Balance,%s%n", formatCurrency(bank.getTopAccountBalance()));
+
+            writer.println();
+            writer.println("Deposits");
+            SummaryData.DepositSummary deposits = data.getDeposits();
+            writer.printf("Total Deposits,%d%n", deposits.getTotalCount());
+            writer.printf("FD Principal,%s%n", formatCurrency(deposits.getTotalFdPrincipal()));
+            writer.printf("FD Maturity Estimate,%s%n", formatCurrency(deposits.getTotalFdMaturityEstimate()));
+            writer.printf("RD Contribution,%s%n", formatCurrency(deposits.getTotalRdContribution()));
+            writer.printf("RD Maturity Estimate,%s%n", formatCurrency(deposits.getTotalRdMaturityEstimate()));
+            writer.printf("Gullak Balance,%s%n", formatCurrency(deposits.getTotalGullakBalance()));
+            writer.printf("Gullak Due,%s%n", formatCurrency(deposits.getTotalGullakDue()));
+            if (!deposits.getMaturityHighlights().isEmpty()) {
+                writer.println("Upcoming Maturities");
+                writer.println("Label,Due Date,Principal,Maturity Value");
+                for (SummaryData.DepositSummary.MaturityInfo info : deposits.getMaturityHighlights()) {
+                    writer.printf("%s,%s,%s,%s%n",
+                            escapeCsv(info.getLabel()),
+                            escapeCsv(info.getMaturityDateLabel()),
+                            formatCurrency(info.getPrincipalValue()),
+                            formatCurrency(info.getMaturityValue()));
+                }
+            }
+
+            writer.println();
+            writer.println("Investments");
+            SummaryData.InvestmentSummary investments = data.getInvestments();
+            writer.printf("Total Assets,%d%n", investments.getTotalCount());
+            writer.printf("Initial Value,%s%n", formatCurrency(investments.getTotalInitialValue()));
+            writer.printf("Current Value,%s%n", formatCurrency(investments.getTotalCurrentValue()));
+            writer.printf("Net Profit/Loss,%s%n", formatCurrency(investments.getTotalProfitOrLoss()));
+            if (!investments.getTopPerformers().isEmpty()) {
+                writer.println("Top Performers");
+                writer.println("Label,Type,Current Value,Profit/Loss %,Profit/Loss Absolute");
+                for (SummaryData.InvestmentSummary.InvestmentHighlight hi : investments.getTopPerformers()) {
+                    writer.printf("%s,%s,%s,%.2f,%s%n",
+                            escapeCsv(defaultIfEmpty(hi.getLabel(), "")),
+                            escapeCsv(defaultIfEmpty(hi.getAssetType(), "")),
+                            formatCurrency(hi.getCurrentValue()),
+                            hi.getProfitOrLossPercentage(),
+                            formatCurrency(hi.getProfitOrLoss()));
+                }
+            }
+
+            writer.println();
+            writer.println("Loans");
+            SummaryData.LoanSummary loans = data.getLoans();
+            writer.printf("Total Loans,%d%n", loans.getTotalCount());
+            writer.printf("Active Loans,%d%n", loans.getActiveCount());
+            writer.printf("Closed Loans,%d%n", loans.getPaidOffCount());
+            writer.printf("Principal Issued,%s%n", formatCurrency(loans.getTotalPrincipal()));
+            writer.printf("Principal Outstanding,%s%n", formatCurrency(loans.getTotalPrincipalOutstanding()));
+            writer.printf("Principal Paid,%s%n", formatCurrency(loans.getTotalPrincipalPaidOff()));
+            writer.printf("Monthly EMI,%s%n", formatCurrency(loans.getTotalMonthlyEmi()));
+            writer.printf("Outstanding Repayable,%s%n", formatCurrency(loans.getTotalRepayableOutstanding()));
+            if (!loans.getKeyLoans().isEmpty()) {
+                writer.println("Key Loans");
+                writer.println("Label,Status,EMI,Principal,Total Repayable");
+                for (SummaryData.LoanSummary.LoanHighlight hl : loans.getKeyLoans()) {
+                    writer.printf("%s,%s,%s,%s,%s%n",
+                            escapeCsv(defaultIfEmpty(hl.getLabel(), "")),
+                            escapeCsv(defaultIfEmpty(hl.getStatus(), "")),
+                            formatCurrency(hl.getEmiAmount()),
+                            formatCurrency(hl.getPrincipalAmount()),
+                            formatCurrency(hl.getTotalRepayable()));
+                }
+            }
+
+            writer.println();
+            writer.println("Cards");
+            SummaryData.CardSummary cards = data.getCards();
+            writer.printf("Total Cards,%d%n", cards.getTotalCount());
+            writer.printf("Credit Cards,%d%n", cards.getCreditCardCount());
+            writer.printf("Debit Cards,%d%n", cards.getDebitCardCount());
+            writer.printf("Total Credit Limit,%s%n", formatCurrency(cards.getTotalCreditLimit()));
+            writer.printf("Credit Used,%s%n", formatCurrency(cards.getTotalCreditUsed()));
+            writer.printf("Credit Available,%s%n", formatCurrency(cards.getTotalCreditAvailable()));
+            writer.printf("Amount Due,%s%n", formatCurrency(cards.getTotalCreditDue()));
+            if (!cards.getKeyCards().isEmpty()) {
+                writer.println("Key Cards");
+                writer.println("Card,Type,Credit Limit,Available Credit,Amount Due");
+                for (SummaryData.CardSummary.CardHighlight ch : cards.getKeyCards()) {
+                    writer.printf("%s,%s,%s,%s,%s%n",
+                            escapeCsv(defaultIfEmpty(ch.getCardName(), "")),
+                            escapeCsv(defaultIfEmpty(ch.getCardType(), "")),
+                            formatCurrency(ch.getCreditLimit()),
+                            formatCurrency(ch.getAvailableCredit()),
+                            formatCurrency(ch.getAmountDue()));
+                }
+            }
+
+            writer.println();
+            writer.println("Tax Profiles");
+            SummaryData.TaxSummary tax = data.getTax();
+            writer.printf("Total Profiles,%d%n", tax.getProfileCount());
+            writer.printf("Gross Income,%s%n", formatCurrency(tax.getTotalGrossIncome()));
+            writer.printf("Deductions,%s%n", formatCurrency(tax.getTotalDeductions()));
+            writer.printf("Taxable Income,%s%n", formatCurrency(tax.getTotalTaxableIncome()));
+            writer.printf("Tax Paid,%s%n", formatCurrency(tax.getTotalTaxPaid()));
+            writer.printf("Latest Financial Year,%s%n", escapeCsv(defaultIfEmpty(tax.getLatestFinancialYear(), "")));
+            writer.printf("Latest Taxable,%s%n", formatCurrency(tax.getLatestYearTaxable()));
+            writer.printf("Latest Tax Paid,%s%n", formatCurrency(tax.getLatestYearTaxPaid()));
+            if (!tax.getKeyProfiles().isEmpty()) {
+                writer.println("Key Profiles");
+                writer.println("Profile,Financial Year,Taxable Income,Tax Paid");
+                for (SummaryData.TaxSummary.TaxProfileHighlight th : tax.getKeyProfiles()) {
+                    writer.printf("%s,%s,%s,%s%n",
+                            escapeCsv(defaultIfEmpty(th.getProfileName(), "")),
+                            escapeCsv(defaultIfEmpty(th.getFinancialYear(), "")),
+                            formatCurrency(th.getTaxableIncome()),
+                            formatCurrency(th.getTaxPaid()));
+                }
+            }
+        }
+    }
+
+    private void writeSummaryToPdf(SummaryData data, File file) throws DocumentException, IOException {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            Document document = new Document();
+            PdfWriter.getInstance(document, fos);
+            document.open();
+
+            com.itextpdf.text.Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, BaseColor.BLACK);
+            com.itextpdf.text.Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, BaseColor.BLACK);
+            com.itextpdf.text.Font textFont = FontFactory.getFont(FontFactory.HELVETICA, 10, BaseColor.DARK_GRAY);
+
+            document.add(new Paragraph("Finance Summary Report", titleFont));
+            document.add(new Paragraph(" "));
+
+            document.add(new Paragraph("Prepared For: " + defaultIfEmpty(data.getHolderName(), "N/A"), textFont));
+            if (!isBlank(data.getDesignation())) {
+                document.add(new Paragraph("Designation: " + defaultIfEmpty(data.getDesignation(), ""), textFont));
+            }
+            if (!isBlank(data.getCompanyName())) {
+                document.add(new Paragraph("Company: " + defaultIfEmpty(data.getCompanyName(), ""), textFont));
+            }
+            if (data.getGeneratedAt() != null) {
+                document.add(new Paragraph("Generated On: " + data.getGeneratedAt().format(SUMMARY_TIMESTAMP_FORMAT), textFont));
+            }
+            document.add(new Paragraph(" "));
+
+            addSummarySection(document, "Transactions Overview", new String[][]{
+                    {"Total Entries", String.valueOf(data.getTransactions().getTotalCount())},
+                    {"Total Income", formatCurrency(data.getTransactions().getTotalIncome())},
+                    {"Total Expense", formatCurrency(data.getTransactions().getTotalExpense())},
+                    {"Net Balance", formatCurrency(data.getTransactions().getNetBalance())}
+            }, sectionFont, textFont);
+
+            SummaryData.BankSummary bank = data.getBank();
+            addSummarySection(document, "Bank Accounts", new String[][]{
+                    {"Accounts", String.valueOf(bank.getAccountCount())},
+                    {"Unique Holders", String.valueOf(bank.getUniqueHolderCount())},
+                    {"Total Balance", formatCurrency(bank.getTotalBalance())},
+                    {"Top Account", defaultIfEmpty(bank.getTopAccountLabel(), "")},
+                    {"Top Balance", formatCurrency(bank.getTopAccountBalance())}
+            }, sectionFont, textFont);
+
+            SummaryData.DepositSummary deposits = data.getDeposits();
+            addSummarySection(document, "Deposits", new String[][]{
+                    {"Total Deposits", String.valueOf(deposits.getTotalCount())},
+                    {"FD Principal", formatCurrency(deposits.getTotalFdPrincipal())},
+                    {"FD Maturity", formatCurrency(deposits.getTotalFdMaturityEstimate())},
+                    {"RD Contribution", formatCurrency(deposits.getTotalRdContribution())},
+                    {"RD Maturity", formatCurrency(deposits.getTotalRdMaturityEstimate())},
+                    {"Gullak Balance", formatCurrency(deposits.getTotalGullakBalance())},
+                    {"Gullak Due", formatCurrency(deposits.getTotalGullakDue())}
+            }, sectionFont, textFont);
+            if (!deposits.getMaturityHighlights().isEmpty()) {
+                document.add(new Paragraph("Upcoming Maturities", sectionFont));
+                PdfPTable table = new PdfPTable(4);
+                table.setWidthPercentage(100);
+                table.setSpacingBefore(5f);
+                table.setSpacingAfter(10f);
+                table.setWidths(new float[]{3f, 2f, 2f, 2f});
+                addTableHeader(table, new String[]{"Label", "Due Date", "Principal", "Maturity"});
+                for (SummaryData.DepositSummary.MaturityInfo info : deposits.getMaturityHighlights()) {
+                    table.addCell(new Phrase(defaultIfEmpty(info.getLabel(), ""), textFont));
+                    table.addCell(new Phrase(defaultIfEmpty(info.getMaturityDateLabel(), ""), textFont));
+                    table.addCell(new Phrase(formatCurrency(info.getPrincipalValue()), textFont));
+                    table.addCell(new Phrase(formatCurrency(info.getMaturityValue()), textFont));
+                }
+                document.add(table);
+            }
+
+            SummaryData.InvestmentSummary investments = data.getInvestments();
+            addSummarySection(document, "Investments", new String[][]{
+                    {"Total Assets", String.valueOf(investments.getTotalCount())},
+                    {"Initial Value", formatCurrency(investments.getTotalInitialValue())},
+                    {"Current Value", formatCurrency(investments.getTotalCurrentValue())},
+                    {"Net Profit/Loss", formatCurrency(investments.getTotalProfitOrLoss())}
+            }, sectionFont, textFont);
+            if (!investments.getTopPerformers().isEmpty()) {
+                document.add(new Paragraph("Top Performers", sectionFont));
+                PdfPTable table = new PdfPTable(4);
+                table.setWidthPercentage(100);
+                table.setSpacingBefore(5f);
+                table.setSpacingAfter(10f);
+                table.setWidths(new float[]{3f, 2f, 2f, 2f});
+                addTableHeader(table, new String[]{"Asset", "Type", "Current Value", "Profit %"});
+                for (SummaryData.InvestmentSummary.InvestmentHighlight hi : investments.getTopPerformers()) {
+                    table.addCell(new Phrase(defaultIfEmpty(hi.getLabel(), ""), textFont));
+                    table.addCell(new Phrase(defaultIfEmpty(hi.getAssetType(), ""), textFont));
+                    table.addCell(new Phrase(formatCurrency(hi.getCurrentValue()), textFont));
+                    table.addCell(new Phrase(String.format("%.2f%%", hi.getProfitOrLossPercentage()), textFont));
+                }
+                document.add(table);
+            }
+
+            SummaryData.LoanSummary loans = data.getLoans();
+            addSummarySection(document, "Loans", new String[][]{
+                    {"Total Loans", String.valueOf(loans.getTotalCount())},
+                    {"Active Loans", String.valueOf(loans.getActiveCount())},
+                    {"Closed Loans", String.valueOf(loans.getPaidOffCount())},
+                    {"Principal Issued", formatCurrency(loans.getTotalPrincipal())},
+                    {"Principal Outstanding", formatCurrency(loans.getTotalPrincipalOutstanding())},
+                    {"Principal Paid", formatCurrency(loans.getTotalPrincipalPaidOff())},
+                    {"Monthly EMI", formatCurrency(loans.getTotalMonthlyEmi())},
+                    {"Outstanding Repayable", formatCurrency(loans.getTotalRepayableOutstanding())}
+            }, sectionFont, textFont);
+            if (!loans.getKeyLoans().isEmpty()) {
+                document.add(new Paragraph("Key Loans", sectionFont));
+                PdfPTable table = new PdfPTable(5);
+                table.setWidthPercentage(100);
+                table.setSpacingBefore(5f);
+                table.setSpacingAfter(10f);
+                table.setWidths(new float[]{3f, 1.5f, 1.5f, 1.5f, 1.5f});
+                addTableHeader(table, new String[]{"Loan", "Status", "EMI", "Principal", "Total"});
+                for (SummaryData.LoanSummary.LoanHighlight hl : loans.getKeyLoans()) {
+                    table.addCell(new Phrase(defaultIfEmpty(hl.getLabel(), ""), textFont));
+                    table.addCell(new Phrase(defaultIfEmpty(hl.getStatus(), ""), textFont));
+                    table.addCell(new Phrase(formatCurrency(hl.getEmiAmount()), textFont));
+                    table.addCell(new Phrase(formatCurrency(hl.getPrincipalAmount()), textFont));
+                    table.addCell(new Phrase(formatCurrency(hl.getTotalRepayable()), textFont));
+                }
+                document.add(table);
+            }
+
+            SummaryData.CardSummary cards = data.getCards();
+            addSummarySection(document, "Cards", new String[][]{
+                    {"Total Cards", String.valueOf(cards.getTotalCount())},
+                    {"Credit Cards", String.valueOf(cards.getCreditCardCount())},
+                    {"Debit Cards", String.valueOf(cards.getDebitCardCount())},
+                    {"Total Credit Limit", formatCurrency(cards.getTotalCreditLimit())},
+                    {"Credit Used", formatCurrency(cards.getTotalCreditUsed())},
+                    {"Available Credit", formatCurrency(cards.getTotalCreditAvailable())},
+                    {"Amount Due", formatCurrency(cards.getTotalCreditDue())}
+            }, sectionFont, textFont);
+            if (!cards.getKeyCards().isEmpty()) {
+                document.add(new Paragraph("High Due Cards", sectionFont));
+                PdfPTable table = new PdfPTable(4);
+                table.setWidthPercentage(100);
+                table.setSpacingBefore(5f);
+                table.setSpacingAfter(10f);
+                table.setWidths(new float[]{3f, 1.5f, 1.5f, 1.5f});
+                addTableHeader(table, new String[]{"Card", "Type", "Available", "Amount Due"});
+                for (SummaryData.CardSummary.CardHighlight ch : cards.getKeyCards()) {
+                    table.addCell(new Phrase(defaultIfEmpty(ch.getCardName(), ""), textFont));
+                    table.addCell(new Phrase(defaultIfEmpty(ch.getCardType(), ""), textFont));
+                    table.addCell(new Phrase(formatCurrency(ch.getAvailableCredit()), textFont));
+                    table.addCell(new Phrase(formatCurrency(ch.getAmountDue()), textFont));
+                }
+                document.add(table);
+            }
+
+            SummaryData.TaxSummary tax = data.getTax();
+            addSummarySection(document, "Tax Profiles", new String[][]{
+                    {"Total Profiles", String.valueOf(tax.getProfileCount())},
+                    {"Gross Income", formatCurrency(tax.getTotalGrossIncome())},
+                    {"Deductions", formatCurrency(tax.getTotalDeductions())},
+                    {"Taxable Income", formatCurrency(tax.getTotalTaxableIncome())},
+                    {"Tax Paid", formatCurrency(tax.getTotalTaxPaid())},
+                    {"Latest Year", defaultIfEmpty(tax.getLatestFinancialYear(), "")},
+                    {"Latest Taxable", formatCurrency(tax.getLatestYearTaxable())},
+                    {"Latest Tax Paid", formatCurrency(tax.getLatestYearTaxPaid())}
+            }, sectionFont, textFont);
+            if (!tax.getKeyProfiles().isEmpty()) {
+                document.add(new Paragraph("Key Profiles", sectionFont));
+                PdfPTable table = new PdfPTable(4);
+                table.setWidthPercentage(100);
+                table.setSpacingBefore(5f);
+                table.setSpacingAfter(10f);
+                table.setWidths(new float[]{3f, 2f, 2f, 2f});
+                addTableHeader(table, new String[]{"Profile", "Financial Year", "Taxable", "Tax Paid"});
+                for (SummaryData.TaxSummary.TaxProfileHighlight th : tax.getKeyProfiles()) {
+                    table.addCell(new Phrase(defaultIfEmpty(th.getProfileName(), ""), textFont));
+                    table.addCell(new Phrase(defaultIfEmpty(th.getFinancialYear(), ""), textFont));
+                    table.addCell(new Phrase(formatCurrency(th.getTaxableIncome()), textFont));
+                    table.addCell(new Phrase(formatCurrency(th.getTaxPaid()), textFont));
+                }
+                document.add(table);
+            }
+
+            document.close();
+        }
+    }
+
+    private void addSummarySection(Document document, String title, String[][] rows,
+                                    com.itextpdf.text.Font headerFont,
+                                    com.itextpdf.text.Font cellFont) throws DocumentException {
+        document.add(new Paragraph(title, headerFont));
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(4f);
+        table.setSpacingAfter(10f);
+        table.setWidths(new float[]{2f, 3f});
+        for (String[] row : rows) {
+            if (row == null || row.length < 2) continue;
+            table.addCell(new Phrase(defaultIfEmpty(row[0], ""), cellFont));
+            table.addCell(new Phrase(defaultIfEmpty(row[1], ""), cellFont));
+        }
+        document.add(table);
+    }
+
+    private void addTableHeader(PdfPTable table, String[] headers) {
+        com.itextpdf.text.Font headFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, BaseColor.BLACK);
+        for (String header : headers) {
+            PdfPCell cell = new PdfPCell(new Phrase(header, headFont));
+            cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
+            cell.setHorizontalAlignment(Element.ALIGN_LEFT);
+            table.addCell(cell);
+        }
+    }
+
+    private String buildDefaultSummaryFilename(String extension) {
+        String holder = currentSummarySnapshot != null ? defaultIfEmpty(currentSummarySnapshot.getHolderName(), "Summary") : "Summary";
+        String safeHolder = holder.replaceAll("[^a-zA-Z0-9-_]", "_");
+    String timestamp = LocalDate.now().toString();
+        return safeHolder + "_Report_" + timestamp + "." + extension;
+    }
+
+    private File ensureExtension(File file, String extension) {
+        String name = file.getName();
+        if (!name.toLowerCase().endsWith(extension)) {
+            File parent = file.getParentFile();
+            if (parent != null) {
+                return new File(parent, name + extension);
+            }
+            return new File(name + extension);
+        }
+        return file;
+    }
+
+    private void appendSection(StringBuilder sb, String title) {
+        sb.append(title).append(System.lineSeparator());
+        sb.append(repeat('-', Math.max(8, title.length()))).append(System.lineSeparator());
+    }
+
+    private String repeat(char ch, int count) {
+        StringBuilder builder = new StringBuilder(count);
+        for (int i = 0; i < count; i++) {
+            builder.append(ch);
+        }
+        return builder.toString();
+    }
+
+    private String formatCurrency(double value) {
+        return String.format("₹%,.2f", value);
+    }
+
+    private String escapeCsv(String input) {
+        if (input == null) {
+            return "";
+        }
+        String escaped = input.replace("\"", "\"\"");
+        if (escaped.contains(",") || escaped.contains("\n") || escaped.contains("\"")) {
+            return "\"" + escaped + "\"";
+        }
+        return escaped;
+    }
+
+    private String defaultIfEmpty(String value, String fallback) {
+        return isBlank(value) ? fallback : value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private void deleteSelectedTransaction() {
@@ -1519,9 +2243,6 @@ private void deleteSelectedTaxProfile() {
                 
                 // Get filtered/sorted data directly from the JTable
                 for (int i = 0; i < currentTable.getRowCount(); i++) {
-                    int modelRow = currentTable.convertRowIndexToModel(i);
-                    int transactionId = (int) currentTable.getModel().getValueAt(modelRow, 0); // Get ID from model
-                    
                     // Find this transaction in the full list (this is inefficient but simple)
                     // A better way would be to get the data directly from the table row
                     // Let's just export what's visible in the table

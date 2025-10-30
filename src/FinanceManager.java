@@ -1,5 +1,6 @@
 package src;
 import src.Investment;
+import src.SummaryData;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -10,6 +11,7 @@ import src.db.DBHelper;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import src.TaxProfile;
@@ -1674,6 +1676,403 @@ stmt.execute("CREATE TABLE IF NOT EXISTS tax_profiles (" +
             e.printStackTrace(); 
             throw e; 
         }
+    }
+
+    /**
+     * Builds a point-in-time snapshot of the overall finance portfolio for exports.
+     */
+    public SummaryData buildSummaryData(String companyName, String designation, String holderName, String transactionsYear) throws SQLException {
+        SummaryData summary = new SummaryData();
+        summary.setCompanyName(safeTrim(companyName));
+        summary.setDesignation(safeTrim(designation));
+        summary.setHolderName(safeTrim(holderName));
+        summary.setGeneratedAt(LocalDateTime.now());
+
+        String yearFilter = (transactionsYear == null || transactionsYear.isBlank()) ? "All Years" : transactionsYear;
+
+        // Transactions
+        List<Transaction> allTransactions = getAllTransactionsForYear(yearFilter);
+        SummaryData.TransactionSummary txnSummary = summary.getTransactions();
+        txnSummary.setTotalCount(allTransactions.size());
+        double totalIncome = 0.0;
+        double totalExpense = 0.0;
+        for (Transaction transaction : allTransactions) {
+            if ("Income".equalsIgnoreCase(transaction.getType())) {
+                totalIncome += transaction.getAmount();
+            } else if ("Expense".equalsIgnoreCase(transaction.getType())) {
+                totalExpense += transaction.getAmount();
+            }
+        }
+        txnSummary.setTotalIncome(totalIncome);
+        txnSummary.setTotalExpense(totalExpense);
+        txnSummary.setNetBalance(totalIncome - totalExpense);
+
+        // Bank accounts
+        List<BankAccount> accounts = getAllBankAccounts();
+        SummaryData.BankSummary bankSummary = summary.getBank();
+        bankSummary.setAccountCount(accounts.size());
+        Set<String> uniqueHolders = new HashSet<>();
+        double totalBankBalance = 0.0;
+        BankAccount richestAccount = null;
+        for (BankAccount account : accounts) {
+            if (account.getHolderName() != null && !account.getHolderName().isBlank()) {
+                uniqueHolders.add(account.getHolderName().trim());
+            }
+            totalBankBalance += account.getBalance();
+            if (richestAccount == null || account.getBalance() > richestAccount.getBalance()) {
+                richestAccount = account;
+            }
+        }
+        bankSummary.setUniqueHolderCount(uniqueHolders.size());
+        bankSummary.setTotalBalance(totalBankBalance);
+        if (richestAccount != null) {
+            bankSummary.setTopAccountLabel(buildBankAccountLabel(richestAccount));
+            bankSummary.setTopAccountBalance(richestAccount.getBalance());
+        }
+
+        // Deposits
+        List<Deposit> allDeposits = getAllDeposits();
+        SummaryData.DepositSummary depositSummary = summary.getDeposits();
+        depositSummary.setTotalCount(allDeposits.size());
+        double totalFdPrincipal = 0.0;
+        double totalFdMaturity = 0.0;
+        double totalRdContribution = 0.0;
+        double totalRdMaturity = 0.0;
+        double totalGullakBalance = 0.0;
+        double totalGullakDue = 0.0;
+        List<SummaryData.DepositSummary.MaturityInfo> maturityInfos = new ArrayList<>();
+        DateTimeFormatter depositDateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        for (Deposit deposit : allDeposits) {
+            String type = deposit.getDepositType();
+            if ("FD".equalsIgnoreCase(type)) {
+                totalFdPrincipal += deposit.getPrincipalAmount();
+                totalFdMaturity += deposit.calculateFDMaturityAmount();
+            } else if ("RD".equalsIgnoreCase(type)) {
+                double contribution = deposit.getMonthlyAmount() * Math.max(deposit.getTenure(), 0);
+                if ("Years".equalsIgnoreCase(deposit.getTenureUnit())) {
+                    contribution = deposit.getMonthlyAmount() * deposit.getTenure() * 12.0;
+                } else if ("Days".equalsIgnoreCase(deposit.getTenureUnit())) {
+                    contribution = deposit.getMonthlyAmount() * (deposit.getTenure() / 30.0);
+                }
+                totalRdContribution += Math.max(contribution, 0.0);
+                totalRdMaturity += deposit.calculateRDMaturityAmount();
+            } else if ("Gullak".equalsIgnoreCase(type)) {
+                totalGullakBalance += deposit.getCurrentTotal();
+                totalGullakDue += deposit.getGullakDueAmount();
+            }
+
+            String maturityStr = deposit.calculateMaturityDate();
+            if (maturityStr != null && !maturityStr.isBlank()) {
+                try {
+                    LocalDate maturityDate = LocalDate.parse(maturityStr, depositDateFormatter);
+                    double principalValue = 0.0;
+                    double maturityValue = 0.0;
+                    if ("FD".equalsIgnoreCase(type)) {
+                        principalValue = deposit.getPrincipalAmount();
+                        maturityValue = deposit.calculateFDMaturityAmount();
+                    } else if ("RD".equalsIgnoreCase(type)) {
+                        principalValue = deposit.getMonthlyAmount() * Math.max(deposit.getTenure(), 0);
+                        maturityValue = deposit.calculateRDMaturityAmount();
+                    } else if ("Gullak".equalsIgnoreCase(type)) {
+                        principalValue = deposit.getCurrentTotal();
+                        maturityValue = deposit.getCurrentTotal();
+                    }
+                    maturityInfos.add(new SummaryData.DepositSummary.MaturityInfo(
+                            buildDepositLabel(deposit),
+                            maturityDate,
+                            maturityStr,
+                            principalValue,
+                            maturityValue
+                    ));
+                } catch (Exception ignored) {
+                    // Ignore invalid or placeholder maturity dates.
+                }
+            }
+        }
+        depositSummary.setTotalFdPrincipal(totalFdPrincipal);
+        depositSummary.setTotalFdMaturityEstimate(totalFdMaturity);
+        depositSummary.setTotalRdContribution(totalRdContribution);
+        depositSummary.setTotalRdMaturityEstimate(totalRdMaturity);
+        depositSummary.setTotalGullakBalance(totalGullakBalance);
+        depositSummary.setTotalGullakDue(totalGullakDue);
+        maturityInfos.sort(Comparator.comparing(SummaryData.DepositSummary.MaturityInfo::getDueDate));
+        if (maturityInfos.size() > 5) {
+            maturityInfos = new ArrayList<>(maturityInfos.subList(0, 5));
+        }
+        depositSummary.setMaturityHighlights(maturityInfos);
+
+        // Investments
+        List<Investment> investmentList = getAllInvestments();
+        SummaryData.InvestmentSummary investmentSummary = summary.getInvestments();
+        investmentSummary.setTotalCount(investmentList.size());
+        double totalInitialValue = 0.0;
+        double totalCurrentValue = 0.0;
+        List<SummaryData.InvestmentSummary.InvestmentHighlight> investmentHighlights = new ArrayList<>();
+        for (Investment investment : investmentList) {
+            double initial = investment.getTotalInitialCost();
+            double current = investment.getTotalCurrentValue();
+            totalInitialValue += initial;
+            totalCurrentValue += current;
+            investmentHighlights.add(new SummaryData.InvestmentSummary.InvestmentHighlight(
+                    buildInvestmentLabel(investment),
+                    safeTrim(investment.getAssetType()),
+                    current,
+                    investment.getProfitOrLoss(),
+                    investment.getProfitOrLossPercentage()
+            ));
+        }
+        investmentSummary.setTotalInitialValue(totalInitialValue);
+        investmentSummary.setTotalCurrentValue(totalCurrentValue);
+        investmentSummary.setTotalProfitOrLoss(totalCurrentValue - totalInitialValue);
+        investmentHighlights.sort((a, b) -> Double.compare(b.getProfitOrLoss(), a.getProfitOrLoss()));
+        if (investmentHighlights.size() > 5) {
+            investmentHighlights = new ArrayList<>(investmentHighlights.subList(0, 5));
+        }
+        investmentSummary.setTopPerformers(investmentHighlights);
+
+        // Loans
+        List<Loan> loanList = getAllLoans();
+        SummaryData.LoanSummary loanSummary = summary.getLoans();
+        loanSummary.setTotalCount(loanList.size());
+        double totalPrincipal = 0.0;
+        double totalPrincipalOutstanding = 0.0;
+        double totalPrincipalPaid = 0.0;
+        double totalMonthlyEmi = 0.0;
+        double totalRepayableOutstanding = 0.0;
+        int activeLoans = 0;
+        int closedLoans = 0;
+        List<SummaryData.LoanSummary.LoanHighlight> loanHighlights = new ArrayList<>();
+        for (Loan loan : loanList) {
+            String status = safeTrim(loan.getStatus());
+            totalPrincipal += loan.getPrincipalAmount();
+            boolean isClosed = status.equalsIgnoreCase("Closed") || status.equalsIgnoreCase("Paid Off") || status.equalsIgnoreCase("Completed");
+            if (isClosed) {
+                closedLoans++;
+                totalPrincipalPaid += loan.getPrincipalAmount();
+            } else {
+                activeLoans++;
+                totalPrincipalOutstanding += loan.getPrincipalAmount();
+                totalMonthlyEmi += loan.getEmiAmount();
+                totalRepayableOutstanding += loan.getTotalPayment();
+            }
+            loanHighlights.add(new SummaryData.LoanSummary.LoanHighlight(
+                    buildLoanLabel(loan),
+                    safeTrim(loan.getLoanType()),
+                    status.isEmpty() ? "Active" : status,
+                    loan.getEmiAmount(),
+                    loan.getPrincipalAmount(),
+                    loan.getTotalPayment()
+            ));
+        }
+        loanSummary.setActiveCount(activeLoans);
+        loanSummary.setPaidOffCount(closedLoans);
+        loanSummary.setTotalPrincipal(totalPrincipal);
+        loanSummary.setTotalPrincipalOutstanding(totalPrincipalOutstanding);
+        loanSummary.setTotalPrincipalPaidOff(totalPrincipalPaid);
+        loanSummary.setTotalMonthlyEmi(totalMonthlyEmi);
+        loanSummary.setTotalRepayableOutstanding(totalRepayableOutstanding);
+        loanHighlights.sort((a, b) -> Double.compare(b.getTotalRepayable(), a.getTotalRepayable()));
+        if (loanHighlights.size() > 5) {
+            loanHighlights = new ArrayList<>(loanHighlights.subList(0, 5));
+        }
+        loanSummary.setKeyLoans(loanHighlights);
+
+        // Cards
+        List<Card> cardList = getAllCards();
+        SummaryData.CardSummary cardSummary = summary.getCards();
+        cardSummary.setTotalCount(cardList.size());
+        int creditCount = 0;
+        int debitCount = 0;
+        double totalCreditLimit = 0.0;
+        double totalCreditUsed = 0.0;
+        double totalCreditAvailable = 0.0;
+        double totalCreditDue = 0.0;
+        List<SummaryData.CardSummary.CardHighlight> cardHighlights = new ArrayList<>();
+        for (Card card : cardList) {
+            boolean isCredit = "Credit Card".equalsIgnoreCase(safeTrim(card.getCardType()));
+            if (isCredit) {
+                creditCount++;
+                totalCreditLimit += card.getCreditLimit();
+                totalCreditUsed += card.getCurrentExpenses();
+                double available = card.getCreditLimit() - card.getCurrentExpenses();
+                if (available < 0) {
+                    available = 0;
+                }
+                totalCreditAvailable += available;
+                totalCreditDue += card.getAmountToPay();
+                cardHighlights.add(new SummaryData.CardSummary.CardHighlight(
+                        card.getCardName(),
+                        card.getCardType(),
+                        card.getCreditLimit(),
+                        available,
+                        card.getAmountToPay()
+                ));
+            } else {
+                debitCount++;
+                cardHighlights.add(new SummaryData.CardSummary.CardHighlight(
+                        card.getCardName(),
+                        card.getCardType(),
+                        0.0,
+                        0.0,
+                        card.getAmountToPay()
+                ));
+            }
+        }
+        cardSummary.setCreditCardCount(creditCount);
+        cardSummary.setDebitCardCount(debitCount);
+        cardSummary.setTotalCreditLimit(totalCreditLimit);
+        cardSummary.setTotalCreditUsed(totalCreditUsed);
+        cardSummary.setTotalCreditAvailable(totalCreditAvailable);
+        cardSummary.setTotalCreditDue(totalCreditDue);
+        cardHighlights.sort((a, b) -> Double.compare(b.getAmountDue(), a.getAmountDue()));
+        if (cardHighlights.size() > 5) {
+            cardHighlights = new ArrayList<>(cardHighlights.subList(0, 5));
+        }
+        cardSummary.setKeyCards(cardHighlights);
+
+        // Tax profiles
+        List<TaxProfile> taxProfiles = getAllTaxProfiles();
+        SummaryData.TaxSummary taxSummary = summary.getTax();
+        taxSummary.setProfileCount(taxProfiles.size());
+        double totalGrossIncome = 0.0;
+        double totalDeductions = 0.0;
+        double totalTaxableIncome = 0.0;
+        double totalTaxPaid = 0.0;
+        TaxProfile latestProfile = null;
+        int latestYearKey = Integer.MIN_VALUE;
+        List<SummaryData.TaxSummary.TaxProfileHighlight> taxHighlights = new ArrayList<>();
+        for (TaxProfile profile : taxProfiles) {
+            totalGrossIncome += profile.getGrossIncome();
+            totalDeductions += profile.getTotalDeductions();
+            totalTaxableIncome += profile.getTaxableIncome();
+            totalTaxPaid += profile.getTaxPaid();
+
+            int key = parseFinancialYearKey(profile.getFinancialYear());
+            if (key > latestYearKey) {
+                latestYearKey = key;
+                latestProfile = profile;
+            }
+
+            taxHighlights.add(new SummaryData.TaxSummary.TaxProfileHighlight(
+                    profile.getProfileName(),
+                    safeTrim(profile.getFinancialYear()),
+                    profile.getTaxableIncome(),
+                    profile.getTaxPaid()
+            ));
+        }
+        taxSummary.setTotalGrossIncome(totalGrossIncome);
+        taxSummary.setTotalDeductions(totalDeductions);
+        taxSummary.setTotalTaxableIncome(totalTaxableIncome);
+        taxSummary.setTotalTaxPaid(totalTaxPaid);
+        if (latestProfile != null) {
+            taxSummary.setLatestFinancialYear(safeTrim(latestProfile.getFinancialYear()));
+            taxSummary.setLatestYearTaxable(latestProfile.getTaxableIncome());
+            taxSummary.setLatestYearTaxPaid(latestProfile.getTaxPaid());
+        }
+        taxHighlights.sort((a, b) -> Double.compare(b.getTaxableIncome(), a.getTaxableIncome()));
+        if (taxHighlights.size() > 5) {
+            taxHighlights = new ArrayList<>(taxHighlights.subList(0, 5));
+        }
+        taxSummary.setKeyProfiles(taxHighlights);
+
+        return summary;
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String buildBankAccountLabel(BankAccount account) {
+        StringBuilder label = new StringBuilder();
+        if (account.getBankName() != null && !account.getBankName().isBlank()) {
+            label.append(account.getBankName().trim());
+        }
+        if (account.getAccountNumber() != null && !account.getAccountNumber().isBlank()) {
+            if (label.length() > 0) {
+                label.append(" - ");
+            }
+            label.append(account.getAccountNumber().trim());
+        }
+        if (label.length() == 0 && account.getHolderName() != null && !account.getHolderName().isBlank()) {
+            label.append(account.getHolderName().trim());
+        }
+        return label.length() == 0 ? "Account" : label.toString();
+    }
+
+    private String buildDepositLabel(Deposit deposit) {
+        StringBuilder label = new StringBuilder();
+        if (deposit.getDepositType() != null && !deposit.getDepositType().isBlank()) {
+            label.append(deposit.getDepositType().trim());
+        }
+        if (deposit.getHolderName() != null && !deposit.getHolderName().isBlank()) {
+            if (label.length() > 0) {
+                label.append(" - ");
+            }
+            label.append(deposit.getHolderName().trim());
+        } else if (deposit.getDescription() != null && !deposit.getDescription().isBlank()) {
+            if (label.length() > 0) {
+                label.append(" - ");
+            }
+            label.append(deposit.getDescription().trim());
+        }
+        return label.length() == 0 ? "Deposit" : label.toString();
+    }
+
+    private String buildInvestmentLabel(Investment investment) {
+        StringBuilder label = new StringBuilder();
+        if (investment.getAssetType() != null && !investment.getAssetType().isBlank()) {
+            label.append(investment.getAssetType().trim());
+        }
+        if (investment.getDescription() != null && !investment.getDescription().isBlank()) {
+            if (label.length() > 0) {
+                label.append(" - ");
+            }
+            label.append(investment.getDescription().trim());
+        }
+        if (label.length() == 0 && investment.getHolderName() != null && !investment.getHolderName().isBlank()) {
+            label.append(investment.getHolderName().trim());
+        }
+        return label.length() == 0 ? "Investment" : label.toString();
+    }
+
+    private String buildLoanLabel(Loan loan) {
+        StringBuilder label = new StringBuilder();
+        if (loan.getLoanType() != null && !loan.getLoanType().isBlank()) {
+            label.append(loan.getLoanType().trim());
+        }
+        if (loan.getLenderName() != null && !loan.getLenderName().isBlank()) {
+            if (label.length() > 0) {
+                label.append(" - ");
+            }
+            label.append(loan.getLenderName().trim());
+        }
+        return label.length() == 0 ? "Loan" : label.toString();
+    }
+
+    private int parseFinancialYearKey(String financialYear) {
+        if (financialYear == null || financialYear.isBlank()) {
+            return Integer.MIN_VALUE;
+        }
+        String[] tokens = financialYear.split("[^0-9]");
+        for (String token : tokens) {
+            if (token.length() == 4) {
+                try {
+                    return Integer.parseInt(token);
+                } catch (NumberFormatException ignored) {
+                    // Ignore invalid token.
+                }
+            }
+        }
+        for (String token : tokens) {
+            if (token.length() == 2) {
+                try {
+                    return 2000 + Integer.parseInt(token);
+                } catch (NumberFormatException ignored) {
+                    // Ignore invalid token.
+                }
+            }
+        }
+        return Integer.MIN_VALUE;
     }
 
     /**
