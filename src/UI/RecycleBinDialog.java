@@ -40,16 +40,24 @@ public class RecycleBinDialog extends JDialog { // Make sure class name matches 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         JButton restoreButton = new JButton("Restore Selected");
         JButton deletePermButton = new JButton("Permanently Delete Selected");
+        JButton selectAllButton = new JButton("Select All");
         JButton closeButton = new JButton("Close");
 
         buttonPanel.add(restoreButton);
         buttonPanel.add(deletePermButton);
+        buttonPanel.add(selectAllButton);
         buttonPanel.add(closeButton);
         add(buttonPanel, BorderLayout.SOUTH);
 
         // --- Action Listeners ---
         restoreButton.addActionListener(e -> restoreSelected());
         deletePermButton.addActionListener(e -> deletePermanentlySelected());
+        selectAllButton.addActionListener(e -> {
+            int rowCount = recycleBinTable.getRowCount();
+            if (rowCount > 0) {
+                recycleBinTable.setRowSelectionInterval(0, rowCount - 1);
+            }
+        });
         closeButton.addActionListener(e -> dispose()); // Just close the dialog
 
         // --- Load Initial Data ---
@@ -89,21 +97,25 @@ public class RecycleBinDialog extends JDialog { // Make sure class name matches 
      * Handles restoring the selected transaction.
      */
     private void restoreSelected() {
-        int selectedRow = recycleBinTable.getSelectedRow();
-        if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "Please select a transaction to restore.", "No Selection", JOptionPane.WARNING_MESSAGE);
+        int[] selectedRows = recycleBinTable.getSelectedRows();
+        if (selectedRows == null || selectedRows.length == 0) {
+            JOptionPane.showMessageDialog(this, "Please select at least one transaction to restore.", "No Selection", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        int transactionId = (int) recycleBinModel.getValueAt(selectedRow, 0); // Get ID from first column
-
         try {
-            manager.restoreTransaction(transactionId);
+            int restored = 0;
+            for (int viewRow : selectedRows) {
+                int modelRow = recycleBinTable.convertRowIndexToModel(viewRow);
+                int transactionId = (int) recycleBinModel.getValueAt(modelRow, 0);
+                manager.restoreTransaction(transactionId);
+                restored++;
+            }
             loadRecycledTransactions(); // Refresh this dialog's table
             parentUI.refreshAfterRestore(); // Tell the main UI to refresh its transactions
-            JOptionPane.showMessageDialog(this, "Transaction restored successfully.", "Restored", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Restored " + restored + " transaction(s).", "Restored", JOptionPane.INFORMATION_MESSAGE);
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error restoring transaction: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error restoring transaction(s): " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -111,17 +123,15 @@ public class RecycleBinDialog extends JDialog { // Make sure class name matches 
      * Handles permanently deleting the selected transaction.
      */
     private void deletePermanentlySelected() {
-        int selectedRow = recycleBinTable.getSelectedRow();
-        if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "Please select a transaction to delete permanently.", "No Selection", JOptionPane.WARNING_MESSAGE);
+        int[] selectedRows = recycleBinTable.getSelectedRows();
+        if (selectedRows == null || selectedRows.length == 0) {
+            JOptionPane.showMessageDialog(this, "Please select at least one transaction to delete permanently.", "No Selection", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        int transactionId = (int) recycleBinModel.getValueAt(selectedRow, 0);
-
         int choice = JOptionPane.showConfirmDialog(
             this,
-            "Are you sure you want to permanently delete transaction ID: " + transactionId + "?\nThis action cannot be undone.",
+            "Are you sure you want to permanently delete " + selectedRows.length + " selected transaction(s)?\nThis action cannot be undone.",
             "Confirm Permanent Delete",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE
@@ -129,10 +139,17 @@ public class RecycleBinDialog extends JDialog { // Make sure class name matches 
 
         if (choice == JOptionPane.YES_OPTION) {
             try {
-                manager.permanentlyDeleteTransaction(transactionId);
+                int deleted = 0;
+                for (int viewRow : selectedRows) {
+                    int modelRow = recycleBinTable.convertRowIndexToModel(viewRow);
+                    int transactionId = (int) recycleBinModel.getValueAt(modelRow, 0);
+                    manager.permanentlyDeleteTransaction(transactionId);
+                    deleted++;
+                }
                 loadRecycledTransactions(); // Refresh this dialog's table
+                JOptionPane.showMessageDialog(this, "Permanently deleted " + deleted + " transaction(s).", "Deleted", JOptionPane.INFORMATION_MESSAGE);
             } catch (SQLException e) {
-                JOptionPane.showMessageDialog(this, "Error permanently deleting transaction: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Error permanently deleting transaction(s): " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }

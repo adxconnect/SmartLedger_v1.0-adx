@@ -40,9 +40,16 @@ import src.UI.SensitiveCardDetailsDialog;
 import src.TaxProfile;
 import src.Loan;
 import src.SummaryData;
+// Modern UI imports
+import src.UI.ModernTheme;
+import src.UI.LogoPanel;
+import src.UI.ModernIcons;
+import src.UI.ModernIcons.IconType;
 // We'll also add placeholders for the dialogs
 import src.UI.AddEditLoanDialog;
 import src.UI.LoanRecycleBinDialog;
+import src.auth.SessionContext;
+import src.auth.UserPreferencesCache;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -76,6 +83,9 @@ public class FinanceManagerFullUI extends JFrame {
     private JButton deleteMonthButton;
     private JTextField txnSearchField; // search text for transactions
     private JComboBox<String> txnSearchColumn; // column selector for transactions
+    private JLabel incomeValueLabel; // Label to show total income
+    private JLabel expenseValueLabel; // Label to show total expense
+    private JLabel balanceValueLabel; // Label to show net balance
 
     // --- Bank Account Tab Variables ---
     private JList<BankAccount> bankAccountList;
@@ -106,9 +116,9 @@ private DefaultListModel<Loan> loanListModel;
 private JPanel loanDetailPanel;
 
     // --- Summary Tab Variables ---
-    private JTextField summaryCompanyField;
-    private JTextField summaryDesignationField;
-    private JTextField summaryHolderField;
+    private AutoCompleteTextField summaryCompanyField;
+    private AutoCompleteTextField summaryDesignationField;
+    private AutoCompleteTextField summaryHolderField;
     private JComboBox<String> summaryYearCombo;
     private JButton summaryRefreshButton;
     private JButton summaryExportCsvButton;
@@ -122,7 +132,29 @@ private JPanel loanDetailPanel;
     public FinanceManagerFullUI() {
         setTitle("Finance Manager - MySQL Edition");
         setSize(900, 600);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
+    setDefaultCloseOperation(DO_NOTHING_ON_CLOSE); // Prevent auto-logout on close
+    // Apply modern background to the frame
+    getContentPane().setBackground(ModernTheme.BACKGROUND);
+
+        // Handle window closing - just hide, don't logout
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                int choice = JOptionPane.showConfirmDialog(
+                    FinanceManagerFullUI.this,
+                    "Do you want to logout or just minimize?\n\nYes = Logout\nNo = Minimize\nCancel = Stay",
+                    "Exit Options",
+                    JOptionPane.YES_NO_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE
+                );
+                if (choice == JOptionPane.YES_OPTION) {
+                    performLogout();
+                } else if (choice == JOptionPane.NO_OPTION) {
+                    setState(java.awt.Frame.ICONIFIED); // Minimize
+                }
+                // Cancel or close dialog = do nothing, stay in app
+            }
+        });
 
         try {
             manager = new FinanceManager(); // Connect DB
@@ -131,44 +163,181 @@ private JPanel loanDetailPanel;
             System.exit(1);
         }
 
+    // Main container with BorderLayout to add logout button at top
+    JPanel mainPanel = new JPanel(new BorderLayout());
+    mainPanel.setBackground(ModernTheme.BACKGROUND);
+    add(mainPanel);
+
+    // Top header with logo, user info and logout
+    JPanel topPanel = new JPanel(new BorderLayout());
+    topPanel.setBorder(new EmptyBorder(12, 16, 12, 16));
+    topPanel.setBackground(ModernTheme.SURFACE);
+        
+        // Left side - User Info
+    JPanel userInfoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
+    userInfoPanel.setBackground(ModernTheme.SURFACE);
+    // App logo on the very left
+    JPanel logoWrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    logoWrap.setOpaque(false);
+    logoWrap.add(LogoPanel.createHeaderLogo());
+    userInfoPanel.add(logoWrap);
+    userInfoPanel.add(Box.createHorizontalStrut(12));
+        
+        // Get current account details
+        src.auth.Account currentAccount = SessionContext.getCurrentAccount();
+        if (currentAccount != null) {
+            // Account name with icon
+            JLabel nameLabel = new JLabel(currentAccount.getAccountName());
+            nameLabel.setFont(ModernTheme.FONT_HEADER);
+            nameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            userInfoPanel.add(nameLabel);
+            
+            // Account type badge
+            String accountTypeText = currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
+                ? "Business" : "Personal";
+            JLabel typeLabel = new JLabel(accountTypeText);
+            typeLabel.setFont(ModernTheme.FONT_SMALL);
+            typeLabel.setForeground(Color.WHITE);
+            typeLabel.setBackground(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
+                ? ModernTheme.PRIMARY : ModernTheme.SUCCESS);
+            typeLabel.setOpaque(true);
+            typeLabel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+            userInfoPanel.add(typeLabel);
+            
+            // Email if available
+            if (currentAccount.getEmail() != null && !currentAccount.getEmail().trim().isEmpty()) {
+                JLabel emailLabel = new JLabel(currentAccount.getEmail());
+                emailLabel.setFont(ModernTheme.FONT_SMALL);
+                emailLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+                userInfoPanel.add(emailLabel);
+            }
+            
+            // Phone if available
+            if (currentAccount.getPhone() != null && !currentAccount.getPhone().trim().isEmpty()) {
+                JLabel phoneLabel = new JLabel(currentAccount.getPhone());
+                phoneLabel.setFont(ModernTheme.FONT_SMALL);
+                phoneLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+                userInfoPanel.add(phoneLabel);
+            }
+        }
+        
+        topPanel.add(userInfoPanel, BorderLayout.CENTER);
+        
+        // Right side - Dark Mode & Logout buttons
+        JPanel logoutPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
+        logoutPanel.setBackground(ModernTheme.SURFACE);
+        
+        // Dark mode toggle button
+        JButton darkModeBtn = ModernTheme.createDarkModeToggleButton();
+        darkModeBtn.addActionListener(e -> {
+            ModernTheme.toggleDarkMode();
+            refreshUITheme();
+        });
+        logoutPanel.add(darkModeBtn);
+        
+        // Logout button
+        JButton logoutBtn = ModernTheme.createDangerButton("Logout");
+        logoutBtn.setPreferredSize(new Dimension(110, 36));
+        logoutBtn.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "Are you sure you want to logout?",
+                "Confirm Logout",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+            );
+            if (confirm == JOptionPane.YES_OPTION) {
+                performLogout();
+            }
+        });
+        
+        logoutPanel.add(logoutBtn);
+        topPanel.add(logoutPanel, BorderLayout.EAST);
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+
         // JTabbedPane setup
-        JTabbedPane tabs = new JTabbedPane();
-        add(tabs);
+    JTabbedPane tabs = new JTabbedPane();
+    styleTabbedPane(tabs);
+        mainPanel.add(tabs, BorderLayout.CENTER);
 
         // =========================================================
         // ===         TRANSACTIONS PANEL                      ===
         // =========================================================
         JPanel tPanel = new JPanel(new BorderLayout(5, 5));
-        tPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+        tPanel.setBackground(ModernTheme.BACKGROUND);
+        tPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
     JPanel tTopPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        tTopPanel.setBackground(ModernTheme.SURFACE);
         yearComboBox = new JComboBox<>();
+        ModernTheme.styleComboBox(yearComboBox);
         tTopPanel.add(new JLabel("Select Year:"));
         tTopPanel.add(yearComboBox);
-        JButton deleteYearButton = new JButton("Delete All of Selected Year");
+        JButton deleteYearButton = ModernTheme.createDangerButton("Delete All of Selected Year");
         tTopPanel.add(deleteYearButton);
-        deleteMonthButton = new JButton("Delete Selected Month");
+        deleteMonthButton = ModernTheme.createDangerButton("Delete Selected Month");
         deleteMonthButton.setEnabled(false);
         tTopPanel.add(deleteMonthButton);
     // --- Search controls for Transactions ---
     tTopPanel.add(Box.createHorizontalStrut(10));
     tTopPanel.add(new JLabel("Search:"));
     txnSearchField = new JTextField(18);
+    ModernTheme.styleTextField(txnSearchField);
     tTopPanel.add(txnSearchField);
     String[] txnCols = new String[]{"All Columns","S.No.","Date","Timestamp","Day","Payment Method","Category","Type","Payee","Description","Amount"};
     txnSearchColumn = new JComboBox<>(txnCols);
+    ModernTheme.styleComboBox(txnSearchColumn);
     txnSearchColumn.setSelectedIndex(0);
     tTopPanel.add(txnSearchColumn);
-        tPanel.add(tTopPanel, BorderLayout.NORTH);
+        
+        // Create a container for top panel and summary cards
+    JPanel topContainer = new JPanel(new BorderLayout());
+    topContainer.setOpaque(false);
+        topContainer.add(tTopPanel, BorderLayout.NORTH);
+        
+        // Add Income/Expense Summary Cards Panel
+    JPanel summaryCardsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+    summaryCardsPanel.setBackground(ModernTheme.BACKGROUND);
+        summaryCardsPanel.setBorder(new EmptyBorder(5, 10, 5, 10));
+        
+        // Create Income Card
+        incomeValueLabel = new JLabel("₹0.00");
+        JPanel incomeCard = createSummaryCard("Total Income", incomeValueLabel, new Color(46, 204, 113), new Color(39, 174, 96));
+        summaryCardsPanel.add(incomeCard);
+        
+        // Create Expense Card
+        expenseValueLabel = new JLabel("₹0.00");
+        JPanel expenseCard = createSummaryCard("Total Expense", expenseValueLabel, new Color(231, 76, 60), new Color(192, 57, 43));
+        summaryCardsPanel.add(expenseCard);
+        
+        // Create Balance Card
+        balanceValueLabel = new JLabel("₹0.00");
+        JPanel balanceCard = createSummaryCard("Net Balance", balanceValueLabel, new Color(52, 152, 219), new Color(41, 128, 185));
+        summaryCardsPanel.add(balanceCard);
+        
+        topContainer.add(summaryCardsPanel, BorderLayout.CENTER);
+        tPanel.add(topContainer, BorderLayout.NORTH);
+        
         monthTabs = new JTabbedPane();
         tPanel.add(monthTabs, BorderLayout.CENTER);
-        JPanel tBottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton addTxnBtn = new JButton("Add Transaction");
-        JButton deleteTxnBtn = new JButton("Delete Selected Transaction");
-        JButton recycleBinBtn = new JButton("Recycle Bin");
-        JButton exportButton = new JButton("Export to File...");
+    JPanel tBottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+    tBottomPanel.setBackground(ModernTheme.SURFACE);
+    JButton addTxnBtn = ModernTheme.createPrimaryButton("Add Transaction");
+    addTxnBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+    addTxnBtn.setIconTextGap(8);
+    JButton deleteTxnBtn = ModernTheme.createDangerButton("Delete Selected Transaction");
+    deleteTxnBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+    deleteTxnBtn.setIconTextGap(8);
+    JButton selectAllTxnBtn = ModernTheme.createSecondaryButton("Select All");
+    JButton recycleBinBtn = ModernTheme.createSecondaryButton("Recycle Bin");
+    recycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+    recycleBinBtn.setIconTextGap(8);
+    JButton exportButton = ModernTheme.createSecondaryButton("Export to File...");
+    exportButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 16));
+    exportButton.setIconTextGap(8);
         tTopPanel.add(exportButton);
         tBottomPanel.add(addTxnBtn);
         tBottomPanel.add(deleteTxnBtn);
+        tBottomPanel.add(selectAllTxnBtn);
         tBottomPanel.add(recycleBinBtn);
         tPanel.add(tBottomPanel, BorderLayout.SOUTH);
         tabs.addTab("Transactions", tPanel);
@@ -177,11 +346,21 @@ private JPanel loanDetailPanel;
         yearComboBox.addActionListener(e -> refreshTransactions());
         addTxnBtn.addActionListener(e -> openTransactionDialog());
         deleteTxnBtn.addActionListener(e -> deleteSelectedTransaction());
+        selectAllTxnBtn.addActionListener(e -> {
+            JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
+            if (currentScrollPane == null) return;
+            JTable currentTable = (JTable) currentScrollPane.getViewport().getView();
+            int rowCount = currentTable.getRowCount();
+            if (rowCount > 0) {
+                currentTable.setRowSelectionInterval(0, rowCount - 1);
+            }
+        });
         deleteMonthButton.addActionListener(e -> deleteSelectedMonth());
         deleteYearButton.addActionListener(e -> deleteSelectedYear());
         monthTabs.addChangeListener(e -> {
             deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0);
             applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
+            updateSummaryCards(); // Update cards when month tab changes
         });
         exportButton.addActionListener(e -> openExportDialog());
         // Live search listeners
@@ -200,26 +379,38 @@ private JPanel loanDetailPanel;
         // =========================================================
         // ===         BANK ACCOUNTS PANEL                     ===
         // =========================================================
-        JPanel bPanel = new JPanel(new BorderLayout());
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(200);
-        bankListModel = new DefaultListModel<>();
-        bankAccountList = new JList<>(bankListModel);
-        bankAccountList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
-        bankAccountList.setBorder(new EmptyBorder(5, 5, 5, 5));
-        bankDetailPanel = new JPanel(new BorderLayout());
-        bankDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        splitPane.setLeftComponent(new JScrollPane(bankAccountList));
-        splitPane.setRightComponent(bankDetailPanel);
-        bPanel.add(splitPane, BorderLayout.CENTER);
-        JPanel bankButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton addBankBtn = new JButton("Add New Account");
-        addBankBtn.addActionListener(e -> openBankAccountDialog());
-        JButton deleteBankBtn = new JButton("Delete Selected Account");
-        deleteBankBtn.addActionListener(e -> deleteSelectedAccount());
-        bankButtonPanel.add(addBankBtn);
-        bankButtonPanel.add(deleteBankBtn);
-        bPanel.add(bankButtonPanel, BorderLayout.SOUTH);
+    JPanel bPanel = new JPanel(new BorderLayout());
+    bPanel.setBackground(ModernTheme.BACKGROUND);
+    JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+    splitPane.setDividerLocation(200);
+    splitPane.setContinuousLayout(true);
+    splitPane.setDividerSize(4);
+    splitPane.setOpaque(false);
+    bankListModel = new DefaultListModel<>();
+    bankAccountList = new JList<>(bankListModel);
+    styleList(bankAccountList);
+    bankAccountList.setBorder(new EmptyBorder(5, 5, 5, 5));
+    bankDetailPanel = new JPanel(new BorderLayout());
+    bankDetailPanel.setBackground(ModernTheme.SURFACE);
+    bankDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
+    JScrollPane bankListScroll = new JScrollPane(bankAccountList);
+    styleModernScrollBar(bankListScroll);
+    splitPane.setLeftComponent(bankListScroll);
+    splitPane.setRightComponent(bankDetailPanel);
+    bPanel.add(splitPane, BorderLayout.CENTER);
+    JPanel bankButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+    bankButtonPanel.setBackground(ModernTheme.SURFACE);
+    JButton addBankBtn = ModernTheme.createPrimaryButton("Add New Account");
+    addBankBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+    addBankBtn.setIconTextGap(8);
+    addBankBtn.addActionListener(e -> openBankAccountDialog());
+    JButton deleteBankBtn = ModernTheme.createDangerButton("Delete Selected Account");
+    deleteBankBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+    deleteBankBtn.setIconTextGap(8);
+    deleteBankBtn.addActionListener(e -> deleteSelectedAccount());
+    bankButtonPanel.add(addBankBtn);
+    bankButtonPanel.add(deleteBankBtn);
+    bPanel.add(bankButtonPanel, BorderLayout.SOUTH);
         tabs.addTab("Bank Accounts", bPanel);
         bankAccountList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
@@ -234,22 +425,36 @@ private JPanel loanDetailPanel;
         // ===         NEW DEPOSITS PANEL                      ===
         // =========================================================
         JPanel dPanel = new JPanel(new BorderLayout());
+        dPanel.setBackground(ModernTheme.BACKGROUND);
         JSplitPane depositSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         depositSplitPane.setDividerLocation(200);
+        depositSplitPane.setContinuousLayout(true);
+        depositSplitPane.setDividerSize(4);
+        depositSplitPane.setOpaque(false);
         depositListModel = new DefaultListModel<>();
         depositList = new JList<>(depositListModel);
-        depositList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
+        styleList(depositList);
         depositList.setBorder(new EmptyBorder(5, 5, 5, 5));
-        depositSplitPane.setLeftComponent(new JScrollPane(depositList));
+        JScrollPane depositListScroll = new JScrollPane(depositList);
+        styleModernScrollBar(depositListScroll);
+        depositSplitPane.setLeftComponent(depositListScroll);
         depositDetailPanel = new JPanel(new BorderLayout());
-        depositDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        depositDetailPanel.setBackground(ModernTheme.SURFACE);
+        depositDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
         depositDetailPanel.add(new JLabel("Select a deposit to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
         depositSplitPane.setRightComponent(depositDetailPanel);
         dPanel.add(depositSplitPane, BorderLayout.CENTER);
         JPanel depositButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton addDepositBtn = new JButton("Add New Deposit");
-        JButton deleteDepositBtn = new JButton("Delete Selected Deposit");
-        JButton depositRecycleBinBtn = new JButton("Deposit Recycle Bin");
+        depositButtonPanel.setBackground(ModernTheme.SURFACE);
+        JButton addDepositBtn = ModernTheme.createPrimaryButton("Add New Deposit");
+        addDepositBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+        addDepositBtn.setIconTextGap(8);
+        JButton deleteDepositBtn = ModernTheme.createDangerButton("Delete Selected Deposit");
+        deleteDepositBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+        deleteDepositBtn.setIconTextGap(8);
+        JButton depositRecycleBinBtn = ModernTheme.createSecondaryButton("Deposit Recycle Bin");
+        depositRecycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+        depositRecycleBinBtn.setIconTextGap(8);
         depositButtonPanel.add(addDepositBtn);
         depositButtonPanel.add(deleteDepositBtn);
         depositButtonPanel.add(depositRecycleBinBtn);
@@ -272,25 +477,39 @@ private JPanel loanDetailPanel;
         // ===         INVESTMENTS PANEL                         ===
         // =========================================================
         JPanel iPanel = new JPanel(new BorderLayout());
+        iPanel.setBackground(ModernTheme.BACKGROUND);
         JSplitPane investmentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         investmentSplitPane.setDividerLocation(220);
+        investmentSplitPane.setContinuousLayout(true);
+        investmentSplitPane.setDividerSize(4);
+        investmentSplitPane.setOpaque(false);
         investmentListModel = new DefaultListModel<>();
         investmentList = new JList<>(investmentListModel);
-        investmentList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
+        styleList(investmentList);
         investmentList.setBorder(new EmptyBorder(5, 5, 5, 5));
-        investmentSplitPane.setLeftComponent(new JScrollPane(investmentList));
+        JScrollPane investmentListScroll = new JScrollPane(investmentList);
+        styleModernScrollBar(investmentListScroll);
+        investmentSplitPane.setLeftComponent(investmentListScroll);
 
         investmentDetailPanel = new JPanel(new BorderLayout());
-        investmentDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        investmentDetailPanel.setBackground(ModernTheme.SURFACE);
+        investmentDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
         investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
         investmentSplitPane.setRightComponent(investmentDetailPanel);
 
         iPanel.add(investmentSplitPane, BorderLayout.CENTER);
 
         JPanel investmentButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton addInvestmentBtn = new JButton("Add Investment");
-        JButton deleteInvestmentBtn = new JButton("Delete Selected");
-        JButton investmentRecycleBinBtn = new JButton("Investment Recycle Bin");
+        investmentButtonPanel.setBackground(ModernTheme.SURFACE);
+        JButton addInvestmentBtn = ModernTheme.createPrimaryButton("Add Investment");
+        addInvestmentBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+        addInvestmentBtn.setIconTextGap(8);
+        JButton deleteInvestmentBtn = ModernTheme.createDangerButton("Delete Selected");
+        deleteInvestmentBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+        deleteInvestmentBtn.setIconTextGap(8);
+        JButton investmentRecycleBinBtn = ModernTheme.createSecondaryButton("Investment Recycle Bin");
+        investmentRecycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+        investmentRecycleBinBtn.setIconTextGap(8);
         investmentButtonPanel.add(addInvestmentBtn);
         investmentButtonPanel.add(deleteInvestmentBtn);
         investmentButtonPanel.add(investmentRecycleBinBtn);
@@ -317,21 +536,28 @@ private JPanel loanDetailPanel;
 // ===         NEW TAXATION PANEL (MASTER-DETAIL)        ===
 // =========================================================
 JPanel taxPanel = new JPanel(new BorderLayout());
+taxPanel.setBackground(ModernTheme.BACKGROUND);
 
 // --- Split Pane ---
 JSplitPane taxSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 taxSplitPane.setDividerLocation(220); // Adjust as needed
+taxSplitPane.setContinuousLayout(true);
+taxSplitPane.setDividerSize(4);
+taxSplitPane.setOpaque(false);
 
 // --- Left Side: List of Tax Profiles ---
 taxProfileListModel = new DefaultListModel<>();
 taxProfileList = new JList<>(taxProfileListModel);
-taxProfileList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
+styleList(taxProfileList);
 taxProfileList.setBorder(new EmptyBorder(5, 5, 5, 5));
-taxSplitPane.setLeftComponent(new JScrollPane(taxProfileList));
+JScrollPane taxListScroll = new JScrollPane(taxProfileList);
+styleModernScrollBar(taxListScroll);
+taxSplitPane.setLeftComponent(taxListScroll);
 
 // --- Right Side: Detail Panel ---
 taxDetailPanel = new JPanel(new BorderLayout());
-taxDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+taxDetailPanel.setBackground(ModernTheme.SURFACE);
+taxDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
 taxDetailPanel.add(new JLabel("Select a tax profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
 taxSplitPane.setRightComponent(taxDetailPanel);
 
@@ -339,8 +565,13 @@ taxPanel.add(taxSplitPane, BorderLayout.CENTER);
 
 // --- Bottom Button Panel ---
 JPanel taxButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-JButton addTaxProfileBtn = new JButton("Add New Tax Profile");
-JButton deleteTaxProfileBtn = new JButton("Delete Selected Profile");
+taxButtonPanel.setBackground(ModernTheme.SURFACE);
+JButton addTaxProfileBtn = ModernTheme.createPrimaryButton("Add New Tax Profile");
+addTaxProfileBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+addTaxProfileBtn.setIconTextGap(8);
+JButton deleteTaxProfileBtn = ModernTheme.createDangerButton("Delete Selected Profile");
+deleteTaxProfileBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+deleteTaxProfileBtn.setIconTextGap(8);
 
 taxButtonPanel.add(addTaxProfileBtn);
 taxButtonPanel.add(deleteTaxProfileBtn);
@@ -361,25 +592,32 @@ deleteTaxProfileBtn.addActionListener(e -> deleteSelectedTaxProfile()); // New m
 
 // Load initial data
 refreshTaxProfiles(); // New method
-// =========================================================
+        // =========================================================
 // ===         NEW LOANS / EMI PANEL (MASTER-DETAIL)     ===
 // =========================================================
 JPanel lPanel = new JPanel(new BorderLayout());
+lPanel.setBackground(ModernTheme.BACKGROUND);
 
 // --- Split Pane ---
 JSplitPane loanSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 loanSplitPane.setDividerLocation(220); // Adjust as needed
+loanSplitPane.setContinuousLayout(true);
+loanSplitPane.setDividerSize(4);
+loanSplitPane.setOpaque(false);
 
 // --- Left Side: List of Loans ---
 loanListModel = new DefaultListModel<>();
 loanList = new JList<>(loanListModel);
-loanList.setFont(new Font("Arial", Font.PLAIN, 14));
+styleList(loanList);
 loanList.setBorder(new EmptyBorder(5, 5, 5, 5));
-loanSplitPane.setLeftComponent(new JScrollPane(loanList));
+JScrollPane loanListScroll = new JScrollPane(loanList);
+styleModernScrollBar(loanListScroll);
+loanSplitPane.setLeftComponent(loanListScroll);
 
 // --- Right Side: Detail Panel ---
 loanDetailPanel = new JPanel(new BorderLayout());
-loanDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+loanDetailPanel.setBackground(ModernTheme.SURFACE);
+loanDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
 loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
 loanSplitPane.setRightComponent(loanDetailPanel);
 
@@ -387,18 +625,23 @@ lPanel.add(loanSplitPane, BorderLayout.CENTER);
 
 // --- Bottom Button Panel ---
 JPanel loanButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-JButton addLoanBtn = new JButton("Add New Loan");
-JButton deleteLoanBtn = new JButton("Delete Selected Loan");
-JButton loanRecycleBinBtn = new JButton("Loan Recycle Bin");
+loanButtonPanel.setBackground(ModernTheme.SURFACE);
+JButton addLoanBtn = ModernTheme.createPrimaryButton("Add New Loan");
+addLoanBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+addLoanBtn.setIconTextGap(8);
+JButton deleteLoanBtn = ModernTheme.createDangerButton("Delete Selected Loan");
+deleteLoanBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+deleteLoanBtn.setIconTextGap(8);
+JButton loanRecycleBinBtn = ModernTheme.createSecondaryButton("Loan Recycle Bin");
+loanRecycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+loanRecycleBinBtn.setIconTextGap(8);
 
 loanButtonPanel.add(addLoanBtn);
 loanButtonPanel.add(deleteLoanBtn);
 loanButtonPanel.add(loanRecycleBinBtn);
 lPanel.add(loanButtonPanel, BorderLayout.SOUTH);
 
-tabs.addTab("Loans / EMI", lPanel); // Add the new tab
-
-// --- Action Listeners ---
+tabs.addTab("Loans / EMI", lPanel); // Add the new tab// --- Action Listeners ---
 loanList.addListSelectionListener(e -> {
     if (!e.getValueIsAdjusting()) {
         Loan selected = loanList.getSelectedValue();
@@ -416,21 +659,28 @@ refreshLoans(); // New method
 // ===         NEW CARDS PANEL (MASTER-DETAIL)           ===
 // =========================================================
 JPanel cPanel = new JPanel(new BorderLayout());
+cPanel.setBackground(ModernTheme.BACKGROUND);
 
 // --- Split Pane ---
 JSplitPane cardSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 cardSplitPane.setDividerLocation(220); // Adjust width for card names
+cardSplitPane.setContinuousLayout(true);
+cardSplitPane.setDividerSize(4);
+cardSplitPane.setOpaque(false);
 
 // --- Left Side: List of Cards ---
 cardListModel = new DefaultListModel<>();
 cardList = new JList<>(cardListModel);
-cardList.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
+styleList(cardList);
 cardList.setBorder(new EmptyBorder(5, 5, 5, 5));
-cardSplitPane.setLeftComponent(new JScrollPane(cardList));
+JScrollPane cardListScroll = new JScrollPane(cardList);
+styleModernScrollBar(cardListScroll);
+cardSplitPane.setLeftComponent(cardListScroll);
 
 // --- Right Side: Detail Panel ---
 cardDetailPanel = new JPanel(new BorderLayout());
-cardDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+cardDetailPanel.setBackground(ModernTheme.SURFACE);
+cardDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
 cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
 cardSplitPane.setRightComponent(cardDetailPanel);
 
@@ -438,9 +688,16 @@ cPanel.add(cardSplitPane, BorderLayout.CENTER);
 
 // --- Bottom Button Panel ---
 JPanel cardButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-JButton addCardBtn = new JButton("Add New Card");
-JButton deleteCardBtn = new JButton("Delete Selected Card");
-JButton cardRecycleBinBtn = new JButton("Card Recycle Bin");
+cardButtonPanel.setBackground(ModernTheme.SURFACE);
+JButton addCardBtn = ModernTheme.createPrimaryButton("Add New Card");
+addCardBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+addCardBtn.setIconTextGap(8);
+JButton deleteCardBtn = ModernTheme.createDangerButton("Delete Selected Card");
+deleteCardBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+deleteCardBtn.setIconTextGap(8);
+JButton cardRecycleBinBtn = ModernTheme.createSecondaryButton("Card Recycle Bin");
+cardRecycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+cardRecycleBinBtn.setIconTextGap(8);
 
 cardButtonPanel.add(addCardBtn);
 cardButtonPanel.add(deleteCardBtn);
@@ -496,29 +753,75 @@ refreshCards(); // Method to be added below
             if (selectedYear == null) {
                 return;
             }
+        
         try {
             Map<String, List<Transaction>> groupedData = manager.getTransactionsGroupedByMonth(selectedYear);
-            String[] tcols = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount"};
+                String[] tcols = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount", "ID"};
+            int serialNumber = 1; // Start serial number from 1 for each user
             for (String monthYear : groupedData.keySet()) {
-                DefaultTableModel monthModel = new DefaultTableModel(tcols, 0);
+                    DefaultTableModel monthModel = new DefaultTableModel(tcols, 0) {
+                        @Override
+                        public Class<?> getColumnClass(int column) {
+                            if (column == 0 || column == 10) return Integer.class;
+                            if (column == 9) return Double.class;
+                            return String.class;
+                        }
+                    };
                 List<Transaction> txs = groupedData.get(monthYear);
+                
+                // Calculate month totals
+                double monthIncome = 0.0;
+                double monthExpense = 0.0;
+                
                 for (Transaction t : txs) {
-                    monthModel.addRow(new Object[]{t.getId(), t.getDate(), t.getTimestamp(), t.getDay(), t.getPaymentMethod(), t.getCategory(), t.getType(), t.getPayee(), t.getDescription(), t.getAmount()});
+                        monthModel.addRow(new Object[]{serialNumber++, t.getDate(), t.getTimestamp(), t.getDay(), t.getPaymentMethod(), t.getCategory(), t.getType(), t.getPayee(), t.getDescription(), t.getAmount(), t.getId()});
+                        
+                        // Calculate totals for this month
+                        if ("Income".equalsIgnoreCase(t.getType())) {
+                            monthIncome += t.getAmount();
+                        } else if ("Expense".equalsIgnoreCase(t.getType())) {
+                            monthExpense += t.getAmount();
+                        }
                 }
                 JTable monthTable = new JTable(monthModel);
+                // Apply modern table styling
+                ModernTheme.styleTable(monthTable);
+                
+                // Add grid lines between columns for modern look
+                monthTable.setShowGrid(true);
+                monthTable.setGridColor(new Color(220, 220, 220)); // Light gray grid lines
+                monthTable.setIntercellSpacing(new Dimension(1, 1)); // 1px spacing for grid lines
+                
+                // Hide the ID column (last column)
+                monthTable.getColumnModel().getColumn(10).setMinWidth(0);
+                monthTable.getColumnModel().getColumn(10).setMaxWidth(0);
+                monthTable.getColumnModel().getColumn(10).setWidth(0);
+                
                 // Enable sorting and filtering per-month table
                 javax.swing.table.TableRowSorter<DefaultTableModel> sorter = new javax.swing.table.TableRowSorter<>(monthModel);
                 monthTable.setRowSorter(sorter);
                 monthTable.putClientProperty("sorter", sorter);
                 monthTable.putClientProperty("monthYear", monthYear);
+                
+                // Store month totals in the scroll pane's client properties
                 JScrollPane scrollPane = new JScrollPane(monthTable);
+                scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+                scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                styleModernScrollBar(scrollPane);
+                scrollPane.putClientProperty("monthIncome", monthIncome);
+                scrollPane.putClientProperty("monthExpense", monthExpense);
+                
                 String tabTitle = getMonthName(monthYear);
                 monthTabs.addTab(tabTitle, scrollPane);
             }
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading transactions: " + e.getMessage());
         }
+        
         deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0);
+        
+        // Update summary cards for the first month (or selected tab)
+        updateSummaryCards();
         // Re-apply any active search filter after refresh
         if (txnSearchField != null && txnSearchColumn != null) {
             applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
@@ -570,40 +873,179 @@ refreshCards(); // Method to be added below
         sorter.setRowFilter(filter);
     }
 
+    // Apply rounded, modern tabs consistent with Login/Forgot screens
+    private void styleTabbedPane(JTabbedPane tabs) {
+        tabs.setFont(ModernTheme.FONT_BODY);
+        tabs.setBackground(ModernTheme.SURFACE);
+        tabs.setOpaque(true);
+        tabs.setBorder(new EmptyBorder(8, 8, 0, 8));
+        tabs.setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI() {
+            @Override
+            protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
+                                              int x, int y, int w, int h, boolean isSelected) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int arc = 12;
+                Color bg = isSelected ? ModernTheme.PRIMARY : ModernTheme.SURFACE;
+                g2.setColor(bg);
+                g2.fillRoundRect(x, y + 5, w, h - 5, arc, arc);
+                if (!isSelected) {
+                    g2.setColor(ModernTheme.BORDER);
+                    g2.drawRoundRect(x, y + 5, w, h - 5, arc, arc);
+                }
+                g2.dispose();
+            }
+
+            @Override
+            protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
+                                     int tabIndex, String title, Rectangle textRect, boolean isSelected) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g2.setFont(ModernTheme.FONT_BODY);
+                g2.setColor(isSelected ? ModernTheme.TEXT_WHITE : ModernTheme.TEXT_PRIMARY);
+                int x = textRect.x;
+                int y = textRect.y + metrics.getAscent();
+                g2.drawString(title, x, y);
+                g2.dispose();
+            }
+        });
+    }
+
+    // Consistent modern thin scrollbars across panes
+    private void styleModernScrollBar(JScrollPane scrollPane) {
+        JScrollBar vbar = scrollPane.getVerticalScrollBar();
+        if (vbar != null) {
+            vbar.setUnitIncrement(16);
+            vbar.setUI(new javax.swing.plaf.basic.BasicScrollBarUI() {
+                @Override
+                protected void configureScrollBarColors() {
+                    thumbColor = ModernTheme.PRIMARY;
+                    trackColor = ModernTheme.SURFACE;
+                }
+                @Override
+                protected Dimension getMinimumThumbSize() {
+                    return new Dimension(10, 30);
+                }
+                @Override
+                protected Dimension getMaximumThumbSize() {
+                    return new Dimension(10, Integer.MAX_VALUE);
+                }
+                @Override
+                protected JButton createDecreaseButton(int orientation) { return createZeroButton(); }
+                @Override
+                protected JButton createIncreaseButton(int orientation) { return createZeroButton(); }
+                private JButton createZeroButton() {
+                    JButton b = new JButton();
+                    b.setPreferredSize(new Dimension(0, 0));
+                    b.setMinimumSize(new Dimension(0, 0));
+                    b.setMaximumSize(new Dimension(0, 0));
+                    return b;
+                }
+                @Override
+                protected void paintThumb(Graphics g, JComponent c, Rectangle thumbBounds) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(ModernTheme.PRIMARY);
+                    g2.fillRoundRect(thumbBounds.x, thumbBounds.y, thumbBounds.width, thumbBounds.height, 10, 10);
+                    g2.dispose();
+                }
+                @Override
+                protected void paintTrack(Graphics g, JComponent c, Rectangle trackBounds) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setColor(ModernTheme.SURFACE);
+                    g2.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
+                    g2.dispose();
+                }
+            });
+            vbar.setPreferredSize(new Dimension(10, vbar.getPreferredSize().height));
+        }
+    }
+
+    // Simple modern renderer for JList with theme colors
+    private void styleList(JList<?> list) {
+        list.setFont(ModernTheme.FONT_BODY);
+        list.setBackground(ModernTheme.SURFACE);
+        list.setForeground(ModernTheme.TEXT_PRIMARY);
+        list.setSelectionBackground(new Color(67, 97, 238, 40));
+        list.setSelectionForeground(ModernTheme.TEXT_PRIMARY);
+        list.setFixedCellHeight(28);
+        list.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> jList, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                Component c = super.getListCellRendererComponent(jList, value, index, isSelected, cellHasFocus);
+                setBorder(new EmptyBorder(6, 8, 6, 8));
+                setFont(ModernTheme.FONT_BODY);
+                if (isSelected) {
+                    setBackground(new Color(67, 97, 238, 30));
+                    setForeground(ModernTheme.TEXT_PRIMARY);
+                } else {
+                    setBackground(ModernTheme.SURFACE);
+                    setForeground(ModernTheme.TEXT_PRIMARY);
+                }
+                return c;
+            }
+        });
+    }
+
     private void initSummaryTab(JTabbedPane tabs) {
         JPanel summaryPanel = new JPanel(new BorderLayout(10, 10));
-        summaryPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        summaryPanel.setBackground(ModernTheme.BACKGROUND);
+        summaryPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
 
         JPanel inputPanel = new JPanel(new GridBagLayout());
+        inputPanel.setBackground(ModernTheme.SURFACE);
+        inputPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.insets = new Insets(6, 6, 6, 6);
         gbc.anchor = GridBagConstraints.WEST;
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        summaryCompanyField = new JTextField(20);
-        summaryDesignationField = new JTextField(18);
-        summaryHolderField = new JTextField(20);
+        summaryCompanyField = new AutoCompleteTextField(20, UserPreferencesCache::getCachedCompanyNames);
+        ModernTheme.styleTextField(summaryCompanyField);
+        summaryDesignationField = new AutoCompleteTextField(18, UserPreferencesCache::getCachedDesignations);
+        ModernTheme.styleTextField(summaryDesignationField);
+        summaryHolderField = new AutoCompleteTextField(20, UserPreferencesCache::getCachedHolders);
+        ModernTheme.styleTextField(summaryHolderField);
         summaryYearCombo = new JComboBox<>();
-        summaryRefreshButton = new JButton("Generate Summary");
-        summaryExportCsvButton = new JButton("Export CSV");
-        summaryExportPdfButton = new JButton("Export PDF");
+        ModernTheme.styleComboBox(summaryYearCombo);
+        
+        summaryRefreshButton = ModernTheme.createPrimaryButton("Generate Summary");
+        summaryRefreshButton.setIcon(ModernIcons.create(IconType.SEARCH, ModernTheme.TEXT_WHITE, 16));
+        summaryRefreshButton.setIconTextGap(8);
+        
+        summaryExportCsvButton = ModernTheme.createSecondaryButton("Export CSV");
+        summaryExportCsvButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 16));
+        summaryExportCsvButton.setIconTextGap(8);
         summaryExportCsvButton.setEnabled(false);
+        
+        summaryExportPdfButton = ModernTheme.createSecondaryButton("Export PDF");
+        summaryExportPdfButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 16));
+        summaryExportPdfButton.setIconTextGap(8);
         summaryExportPdfButton.setEnabled(false);
 
         int row = 0;
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Company:"), gbc);
+        JLabel companyLabel = new JLabel("Company:");
+        companyLabel.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(companyLabel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryCompanyField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Designation:"), gbc);
+        JLabel designationLabel = new JLabel("Designation:");
+        designationLabel.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(designationLabel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryDesignationField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Report Holder:"), gbc);
+        JLabel holderLabel = new JLabel("Report Holder:");
+        holderLabel.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(holderLabel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryHolderField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(new JLabel("Transaction Year:"), gbc);
+        JLabel yearLabel = new JLabel("Transaction Year:");
+        yearLabel.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(yearLabel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryYearCombo, gbc);
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        buttonPanel.setOpaque(false);
         buttonPanel.add(summaryRefreshButton);
         buttonPanel.add(summaryExportCsvButton);
         buttonPanel.add(summaryExportPdfButton);
@@ -614,12 +1056,18 @@ refreshCards(); // Method to be added below
         summaryOverviewArea = new JTextArea(24, 80);
         summaryOverviewArea.setEditable(false);
         summaryOverviewArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        summaryOverviewArea.setBackground(ModernTheme.SURFACE);
+        summaryOverviewArea.setForeground(ModernTheme.TEXT_PRIMARY);
         summaryOverviewArea.setLineWrap(true);
         summaryOverviewArea.setWrapStyleWord(true);
-        summaryOverviewArea.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+        summaryOverviewArea.setBorder(new EmptyBorder(10, 10, 10, 10));
+        
+        JScrollPane summaryScroll = new JScrollPane(summaryOverviewArea);
+        summaryScroll.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+        styleModernScrollBar(summaryScroll);
 
         summaryPanel.add(inputPanel, BorderLayout.NORTH);
-        summaryPanel.add(new JScrollPane(summaryOverviewArea), BorderLayout.CENTER);
+        summaryPanel.add(summaryScroll, BorderLayout.CENTER);
 
         loadSummaryYearChoices();
 
@@ -659,6 +1107,17 @@ refreshCards(); // Method to be added below
             String designation = summaryDesignationField != null ? summaryDesignationField.getText() : "";
             String holder = summaryHolderField != null ? summaryHolderField.getText() : "";
             String year = summaryYearCombo != null ? (String) summaryYearCombo.getSelectedItem() : "All Years";
+
+            // Cache the entered values for autocomplete
+            if (!company.trim().isEmpty()) {
+                UserPreferencesCache.cacheCompanyName(company.trim());
+            }
+            if (!designation.trim().isEmpty()) {
+                UserPreferencesCache.cacheDesignation(designation.trim());
+            }
+            if (!holder.trim().isEmpty()) {
+                UserPreferencesCache.cacheHolderName(holder.trim());
+            }
 
             SummaryData summary = manager.buildSummaryData(company, designation, holder, year);
             currentSummarySnapshot = summary;
@@ -1279,7 +1738,10 @@ refreshCards(); // Method to be added below
         if (selectedRow == -1) {
             JOptionPane.showMessageDialog(this, "Please select a transaction to delete.", "No Transaction", JOptionPane.WARNING_MESSAGE); return;
         }
-        int transactionId = (int) currentTable.getValueAt(selectedRow, 0);
+            // Get the actual database ID from the hidden column (index 10)
+            int modelRow = currentTable.convertRowIndexToModel(selectedRow);
+            DefaultTableModel model = (DefaultTableModel) currentTable.getModel();
+            int transactionId = (int) model.getValueAt(modelRow, 10);
         String desc = String.valueOf(currentTable.getValueAt(selectedRow, 8)); // Use String.valueOf for safety
         int choice = JOptionPane.showConfirmDialog(this, "Move this transaction to the recycle bin?\nID: " + transactionId + " (" + desc + ")", "Confirm Delete", JOptionPane.YES_NO_OPTION);
         if (choice == JOptionPane.YES_OPTION) {
@@ -1703,8 +2165,119 @@ refreshCards(); // Method to be added below
     // --- OTHER REFRESH/DIALOG METHODS ---
 
     
-
-
+    // --- Method to Update Summary Cards Based on Selected Month ---
+    private void updateSummaryCards() {
+        JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
+        if (currentScrollPane == null) {
+            // No month selected, reset to 0
+            if (incomeValueLabel != null) incomeValueLabel.setText("₹0.00");
+            if (expenseValueLabel != null) expenseValueLabel.setText("₹0.00");
+            if (balanceValueLabel != null) balanceValueLabel.setText("₹0.00");
+            return;
+        }
+        
+        // Get the stored totals for the selected month
+        Double monthIncome = (Double) currentScrollPane.getClientProperty("monthIncome");
+        Double monthExpense = (Double) currentScrollPane.getClientProperty("monthExpense");
+        
+        if (monthIncome == null) monthIncome = 0.0;
+        if (monthExpense == null) monthExpense = 0.0;
+        
+        double netBalance = monthIncome - monthExpense;
+        
+        // Update the labels
+        if (incomeValueLabel != null) {
+            incomeValueLabel.setText(String.format("₹%,.2f", monthIncome));
+        }
+        if (expenseValueLabel != null) {
+            expenseValueLabel.setText(String.format("₹%,.2f", monthExpense));
+        }
+        if (balanceValueLabel != null) {
+            balanceValueLabel.setText(String.format("₹%,.2f", netBalance));
+        }
+    }
+    
+    // --- Helper Method to Create Summary Cards ---
+    private JPanel createSummaryCard(String title, JLabel valueLabel, Color bgColor, Color darkColor) {
+        JPanel card = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // Gradient background
+                GradientPaint gradient = new GradientPaint(0, 0, bgColor, 0, getHeight(), darkColor);
+                g2.setPaint(gradient);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                
+                g2.dispose();
+            }
+        };
+        card.setLayout(new BorderLayout(10, 10));
+        card.setPreferredSize(new Dimension(200, 100));
+        card.setBorder(new EmptyBorder(15, 20, 15, 20));
+        card.setOpaque(false);
+        
+        // Title Label
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        titleLabel.setForeground(Color.WHITE);
+        titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        // Value Label (passed as parameter)
+        valueLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        valueLabel.setForeground(Color.WHITE);
+        valueLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        card.add(titleLabel, BorderLayout.NORTH);
+        card.add(valueLabel, BorderLayout.CENTER);
+        
+        return card;
+    }
+    
+    // --- Logout Method ---
+        // --- Refresh UI Theme Method ---
+        private void refreshUITheme() {
+            // Update all components to use new colors
+            SwingUtilities.updateComponentTreeUI(this);
+            getContentPane().setBackground(ModernTheme.BACKGROUND);
+        
+            // Refresh all tabs
+            refreshTransactions();
+            refreshBankAccounts();
+            refreshDeposits();
+            refreshInvestments();
+            refreshTaxProfiles();
+            refreshLoans();
+            refreshCards();
+            regenerateSummary();
+        
+            repaint();
+            revalidate();
+        }
+    
+    private void performLogout() {
+        try {
+            // Close database connection
+            if (manager != null) {
+                manager.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
+        // Clear session
+        SessionContext.clear();
+        
+        // Dispose this window
+        dispose();
+        
+        // Restart the application (show login again)
+        SwingUtilities.invokeLater(() -> {
+            FinanceManagerApp.main(new String[0]);
+        });
+    }
    
     // --- Main Method ---
     public static void main(String[] args) {
@@ -2313,9 +2886,10 @@ private void deleteSelectedTaxProfile() {
             pw.println(String.join(",", columns));
             
             // Write data
+            int serialNumber = 1; // Start serial number from 1
             for (Transaction t : data) {
                 StringJoiner sj = new StringJoiner(",");
-                sj.add(String.valueOf(t.getId()));
+                sj.add(String.valueOf(serialNumber++));
                 sj.add("\"" + t.getDate() + "\"");
                 sj.add("\"" + t.getTimestamp() + "\"");
                 sj.add("\"" + t.getDay() + "\"");
@@ -2367,8 +2941,9 @@ private void deleteSelectedTaxProfile() {
             
             // Add Data Rows
             com.itextpdf.text.Font cellFont = FontFactory.getFont(FontFactory.HELVETICA, 8);
+            int serialNumber = 1; // Start serial number from 1
             for (Transaction t : data) {
-                table.addCell(new Phrase(String.valueOf(t.getId()), cellFont));
+                table.addCell(new Phrase(String.valueOf(serialNumber++), cellFont));
                 table.addCell(new Phrase(t.getDate(), cellFont));
                 table.addCell(new Phrase(t.getCategory(), cellFont));
                 table.addCell(new Phrase(t.getType(), cellFont));
