@@ -69,6 +69,8 @@ public class FinanceManagerFullUI extends JFrame {
     private JTabbedPane monthTabs;
     private JComboBox<String> yearComboBox;
     private JButton deleteMonthButton;
+    private JTextField txnSearchField; // search text for transactions
+    private JComboBox<String> txnSearchColumn; // column selector for transactions
 
     // --- Bank Account Tab Variables ---
     private JList<BankAccount> bankAccountList;
@@ -120,7 +122,7 @@ private JPanel loanDetailPanel;
         // =========================================================
         JPanel tPanel = new JPanel(new BorderLayout(5, 5));
         tPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
-        JPanel tTopPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    JPanel tTopPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         yearComboBox = new JComboBox<>();
         tTopPanel.add(new JLabel("Select Year:"));
         tTopPanel.add(yearComboBox);
@@ -129,6 +131,15 @@ private JPanel loanDetailPanel;
         deleteMonthButton = new JButton("Delete Selected Month");
         deleteMonthButton.setEnabled(false);
         tTopPanel.add(deleteMonthButton);
+    // --- Search controls for Transactions ---
+    tTopPanel.add(Box.createHorizontalStrut(10));
+    tTopPanel.add(new JLabel("Search:"));
+    txnSearchField = new JTextField(18);
+    tTopPanel.add(txnSearchField);
+    String[] txnCols = new String[]{"All Columns","S.No.","Date","Timestamp","Day","Payment Method","Category","Type","Payee","Description","Amount"};
+    txnSearchColumn = new JComboBox<>(txnCols);
+    txnSearchColumn.setSelectedIndex(0);
+    tTopPanel.add(txnSearchColumn);
         tPanel.add(tTopPanel, BorderLayout.NORTH);
         monthTabs = new JTabbedPane();
         tPanel.add(monthTabs, BorderLayout.CENTER);
@@ -150,8 +161,19 @@ private JPanel loanDetailPanel;
         deleteTxnBtn.addActionListener(e -> deleteSelectedTransaction());
         deleteMonthButton.addActionListener(e -> deleteSelectedMonth());
         deleteYearButton.addActionListener(e -> deleteSelectedYear());
-        monthTabs.addChangeListener(e -> deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0));
+        monthTabs.addChangeListener(e -> {
+            deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0);
+            applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
+        });
         exportButton.addActionListener(e -> openExportDialog());
+        // Live search listeners
+        txnSearchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void update() { applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem()); }
+            public void insertUpdate(javax.swing.event.DocumentEvent e){ update(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e){ update(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e){ update(); }
+        });
+        txnSearchColumn.addActionListener(e -> applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem()));
         // Initial Load
         loadYearFilter();
         refreshTransactions();
@@ -458,6 +480,10 @@ refreshCards(); // Method to be added below
                     monthModel.addRow(new Object[]{t.getId(), t.getDate(), t.getTimestamp(), t.getDay(), t.getPaymentMethod(), t.getCategory(), t.getType(), t.getPayee(), t.getDescription(), t.getAmount()});
                 }
                 JTable monthTable = new JTable(monthModel);
+                // Enable sorting and filtering per-month table
+                javax.swing.table.TableRowSorter<DefaultTableModel> sorter = new javax.swing.table.TableRowSorter<>(monthModel);
+                monthTable.setRowSorter(sorter);
+                monthTable.putClientProperty("sorter", sorter);
                 monthTable.putClientProperty("monthYear", monthYear);
                 JScrollPane scrollPane = new JScrollPane(monthTable);
                 String tabTitle = getMonthName(monthYear);
@@ -467,6 +493,56 @@ refreshCards(); // Method to be added below
             JOptionPane.showMessageDialog(this, "Error loading transactions: " + e.getMessage());
         }
         deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0);
+        // Re-apply any active search filter after refresh
+        if (txnSearchField != null && txnSearchColumn != null) {
+            applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
+        }
+    }
+
+    // Applies a RowFilter to the currently selected month's table based on the text and target column
+    private void applyTransactionSearchFilter(String query, String columnLabel) {
+        JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
+        if (currentScrollPane == null) return;
+        JTable table = (JTable) currentScrollPane.getViewport().getView();
+        @SuppressWarnings("unchecked")
+        javax.swing.table.TableRowSorter<DefaultTableModel> sorter = (javax.swing.table.TableRowSorter<DefaultTableModel>) table.getClientProperty("sorter");
+        if (sorter == null) return;
+
+        if (query == null) query = "";
+        String q = query.trim();
+        if (q.isEmpty()) { sorter.setRowFilter(null); return; }
+
+        // Case-insensitive contains match
+        String pattern = java.util.regex.Pattern.quote(q);
+        javax.swing.RowFilter<DefaultTableModel, Object> filter;
+
+        // Column mapping to model indices
+        String[] labels = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount"};
+        if ("All Columns".equals(columnLabel)) {
+            java.util.List<javax.swing.RowFilter<DefaultTableModel, Object>> filters = new java.util.ArrayList<>();
+            for (int i = 0; i < labels.length; i++) {
+                final int col = i;
+                filters.add(new javax.swing.RowFilter<DefaultTableModel, Object>() {
+                    public boolean include(javax.swing.RowFilter.Entry<? extends DefaultTableModel, ? extends Object> entry) {
+                        Object v = entry.getValue(col);
+                        return v != null && v.toString().toLowerCase().contains(q.toLowerCase());
+                    }
+                });
+            }
+            filter = javax.swing.RowFilter.orFilter(filters);
+        } else {
+            int targetCol = -1;
+            for (int i = 0; i < labels.length; i++) if (labels[i].equals(columnLabel)) { targetCol = i; break; }
+            if (targetCol < 0) { sorter.setRowFilter(null); return; }
+            final int colIndex = targetCol;
+            filter = new javax.swing.RowFilter<DefaultTableModel, Object>() {
+                public boolean include(javax.swing.RowFilter.Entry<? extends DefaultTableModel, ? extends Object> entry) {
+                    Object v = entry.getValue(colIndex);
+                    return v != null && v.toString().toLowerCase().contains(q.toLowerCase());
+                }
+            };
+        }
+        sorter.setRowFilter(filter);
     }
 
     private void deleteSelectedTransaction() {

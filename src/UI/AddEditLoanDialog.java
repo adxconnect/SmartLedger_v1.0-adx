@@ -42,21 +42,48 @@ public class AddEditLoanDialog extends JDialog {
         }
     }
 
+    // In src/UI/AddEditLoanDialog.java
+    
     private NumberFormatter createNumberFormatter(boolean allowDecimals) {
         NumberFormat format = NumberFormat.getNumberInstance();
         if (allowDecimals) {
-            format.setGroupingUsed(false);
+            format.setGroupingUsed(false); // No commas
             format.setMaximumFractionDigits(2);
         } else {
             format.setParseIntegerOnly(true);
             format.setGroupingUsed(false);
         }
-        NumberFormatter formatter = new NumberFormatter(format);
-        formatter.setValueClass(allowDecimals ? Double.class : Integer.class);
-        formatter.setMinimum(0);
-        formatter.setAllowsInvalid(false);
-        formatter.setCommitsOnValidEdit(true);
+        
+    NumberFormatter formatter = new NumberFormatter(format);
+    // Accept any Number so parsed Long/Integer/Double values don't get rejected
+    formatter.setValueClass(Number.class);
+    formatter.setMinimum(0); // Minimum value
+    formatter.setMaximum(allowDecimals ? Double.MAX_VALUE : Integer.MAX_VALUE); // Max value
+
+    // Allow partial inputs like "1." while typing
+    formatter.setAllowsInvalid(true);
+    // Commit as soon as the edit is valid; we'll also persist text on focus loss
+    formatter.setCommitsOnValidEdit(true);
+        
         return formatter;
+    }
+
+    // --- Helpers to parse numbers robustly from text ---
+    private double parseDoubleField(JFormattedTextField field) {
+        String text = field.getText();
+        if (text == null) text = "";
+        text = text.trim().replace(",", ""); // drop grouping commas
+        if (text.isEmpty()) throw new NumberFormatException("empty");
+        return Double.parseDouble(text);
+    }
+
+    private int parseIntField(JFormattedTextField field) {
+        String text = field.getText();
+        if (text == null) text = "";
+        text = text.trim().replace(",", "");
+        if (text.isEmpty()) throw new NumberFormatException("empty");
+        // allow users to type 12.0 etc.; round to nearest int
+        return (int) Math.round(Double.parseDouble(text));
     }
 
     private void initComponents() {
@@ -91,8 +118,9 @@ public class AddEditLoanDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = row;
         formPanel.add(new JLabel("Principal Amount (₹):"), gbc);
         gbc.gridx = 1;
-        principalField = new JFormattedTextField(createNumberFormatter(true));
-        principalField.setValue(0.0);
+    principalField = new JFormattedTextField(createNumberFormatter(true));
+    principalField.setValue(0.0);
+    principalField.setFocusLostBehavior(JFormattedTextField.PERSIST);
         formPanel.add(principalField, gbc);
         row++;
 
@@ -100,8 +128,9 @@ public class AddEditLoanDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = row;
         formPanel.add(new JLabel("Annual Interest Rate (%):"), gbc);
         gbc.gridx = 1;
-        rateField = new JFormattedTextField(createNumberFormatter(true));
-        rateField.setValue(0.0);
+    rateField = new JFormattedTextField(createNumberFormatter(true));
+    rateField.setValue(0.0);
+    rateField.setFocusLostBehavior(JFormattedTextField.PERSIST);
         formPanel.add(rateField, gbc);
         row++;
 
@@ -109,8 +138,9 @@ public class AddEditLoanDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = row;
         formPanel.add(new JLabel("Tenure (in Months):"), gbc);
         gbc.gridx = 1;
-        tenureField = new JFormattedTextField(createNumberFormatter(false));
-        tenureField.setValue(0);
+    tenureField = new JFormattedTextField(createNumberFormatter(false));
+    tenureField.setValue(0);
+    tenureField.setFocusLostBehavior(JFormattedTextField.PERSIST);
         formPanel.add(tenureField, gbc);
         row++;
 
@@ -168,8 +198,9 @@ public class AddEditLoanDialog extends JDialog {
 
         add(formPanel, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
-        pack();
-        setLocationRelativeTo(owner);
+    pack();
+    // Center relative to the dialog's owner window
+    setLocationRelativeTo(getOwner());
     }
 
     /**
@@ -196,9 +227,10 @@ public class AddEditLoanDialog extends JDialog {
             if (loanToEdit == null) { // Adding a new loan
                 String lenderName = lenderNameField.getText();
                 String loanType = (String) loanTypeComboBox.getSelectedItem();
-                double principal = (Double) principalField.getValue();
-                double rate = (Double) rateField.getValue();
-                int tenure = (Integer) tenureField.getValue();
+                // Parse directly from text to avoid formatter edge cases
+                double principal = parseDoubleField(principalField);
+                double rate = parseDoubleField(rateField);
+                int tenure = parseIntField(tenureField);
                 String startDate = startDateField.getText();
                 String notes = notesArea.getText();
 

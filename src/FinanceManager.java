@@ -1753,8 +1753,13 @@ stmt.execute("CREATE TABLE IF NOT EXISTS tax_profiles (" +
             if (e.getErrorCode() == 1062) { // Handle duplicate key (already restored)
                  System.out.println("Loan " + loanId + " already exists. Removing from recycle bin.");
                  try (PreparedStatement deletePsOnly = connection.prepareStatement(deleteSql)) {
-                     deletePsOnly.setInt(1, loanId); deletePsOnly.executeUpdate(); conn.commit();
-                 } catch (SQLException ex) { conn.rollback(); throw ex; }
+                     deletePsOnly.setInt(1, loanId);
+                     deletePsOnly.executeUpdate();
+                     connection.commit();
+                 } catch (SQLException ex) {
+                     connection.rollback();
+                     throw ex;
+                 }
             } else { throw e; }
         } finally {
             connection.setAutoCommit(true);
