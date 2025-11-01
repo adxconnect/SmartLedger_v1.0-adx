@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
+import src.UI.FinanceManagerFullUI;
 import src.FinanceManager;
 import src.auth.AuthManager;
 import src.auth.SessionContext;

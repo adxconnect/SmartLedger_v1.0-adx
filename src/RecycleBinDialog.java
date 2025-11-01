@@ -2,6 +2,9 @@ package src;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+
+import src.UI.FinanceManagerFullUI;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -10,7 +13,6 @@ import java.util.List;
 
 import src.FinanceManager;
 import src.Transaction;
-import src.UI.FinanceManagerFullUI;
 
 public class RecycleBinDialog extends JDialog {
 

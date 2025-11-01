@@ -172,6 +172,8 @@ public class AuthManager {
 	}
 
 	private void updateLastLogin(int accountId) {
+		// Try-catch approach - if column doesn't exist, the update will fail gracefully
+		
 		String sql = "UPDATE accounts SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?";
 		try (PreparedStatement stmt = connection.prepareStatement(sql)) {
 			stmt.setInt(1, accountId);

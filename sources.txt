@@ -4,6 +4,7 @@ d:\Finance-Manager--Adx\src\Deposit.java
 d:\Finance-Manager--Adx\src\FinanceManager.java
 d:\Finance-Manager--Adx\src\GoldSilverInvestment.java
 d:\Finance-Manager--Adx\src\Investment.java
+d:\Finance-Manager--Adx\src\Lending.java
 d:\Finance-Manager--Adx\src\Loan.java
 d:\Finance-Manager--Adx\src\Main.java
 d:\Finance-Manager--Adx\src\MutualFund.java
@@ -24,6 +25,7 @@ d:\Finance-Manager--Adx\src\org\apache\commons\io\output\UnsynchronizedByteArray
 d:\Finance-Manager--Adx\src\UI\AddEditCardDialog.java
 d:\Finance-Manager--Adx\src\UI\AddEditDepositDialog.java
 d:\Finance-Manager--Adx\src\UI\AddEditInvestmentDialog.java
+d:\Finance-Manager--Adx\src\UI\AddEditLendingDialog.java
 d:\Finance-Manager--Adx\src\UI\AutoCompleteTextField.java
 d:\Finance-Manager--Adx\src\UI\LogoPanel.java
 d:\Finance-Manager--Adx\src\UI\ModernIcons.java
@@ -38,6 +40,7 @@ d:\Finance-Manager--Adx\src\UI\ForgotPasswordDialog.java
 d:\Finance-Manager--Adx\src\UI\FinanceManagerFullUI.java
 d:\Finance-Manager--Adx\src\UI\GullakDialog.java
 d:\Finance-Manager--Adx\src\UI\InvestmentRecycleBinDialog.java
+d:\Finance-Manager--Adx\src\UI\LendingRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\LoginDialog.java
 d:\Finance-Manager--Adx\src\UI\LoanRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\RecycleBinDialog.java

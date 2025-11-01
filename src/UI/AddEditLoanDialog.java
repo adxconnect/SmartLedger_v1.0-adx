@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
 import javax.swing.text.NumberFormatter;
 
+import src.UI.FinanceManagerFullUI;
 import src.FinanceManager;
 import src.Loan;
 

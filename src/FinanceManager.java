@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import src.Lending;
 
 //Same-package types don't require imports.
 
@@ -37,6 +38,8 @@ public class FinanceManager {
         "recycle_bin_investments",
         "loans",
         "recycle_bin_loans",
+        "lendings",
+        "recycle_bin_lendings",
         "tax_profiles"
     );
     
@@ -1458,30 +1461,7 @@ public class FinanceManager {
          try (Statement stmt = connection.createStatement()) {
              System.out.println("Checking/Creating database tables...");
              
-             stmt.execute("CREATE TABLE IF NOT EXISTS accounts (" +
-                 "id INT AUTO_INCREMENT PRIMARY KEY," +
-                 "account_name VARCHAR(100)," +
-                 "account_type VARCHAR(20)," +
-                 "email VARCHAR(255) NOT NULL UNIQUE," +
-                 "phone VARCHAR(20)," +
-                 "password_hash VARCHAR(512) NOT NULL," +
-                 "password_salt VARCHAR(256) NOT NULL," +
-                 "security_question VARCHAR(255)," +
-                 "security_answer VARCHAR(255)," +
-                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
-                 "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
-                 "last_login_at TIMESTAMP NULL" +
-             ")");
-
-             stmt.execute("CREATE TABLE IF NOT EXISTS login_audit (" +
-                 "id INT AUTO_INCREMENT PRIMARY KEY," +
-                 "account_id INT NOT NULL," +
-                 "event_type VARCHAR(50)," +
-                 "ip_address VARCHAR(64)," +
-                 "user_agent VARCHAR(255)," +
-                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
-                 "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE" +
-             ")");
+             // Note: accounts and login_audit tables are created by AuthManager
 
              // Inside private void createTables()
             stmt.execute("CREATE TABLE IF NOT EXISTS tax_profiles (" +
@@ -1683,6 +1663,40 @@ public class FinanceManager {
                 "deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
                 "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE" +
             ")");
+            stmt.execute("CREATE TABLE IF NOT EXISTS lendings (" +
+            "id INT AUTO_INCREMENT PRIMARY KEY," +
+            "account_id INT NOT NULL," +
+            "borrower_name VARCHAR(100) NOT NULL," +
+            "loan_type VARCHAR(50) NOT NULL," +
+            "principal_amount DECIMAL(15, 2) NOT NULL," +
+            "interest_rate DECIMAL(5, 2) NOT NULL," +
+            "tenure_months INT NOT NULL," +
+            "date_lent DATE," +
+            "interest_to_receive DECIMAL(15, 2) NOT NULL," +
+            "total_to_receive DECIMAL(15, 2) NOT NULL," +
+            "monthly_payment DECIMAL(10, 2) NOT NULL," +
+            "status VARCHAR(20) DEFAULT 'Active'," +
+            "notes TEXT," +
+            "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE" +
+        ")");
+            stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_lendings (" +
+            "id INT NOT NULL," +
+            "account_id INT NOT NULL," +
+            "borrower_name VARCHAR(100) NOT NULL," +
+            "loan_type VARCHAR(50) NOT NULL," +
+            "principal_amount DECIMAL(15, 2) NOT NULL," +
+            "interest_rate DECIMAL(5, 2) NOT NULL," +
+            "tenure_months INT NOT NULL," +
+            "date_lent DATE," +
+            "interest_to_receive DECIMAL(15, 2) NOT NULL," +
+            "total_to_receive DECIMAL(15, 2) NOT NULL," +
+            "monthly_payment DECIMAL(10, 2) NOT NULL," +
+            "status VARCHAR(20) DEFAULT 'Active'," +
+            "notes TEXT," +
+            "deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+            "PRIMARY KEY(id)," +
+            "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE" +
+        ")");
 
              System.out.println("Tables checked/created/updated.");
             ensureAccountScopedSchema();
@@ -1701,6 +1715,8 @@ public class FinanceManager {
         ensureColumnExists("recycle_bin_investments", "account_id INT");
         ensureColumnExists("loans", "account_id INT");
         ensureColumnExists("recycle_bin_loans", "account_id INT");
+        ensureColumnExists("lendings", "account_id INT");
+        ensureColumnExists("recycle_bin_lendings", "account_id INT");
         ensureColumnExists("tax_profiles", "account_id INT");
     }
 
@@ -2578,6 +2594,231 @@ public class FinanceManager {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, loanId);
             ps.setInt(2, accountId);
+            ps.executeUpdate();
+        }
+    }
+    // ==================================================================
+    // ===         NEW LENDING METHODS                              ===
+    // ==================================================================
+
+    /**
+     * Saves a new lending record to the database.
+     */
+    public void saveLending(Lending lending) throws SQLException {
+        String sql = "INSERT INTO lendings (account_id, borrower_name, loan_type, principal_amount, interest_rate, " +
+                     "tenure_months, date_lent, status, notes, " +
+                     "interest_to_receive, total_to_receive, monthly_payment) " + // Corrected column names
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, SessionContext.getCurrentAccountId()); // Add account_id
+            ps.setString(2, lending.getBorrowerName()); // Use getBorrowerName()
+            ps.setString(3, lending.getLoanType());
+            ps.setDouble(4, lending.getPrincipalAmount());
+            ps.setDouble(5, lending.getInterestRate());
+            ps.setInt(6, lending.getTenureMonths());
+
+            // Handle Date
+            if (lending.getDateLent() != null && !lending.getDateLent().isEmpty()) {
+                 try {
+                    LocalDate localDate = LocalDate.parse(lending.getDateLent(), DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                    ps.setDate(7, java.sql.Date.valueOf(localDate));
+                 } catch (Exception e) {
+                     System.err.println("Invalid lending start date format, setting to null: " + lending.getDateLent());
+                     ps.setNull(7, Types.DATE);
+                 }
+            } else {
+                ps.setNull(7, Types.DATE);
+            }
+            
+            ps.setString(8, "Active"); // Default status
+            ps.setString(9, lending.getNotes());
+            
+            // Add the calculated fields
+            ps.setDouble(10, lending.getTotalInterestToReceive()); // Corrected method
+            ps.setDouble(11, lending.getTotalToReceive());      // Corrected method
+            ps.setDouble(12, lending.getMonthlyPayment());     // Corrected method
+            
+            ps.executeUpdate();
+            
+            // Optional: Get generated ID
+            // try (ResultSet generatedKeys = ps.getGeneratedKeys()) {
+            //     if (generatedKeys.next()) {
+            //         // We can set the ID on the object if we add a setId method to Loan.java
+            //         // loan.setId(generatedKeys.getInt(1)); 
+            //     }
+            // }
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR saving lending record (SQL) !!!"); 
+            e.printStackTrace(); throw e; 
+        }
+    }
+    
+    /**
+     * Fetches all lending records from the database.
+     */
+    public List<Lending> getAllLendings() throws SQLException {
+        System.out.println("DEBUG: Entering getAllLendings...");
+        List<Lending> lendings = new ArrayList<>();
+        
+        // Check if account_id column exists, if not, return empty list or use fallback query
+        if (!columnExists("lendings", "account_id")) {
+            System.out.println("DEBUG: account_id column doesn't exist in lendings table yet, returning empty list");
+            return lendings;
+        }
+        
+        String sql = "SELECT * FROM lendings WHERE account_id = ? ORDER BY status, borrower_name";
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, SessionContext.getCurrentAccountId());
+            try (ResultSet rs = ps.executeQuery()) {
+            
+            while (rs.next()) {
+                try {
+                    java.sql.Date sqlDateLent = rs.getDate("date_lent");
+                    String formattedDateLent = (sqlDateLent != null) ? dateFormat.format(sqlDateLent) : null;
+                    
+                    Lending lending = new Lending(
+                        rs.getInt("id"),
+                        rs.getString("borrower_name"),
+                        rs.getString("loan_type"),
+                        rs.getDouble("principal_amount"),
+                        rs.getDouble("interest_rate"),
+                        rs.getInt("tenure_months"),
+                        formattedDateLent,
+                        rs.getString("status"),
+                        rs.getString("notes"),
+                        rs.getDouble("monthly_payment"),
+                        rs.getDouble("interest_to_receive"),
+                        rs.getDouble("total_to_receive")
+                    );
+                    lendings.add(lending);
+                } catch (Exception e) {
+                    System.err.println("!!! ERROR creating Lending object from ResultSet !!!");
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("DEBUG: Fetched " + lendings.size() + " lending records.");
+            }
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR executing SQL in getAllLendings !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+        return lendings;
+    }
+    
+    /**
+     * Updates the status of a lending record (e.g., to "Repaid").
+     */
+    public void updateLendingStatus(int lendingId, String newStatus) throws SQLException {
+        String sql = "UPDATE lendings SET status = ? WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, lendingId);
+            ps.executeUpdate();
+        } catch (SQLException e) { 
+            System.err.println("!!! ERROR updating lending status (SQL) !!!"); 
+            e.printStackTrace(); 
+            throw e; 
+        }
+    }
+
+    /**
+     * Moves a lending record to the recycle bin table.
+     */
+    public void moveLendingToRecycleBin(int lendingId) throws SQLException {
+        String copySql = "INSERT INTO recycle_bin_lendings SELECT *, NOW() FROM lendings WHERE id = ?";
+        String deleteSql = "DELETE FROM lendings WHERE id = ?";
+        
+        connection.setAutoCommit(false);
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, lendingId);
+            deletePs.setInt(1, lendingId);
+            
+            int copied = copyPs.executeUpdate();
+            if (copied == 0) throw new SQLException("Failed to copy lending to recycle bin, ID not found: " + lendingId);
+            
+            deletePs.executeUpdate();
+            connection.commit();
+            
+        } catch (SQLException e) {
+            connection.rollback();
+            System.err.println("!!! ERROR moving lending record to recycle bin !!!"); 
+            e.printStackTrace();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+    
+    /**
+     * Fetches recycled lending records for the UI dialog.
+     */
+    public List<Map<String, Object>> getRecycledLendingsForUI() throws SQLException {
+        List<Map<String, Object>> recycled = new ArrayList<>();
+        String sql = "SELECT id, loan_type, borrower_name, principal_amount, " +
+                     "DATE_FORMAT(deleted_on, '%Y-%m-%d %H:%i:%s') as deleted_on_str " +
+                     "FROM recycle_bin_lendings WHERE account_id = ? ORDER BY deleted_on DESC";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, SessionContext.getCurrentAccountId());
+            try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                 Map<String, Object> data = new HashMap<>();
+                 data.put("id", rs.getInt("id"));
+                 data.put("loan_type", rs.getString("loan_type"));
+                 data.put("borrower_name", rs.getString("borrower_name"));
+                 data.put("principal_amount", rs.getDouble("principal_amount"));
+                 data.put("deleted_on_str", rs.getString("deleted_on_str"));
+                 recycled.add(data);
+            }
+            }
+        } catch (SQLException e) { System.err.println("!!! ERROR getting recycled lendings !!!"); e.printStackTrace(); throw e; }
+        return recycled;
+    }
+
+    /**
+     * Restores a lending record from the recycle bin.
+     */
+    public void restoreLending(int lendingId) throws SQLException {
+        String copySql = "INSERT INTO lendings (id, account_id, borrower_name, loan_type, principal_amount, interest_rate, tenure_months, date_lent, monthly_payment, interest_to_receive, total_to_receive, status, notes) " +
+                       "SELECT id, account_id, borrower_name, loan_type, principal_amount, interest_rate, tenure_months, date_lent, monthly_payment, interest_to_receive, total_to_receive, status, notes " +
+                       "FROM recycle_bin_lendings WHERE id = ?";
+        String deleteSql = "DELETE FROM recycle_bin_lendings WHERE id = ?";
+        
+        connection.setAutoCommit(false);
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, lendingId);
+            deletePs.setInt(1, lendingId);
+            
+            copyPs.executeUpdate();
+            deletePs.executeUpdate();
+            
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            if (e.getErrorCode() == 1062) { // Handle duplicate key
+                 System.out.println("Lending record " + lendingId + " already exists. Removing from recycle bin.");
+                 try (PreparedStatement deletePsOnly = connection.prepareStatement(deleteSql)) {
+                     deletePsOnly.setInt(1, lendingId); deletePsOnly.executeUpdate(); connection.commit();
+                 } catch (SQLException ex) { connection.rollback(); throw ex; }
+            } else { throw e; }
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+
+    /**
+     * Permanently deletes a lending record from the recycle bin.
+     */
+    public void permanentlyDeleteLending(int lendingId) throws SQLException {
+        String sql = "DELETE FROM recycle_bin_lendings WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, lendingId);
             ps.executeUpdate();
         }
     }

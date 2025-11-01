@@ -26,7 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.StringJoiner;
-
+import src.Lending;
+import src.UI.LendingRecycleBinDialog;
 import src.UI.InvestmentRecycleBinDialog;
 import src.Deposit; // Import for Deposit class
 import src.UI.AddEditTaxProfileDialog;
@@ -70,6 +71,7 @@ import com.itextpdf.text.Phrase;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
+
 import com.itextpdf.text.FontFactory;
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Element;
@@ -86,7 +88,7 @@ public class FinanceManagerFullUI extends JFrame {
     private JLabel incomeValueLabel; // Label to show total income
     private JLabel expenseValueLabel; // Label to show total expense
     private JLabel balanceValueLabel; // Label to show net balance
-
+    
     // --- Bank Account Tab Variables ---
     private JList<BankAccount> bankAccountList;
     private DefaultListModel<BankAccount> bankListModel;
@@ -110,10 +112,11 @@ public class FinanceManagerFullUI extends JFrame {
     private JList<TaxProfile> taxProfileList;
     private DefaultListModel<TaxProfile> taxProfileListModel;
     private JPanel taxDetailPanel;
+    
     // --- Loan Tab Variables ---
-private JList<Loan> loanList;
-private DefaultListModel<Loan> loanListModel;
-private JPanel loanDetailPanel;
+    private JList<Loan> loanList;
+    private DefaultListModel<Loan> loanListModel;
+    private JPanel loanDetailPanel;
 
     // --- Summary Tab Variables ---
     private AutoCompleteTextField summaryCompanyField;
@@ -128,6 +131,10 @@ private JPanel loanDetailPanel;
     private boolean summaryTabInitialized = false;
     private static final DateTimeFormatter SUMMARY_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
 
+    // --- Lending Tab Variables ---
+    private JList<Lending> lendingList;
+    private DefaultListModel<Lending> lendingListModel;
+    private JPanel lendingDetailPanel;
 
     public FinanceManagerFullUI() {
         setTitle("Finance Manager - MySQL Edition");
@@ -655,6 +662,58 @@ loanRecycleBinBtn.addActionListener(e -> openLoanRecycleBin()); // New method
 
 // Load initial data
 refreshLoans(); // New method
+
+// =========================================================
+// ===         NEW LENDING PANEL (MASTER-DETAIL)         ===
+// =========================================================
+JPanel lePanel = new JPanel(new BorderLayout()); // 'le' for Lending
+
+// --- Split Pane ---
+JSplitPane lendingSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+lendingSplitPane.setDividerLocation(220);
+
+// --- Left Side: List of Lendings ---
+lendingListModel = new DefaultListModel<>();
+lendingList = new JList<>(lendingListModel);
+lendingList.setFont(new Font("Arial", Font.PLAIN, 14));
+lendingList.setBorder(new EmptyBorder(5, 5, 5, 5));
+lendingSplitPane.setLeftComponent(new JScrollPane(lendingList));
+
+// --- Right Side: Detail Panel ---
+lendingDetailPanel = new JPanel(new BorderLayout());
+lendingDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+lendingDetailPanel.add(new JLabel("Select a lending record to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+lendingSplitPane.setRightComponent(lendingDetailPanel);
+
+lePanel.add(lendingSplitPane, BorderLayout.CENTER);
+
+// --- Bottom Button Panel ---
+JPanel lendingButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+JButton addLendingBtn = new JButton("Add New Lending");
+JButton deleteLendingBtn = new JButton("Delete Selected Lending");
+JButton lendingRecycleBinBtn = new JButton("Lending Recycle Bin");
+
+lendingButtonPanel.add(addLendingBtn);
+lendingButtonPanel.add(deleteLendingBtn);
+lendingButtonPanel.add(lendingRecycleBinBtn);
+lePanel.add(lendingButtonPanel, BorderLayout.SOUTH);
+
+tabs.addTab("Lending", lePanel); // Add the new "Lending" tab
+
+// --- Action Listeners ---
+lendingList.addListSelectionListener(e -> {
+    if (!e.getValueIsAdjusting()) {
+        Lending selected = lendingList.getSelectedValue();
+        showLendingDetails(selected); // New method we will add
+    }
+});
+
+addLendingBtn.addActionListener(e -> openAddEditLendingDialog(null)); // New method
+deleteLendingBtn.addActionListener(e -> deleteSelectedLending()); // New method
+lendingRecycleBinBtn.addActionListener(e -> openLendingRecycleBin()); // New method
+
+// Load initial data
+refreshLendings(); // New method
 // =========================================================
 // ===         NEW CARDS PANEL (MASTER-DETAIL)           ===
 // =========================================================
@@ -3137,6 +3196,172 @@ private void openLoanRecycleBin() {
 public void refreshAfterLoanRestore() {
     System.out.println("Refreshing loans list after restore...");
     refreshLoans();
+}
+// ==================================================================
+// ===               LENDING UI METHODS                         ===
+// ==================================================================
+
+/**
+ * Refreshes the list of lending records on the left side.
+ * Make this PUBLIC so dialogs can call it.
+ */
+public void refreshLendings() {
+    System.out.println("--- Refreshing Lendings ---");
+    lendingListModel.clear();
+    lendingDetailPanel.removeAll();
+    lendingDetailPanel.add(new JLabel("Select a lending record to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    lendingDetailPanel.revalidate();
+    lendingDetailPanel.repaint();
+    try {
+        List<Lending> lendings = manager.getAllLendings();
+        System.out.println("Fetched " + lendings.size() + " lending records.");
+        for (Lending l : lendings) {
+            lendingListModel.addElement(l);
+        }
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "Error loading lending records: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        e.printStackTrace();
+    }
+}
+
+/**
+ * Shows calculated details for the selected lending record.
+ */
+private void showLendingDetails(Lending lending) {
+    lendingDetailPanel.removeAll();
+    if (lending == null) {
+        lendingDetailPanel.add(new JLabel("Select a record to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    } else {
+        JPanel detailGrid = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 5, 4, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
+
+        int row = 0;
+
+        // --- Title ---
+        JLabel title = new JLabel(lending.getBorrowerName() + " (" + lending.getLoanType() + ")");
+        title.setFont(new Font("Arial", Font.BOLD, 18));
+        gbc.gridx = 0; gbc.gridy = row++; gbc.gridwidth = 2;
+        detailGrid.add(title, gbc);
+
+        // --- EMI (What they owe you) ---
+        JLabel emiLabel = new JLabel(String.format("Expected Monthly Payment: ₹%.2f", lending.getMonthlyPayment()));
+        emiLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        emiLabel.setForeground(new Color(0, 100, 0)); // Dark green
+        gbc.gridy = row++;
+        detailGrid.add(emiLabel, gbc);
+
+        gbc.gridy = row++; gbc.insets = new Insets(5, 0, 5, 0);
+        detailGrid.add(new JSeparator(), gbc);
+        gbc.insets = new Insets(4, 5, 4, 5);
+
+        // --- Loan Details ---
+        gbc.gridwidth = 1; // Reset to 1 column
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Principal Lent:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", lending.getPrincipalAmount())), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Annual Interest Rate:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("%.2f %%", lending.getInterestRate())), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Tenure:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(lending.getTenureMonths() + " months"), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Date Lent:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(lending.getDateLent() != null ? lending.getDateLent() : "N/A"), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Status:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(lending.getStatus()), gbc);
+        row++;
+
+        // --- Total Payment Details ---
+        gbc.gridy = row++; gbc.gridwidth = 2; gbc.insets = new Insets(5, 0, 5, 0);
+        detailGrid.add(new JSeparator(), gbc);
+        gbc.insets = new Insets(4, 5, 4, 5);
+        gbc.gridwidth = 1;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Principal:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", lending.getPrincipalAmount())), gbc);
+        row++;
+
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Interest to Receive:"), gbc);
+        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", lending.getTotalInterestToReceive())), gbc);
+        row++;
+
+        JLabel totalPayLabel = new JLabel(String.format("₹%.2f", lending.getTotalToReceive()));
+        totalPayLabel.setFont(new Font("Arial", Font.BOLD, 12));
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total to Receive:"), gbc);
+        gbc.gridx = 1; detailGrid.add(totalPayLabel, gbc);
+        row++;
+
+        // --- Buttons ---
+        JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton editButton = new JButton("Edit / Mark as Repaid");
+        editButton.addActionListener(e -> openAddEditLendingDialog(lending));
+        buttonSubPanel.add(editButton);
+
+        lendingDetailPanel.add(detailGrid, BorderLayout.NORTH);
+        lendingDetailPanel.add(buttonSubPanel, BorderLayout.CENTER);
+    }
+    lendingDetailPanel.revalidate();
+    lendingDetailPanel.repaint();
+}
+
+/**
+ * Opens the dialog to add/edit a lending record (Placeholder).
+ */
+private void openAddEditLendingDialog(Lending lendingToEdit) {
+    AddEditLendingDialog dialog = new AddEditLendingDialog(this, manager, lendingToEdit, this);
+    dialog.setVisible(true);
+    // Refresh is handled by the dialog on success
+}
+
+/**
+ * Deletes the selected lending record (moves to recycle bin).
+ */
+private void deleteSelectedLending() {
+    Lending selected = lendingList.getSelectedValue();
+    if (selected == null) {
+        JOptionPane.showMessageDialog(this, "Please select a record to delete.", "No Selection", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    int choice = JOptionPane.showConfirmDialog(this,
+        "Move this lending record to the recycle bin?\n" + selected.toString(),
+        "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+    if (choice == JOptionPane.YES_OPTION) {
+        try {
+            manager.moveLendingToRecycleBin(selected.getId());
+            refreshLendings(); // Refresh the list
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error deleting lending record: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace();
+        }
+    }
+}
+
+/**
+ * Opens the Lending Recycle Bin dialog (Placeholder).
+ */
+private void openLendingRecycleBin() {
+     LendingRecycleBinDialog dialog = new LendingRecycleBinDialog(this, manager, this);
+     dialog.setVisible(true);
+     // The main list will refresh via the callback 'refreshAfterLendingRestore' if needed
+}
+
+/**
+ * Callback method for the Lending Recycle Bin dialog (Placeholder).
+ * Make sure this is PUBLIC.
+ */
+public void refreshAfterLendingRestore() {
+    System.out.println("Refreshing lending list after restore...");
+    refreshLendings();
 }
 
 } 
