@@ -107,6 +107,18 @@ public class ModernIcons {
             case MONEY:
                 drawMoney(g2, size, pad);
                 break;
+            case MAGIC:
+                drawMagic(g2, size, pad);
+                break;
+            case MENU:
+                drawMenu(g2, size, pad);
+                break;
+            case EYE:
+                drawEye(g2, size, pad);
+                break;
+            case EYE_OFF:
+                drawEyeOff(g2, size, pad);
+                break;
         }
     }
     
@@ -121,14 +133,44 @@ public class ModernIcons {
     }
     
     private static void drawTransactions(Graphics2D g2, int size, int pad) {
-        // List with dollar signs
-        int y = pad + size / 6;
-        int lineHeight = size / 5;
-        for (int i = 0; i < 3; i++) {
-            g2.drawLine(pad, y, size - pad, y);
-            g2.drawLine(pad, y, pad, y + lineHeight / 3);
-            y += lineHeight;
-        }
+        // Receipt/document with currency symbol
+        int docWidth = size - pad * 2;
+        int docHeight = (int)(size * 0.8);
+        int docX = pad;
+        int docY = pad;
+        
+        // Draw receipt outline with wavy top
+        int[] xPoints = new int[8];
+        int[] yPoints = new int[8];
+        xPoints[0] = docX;
+        yPoints[0] = docY + size / 8;
+        xPoints[1] = docX + docWidth / 4;
+        yPoints[1] = docY;
+        xPoints[2] = docX + docWidth / 2;
+        yPoints[2] = docY + size / 8;
+        xPoints[3] = docX + 3 * docWidth / 4;
+        yPoints[3] = docY;
+        xPoints[4] = docX + docWidth;
+        yPoints[4] = docY + size / 8;
+        xPoints[5] = docX + docWidth;
+        yPoints[5] = docY + docHeight;
+        xPoints[6] = docX;
+        yPoints[6] = docY + docHeight;
+        xPoints[7] = docX;
+        yPoints[7] = docY + size / 8;
+        
+        g2.setStroke(new java.awt.BasicStroke(1.5f));
+        g2.drawPolyline(xPoints, yPoints, 8);
+        
+        // Draw currency symbol ($) in the center
+        int centerX = docX + docWidth / 2;
+        int centerY = docY + docHeight / 2;
+        g2.setStroke(new java.awt.BasicStroke(2f));
+        
+        // $ symbol
+        g2.drawLine(centerX, centerY - size / 6, centerX, centerY + size / 6);
+        g2.drawArc(centerX - size / 8, centerY - size / 6, size / 4, size / 4, 0, 180);
+        g2.drawArc(centerX - size / 8, centerY - size / 12, size / 4, size / 4, 180, 180);
     }
     
     private static void drawBank(Graphics2D g2, int size, int pad) {
@@ -333,6 +375,82 @@ public class ModernIcons {
     public enum IconType {
         DASHBOARD, TRANSACTIONS, BANK, CREDIT_CARD, INVESTMENT, LOAN,
         TAX, DEPOSIT, SUMMARY, ADD, DELETE, EDIT, RECYCLE, EXPORT,
-        SEARCH, SETTINGS, LOGOUT, USER, MONEY
+        SEARCH, SETTINGS, LOGOUT, USER, MONEY, MAGIC, MENU, EYE, EYE_OFF
+    }
+
+    private static void drawMenu(Graphics2D g2, int size, int pad) {
+        // Hamburger menu - three horizontal lines
+        g2.setStroke(new BasicStroke(size / 12f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        int lineLength = size - pad * 2;
+        int y1 = pad + size / 5;
+        int y2 = size / 2;
+        int y3 = size - pad - size / 5;
+        
+        g2.drawLine(pad, y1, pad + lineLength, y1);
+        g2.drawLine(pad, y2, pad + lineLength, y2);
+        g2.drawLine(pad, y3, pad + lineLength, y3);
+    }
+    
+    private static void drawMagic(Graphics2D g2, int size, int pad) {
+        // Central sparkle
+        int center = size / 2;
+        int radius = size / 4;
+        for (int i = 0; i < 8; i++) {
+            double angle = Math.PI * i / 4.0;
+            int x1 = center + (int) (radius * Math.cos(angle));
+            int y1 = center + (int) (radius * Math.sin(angle));
+            int x2 = center + (int) ((radius / 2.0) * Math.cos(angle));
+            int y2 = center + (int) ((radius / 2.0) * Math.sin(angle));
+            g2.drawLine(x2, y2, x1, y1);
+        }
+
+        // Small sparkles around to mimic Gemini-like magic
+        int miniRadius = size / 10;
+        int[][] offsets = {
+            {center - radius, center - radius / 2},
+            {center + radius / 2, center - radius},
+            {center + radius - miniRadius, center + radius / 3}
+        };
+        for (int[] offset : offsets) {
+            drawMiniSparkle(g2, offset[0], offset[1], miniRadius);
+        }
+    }
+
+    private static void drawMiniSparkle(Graphics2D g2, int cx, int cy, int radius) {
+        for (int i = 0; i < 4; i++) {
+            double angle = Math.PI * i / 2.0;
+            int x1 = cx + (int) (radius * Math.cos(angle));
+            int y1 = cy + (int) (radius * Math.sin(angle));
+            g2.drawLine(cx, cy, x1, y1);
+        }
+    }
+    
+    private static void drawEye(Graphics2D g2, int size, int pad) {
+        // Eye shape - ellipse for eye outline
+        int center = size / 2;
+        int eyeWidth = size - pad * 2;
+        int eyeHeight = (int) (eyeWidth * 0.6);
+        int eyeX = pad;
+        int eyeY = center - eyeHeight / 2;
+        
+        // Draw eye outline using arc (almond shape)
+        Path2D eye = new Path2D.Float();
+        eye.moveTo(eyeX, center);
+        eye.curveTo(eyeX, eyeY, eyeX + eyeWidth, eyeY, eyeX + eyeWidth, center);
+        eye.curveTo(eyeX + eyeWidth, center + eyeHeight / 2, eyeX, center + eyeHeight / 2, eyeX, center);
+        g2.draw(eye);
+        
+        // Draw pupil (small circle in center)
+        int pupilRadius = size / 6;
+        g2.fillOval(center - pupilRadius / 2, center - pupilRadius / 2, pupilRadius, pupilRadius);
+    }
+    
+    private static void drawEyeOff(Graphics2D g2, int size, int pad) {
+        // Draw eye first
+        drawEye(g2, size, pad);
+        
+        // Draw diagonal line through the eye (slash)
+        g2.setStroke(new BasicStroke(size / 12f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawLine(pad, size - pad, size - pad, pad);
     }
 }

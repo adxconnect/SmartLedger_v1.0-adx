@@ -1,6 +1,7 @@
 package src;
 import src.Investment;
 import src.SummaryData;
+
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -17,7 +18,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import src.Lending;
-
+import java.awt.Font;
+import java.awt.GraphicsEnvironment;
+import java.io.InputStream;
 //Same-package types don't require imports.
 
 public class FinanceManager {
@@ -42,7 +45,15 @@ public class FinanceManager {
         "recycle_bin_lendings",
         "tax_profiles"
     );
-    
+    private static void launch() {
+    // --- ADD THIS LINE ---
+    registerGoogleFonts(); // Load fonts BEFORE creating any UI
+    // --- END OF ADDITION ---
+
+    SessionContext.clear();
+    DBHelper helper = null;
+    // ... rest of your launch method ...
+}
 
     public FinanceManager() throws SQLException { 
         dbHelper = new DBHelper();
@@ -2822,4 +2833,60 @@ public class FinanceManager {
             ps.executeUpdate();
         }
     }
+    private static void registerGoogleFonts() {
+    try {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        int fontsLoaded = 0;
+        
+        // List of Poppins font files to load
+        String[] poppinsFonts = {
+            "Poppins-Regular.ttf",
+            "Poppins-Bold.ttf",
+            "Poppins-SemiBold.ttf",
+            "Poppins-Medium.ttf",
+            "Poppins-Thin.ttf",
+            "Poppins-ExtraBold.ttf",
+            "Poppins-Italic.ttf",
+            "Poppins-SemiBoldItalic.ttf"
+        };
+        
+        for (String fontFile : poppinsFonts) {
+            try {
+                // Try loading from resources in classpath
+                InputStream fontStream = FinanceManager.class.getResourceAsStream("/resources/" + fontFile);
+                
+                // If not found in classpath, try from file system
+                if (fontStream == null) {
+                    try {
+                        java.io.File file = new java.io.File("src/resources/" + fontFile);
+                        if (file.exists()) {
+                            fontStream = new java.io.FileInputStream(file);
+                        }
+                    } catch (Exception ignored) {}
+                }
+                
+                if (fontStream != null) {
+                    Font font = Font.createFont(Font.TRUETYPE_FONT, fontStream);
+                    ge.registerFont(font);
+                    fontStream.close();
+                    fontsLoaded++;
+                } else {
+                    System.err.println("Warning: " + fontFile + " not found in resources");
+                }
+            } catch (Exception e) {
+                System.err.println("Warning: Failed to load " + fontFile + ": " + e.getMessage());
+            }
+        }
+        
+        if (fontsLoaded > 0) {
+            System.out.println("Successfully registered " + fontsLoaded + " Poppins font(s) for SmartLedger.");
+        } else {
+            System.err.println("Warning: No Poppins fonts were loaded. Using system default fonts.");
+        }
+
+    } catch (Exception e) {
+        System.err.println("Failed to load Poppins fonts. Using system default.");
+        e.printStackTrace();
+    }
+}
 }

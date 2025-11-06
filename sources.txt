@@ -34,6 +34,7 @@ d:\Finance-Manager--Adx\src\UI\AddEditLoanDialog.java
 d:\Finance-Manager--Adx\src\UI\AddEditTaxProfileDialog.java
 d:\Finance-Manager--Adx\src\UI\CardRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\DepositRecycleBinDialog.java
+d:\Finance-Manager--Adx\src\UI\EditProfileDialog.java
 d:\Finance-Manager--Adx\src\UI\EnterOtpDialog.java
 d:\Finance-Manager--Adx\src\UI\FinanceManagerApp.java
 d:\Finance-Manager--Adx\src\UI\ForgotPasswordDialog.java
@@ -44,5 +45,8 @@ d:\Finance-Manager--Adx\src\UI\LendingRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\LoginDialog.java
 d:\Finance-Manager--Adx\src\UI\LoanRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\RecycleBinDialog.java
+d:\Finance-Manager--Adx\src\UI\RegisterDialog.java
 d:\Finance-Manager--Adx\src\UI\SensitiveCardDetailsDialog.java
 d:\Finance-Manager--Adx\src\UI\ShowOtpDialog.java
+d:\Finance-Manager--Adx\src\UI\SidebarPanel.java
+d:\Finance-Manager--Adx\src\UI\WatermarkedPanel.java

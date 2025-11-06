@@ -7,10 +7,14 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 // Removed duplicate RecycleBinDialog import
 import src.UI.DepositRecycleBinDialog; // Import for Deposit Recycle Bin
 import src.UI.AddEditInvestmentDialog;
@@ -38,6 +42,7 @@ import src.UI.RecycleBinDialog; // Transaction Recycle Bin Dialog
 import src.UI.ShowOtpDialog;
 import src.UI.EnterOtpDialog;
 import src.UI.SensitiveCardDetailsDialog;
+import src.UI.EditProfileDialog;
 import src.TaxProfile;
 import src.Loan;
 import src.SummaryData;
@@ -76,18 +81,45 @@ import com.itextpdf.text.FontFactory;
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Element;
 
+
+
 public class FinanceManagerFullUI extends JFrame {
     private FinanceManager manager;
+    // --- NEW Main UI Components ---
+    private SidebarPanel sidebarPanel;
+    private JPanel mainContentPanel;
+    private CardLayout cardLayout;
+    // --- Main UI Components ---
+  
+    private LogoPanel headerLogo; // Logo panel for theme switching
+    
+    // Profile widget components for theme updates
+    private JButton userProfileBtn;
+    private JPanel avatarPanel;
+    private JLabel nameLabel;
+    private JLabel typeLabel;
+    private JLabel dropdownIcon;
+    private JPanel leftPanel;
 
     // --- Transaction Tab Variables ---
-    private JTabbedPane monthTabs;
     private JComboBox<String> yearComboBox;
+    private JComboBox<String> monthComboBox; // Month selector dropdown
     private JButton deleteMonthButton;
+    private JButton calendarButton; // Month filter button
+    private JPanel filterPanel; // Filter panel container
+    private JPopupMenu monthMenu; // Month filter popup menu
+    private JPopupMenu columnMenu; // Column filter popup menu
+    private JLabel yearLabel; // "Select Year:" label
+    private JLabel searchLabel; // "Search:" label
     private JTextField txnSearchField; // search text for transactions
     private JComboBox<String> txnSearchColumn; // column selector for transactions
+    private JButton filterButton; // Filter button for column search
+    private JButton exportButton; // Export button for transactions
     private JLabel incomeValueLabel; // Label to show total income
     private JLabel expenseValueLabel; // Label to show total expense
     private JLabel balanceValueLabel; // Label to show net balance
+    private JTable transactionsTable; // Single table for all transactions
+    private JScrollPane transactionsScrollPane; // ScrollPane for transactions table
     
     // --- Bank Account Tab Variables ---
     private JList<BankAccount> bankAccountList;
@@ -137,7 +169,7 @@ public class FinanceManagerFullUI extends JFrame {
     private JPanel lendingDetailPanel;
 
     public FinanceManagerFullUI() {
-        setTitle("Finance Manager - MySQL Edition");
+        setTitle("SmartLedger - Personal Finance Manager");
         setSize(900, 600);
     setDefaultCloseOperation(DO_NOTHING_ON_CLOSE); // Prevent auto-logout on close
     // Apply modern background to the frame
@@ -175,64 +207,191 @@ public class FinanceManagerFullUI extends JFrame {
     mainPanel.setBackground(ModernTheme.BACKGROUND);
     add(mainPanel);
 
-    // Top header with logo, user info and logout
+    // Top header with modern user profile widget
     JPanel topPanel = new JPanel(new BorderLayout());
-    topPanel.setBorder(new EmptyBorder(12, 16, 12, 16));
+    topPanel.setBorder(new EmptyBorder(8, 16, 8, 16));
     topPanel.setBackground(ModernTheme.SURFACE);
-        
-        // Left side - User Info
-    JPanel userInfoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
-    userInfoPanel.setBackground(ModernTheme.SURFACE);
-    // App logo on the very left
-    JPanel logoWrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-    logoWrap.setOpaque(false);
-    logoWrap.add(LogoPanel.createHeaderLogo());
-    userInfoPanel.add(logoWrap);
-    userInfoPanel.add(Box.createHorizontalStrut(12));
-        
+    
         // Get current account details
         src.auth.Account currentAccount = SessionContext.getCurrentAccount();
+        
+        // LEFT SIDE - Modern User Profile Widget (aligned to left)
+        leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        leftPanel.setBackground(ModernTheme.SURFACE);
+        
         if (currentAccount != null) {
-            // Account name with icon
-            JLabel nameLabel = new JLabel(currentAccount.getAccountName());
-            nameLabel.setFont(ModernTheme.FONT_HEADER);
-            nameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
-            userInfoPanel.add(nameLabel);
+            // Create interactive user profile button with custom rounded painting
+            userProfileBtn = new JButton() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                    
+                    // Draw rounded background
+                    g2.setColor(getBackground());
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                    
+                    // Draw border with proper insets to ensure it's fully visible
+                    g2.setColor(ModernTheme.BORDER);
+                    g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 18, 18);
+                    
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
             
-            // Account type badge
+            userProfileBtn.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 6));
+            userProfileBtn.setBackground(ModernTheme.BACKGROUND);
+            userProfileBtn.setContentAreaFilled(false);
+            userProfileBtn.setBorderPainted(false);
+            userProfileBtn.setFocusPainted(false);
+            userProfileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            userProfileBtn.setOpaque(false);
+            
+            // Create circular avatar with custom painting
+            avatarPanel = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    
+                    // Draw circular background
+                    g2.setColor(ModernTheme.PRIMARY);
+                    g2.fillOval(0, 0, getWidth(), getHeight());
+                    
+                    // Draw text
+                    g2.setColor(Color.WHITE);
+                    g2.setFont(new Font(ModernTheme.FONT_HEADER.getFamily(), Font.BOLD, 16));
+                    FontMetrics fm = g2.getFontMetrics();
+                    String initial = currentAccount.getAccountName().substring(0, 1).toUpperCase();
+                    int textWidth = fm.stringWidth(initial);
+                    int textHeight = fm.getAscent();
+                    g2.drawString(initial, (getWidth() - textWidth) / 2, (getHeight() + textHeight) / 2 - 2);
+                    
+                    g2.dispose();
+                }
+            };
+            avatarPanel.setPreferredSize(new Dimension(36, 36));
+            avatarPanel.setOpaque(false);
+            
+            userProfileBtn.add(avatarPanel);
+            
+            // User info panel (name + type badge)
+            JPanel userInfoPanel = new JPanel();
+            userInfoPanel.setLayout(new BoxLayout(userInfoPanel, BoxLayout.Y_AXIS));
+            userInfoPanel.setOpaque(false);
+            
+            // Name label with smaller font
+            nameLabel = new JLabel(currentAccount.getAccountName());
+            nameLabel.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 13));
+            nameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            
+            // Account type badge with smaller font and rounded corners
             String accountTypeText = currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
                 ? "Business" : "Personal";
-            JLabel typeLabel = new JLabel(accountTypeText);
-            typeLabel.setFont(ModernTheme.FONT_SMALL);
+            typeLabel = new JLabel(accountTypeText) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(getBackground());
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            typeLabel.setFont(new Font(ModernTheme.FONT_SMALL.getFamily(), Font.PLAIN, 10));
             typeLabel.setForeground(Color.WHITE);
             typeLabel.setBackground(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
                 ? ModernTheme.PRIMARY : ModernTheme.SUCCESS);
-            typeLabel.setOpaque(true);
+            typeLabel.setOpaque(false);
             typeLabel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+            typeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            
+            userInfoPanel.add(nameLabel);
+            userInfoPanel.add(Box.createVerticalStrut(2));
             userInfoPanel.add(typeLabel);
             
-            // Email if available
+            userProfileBtn.add(userInfoPanel);
+            
+            // Dropdown arrow icon (smaller)
+            dropdownIcon = new JLabel("▼");
+            dropdownIcon.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 8));
+            dropdownIcon.setForeground(ModernTheme.TEXT_SECONDARY);
+            userProfileBtn.add(dropdownIcon);
+            
+            // Add interactive popup menu with rounded style
+            JPopupMenu userMenu = new JPopupMenu() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(getBackground());
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            userMenu.setBackground(ModernTheme.SURFACE);
+            userMenu.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+                BorderFactory.createEmptyBorder(5, 5, 5, 5)
+            ));
+            
+            // Profile info in popup (smaller fonts)
+            JMenuItem profileHeader = new JMenuItem("Profile Information");
+            profileHeader.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 12));
+            profileHeader.setEnabled(false);
+            profileHeader.setBackground(ModernTheme.SURFACE);
+            userMenu.add(profileHeader);
+            userMenu.addSeparator();
+            
+            // Email info with smaller font
             if (currentAccount.getEmail() != null && !currentAccount.getEmail().trim().isEmpty()) {
-                JLabel emailLabel = new JLabel(currentAccount.getEmail());
-                emailLabel.setFont(ModernTheme.FONT_SMALL);
-                emailLabel.setForeground(ModernTheme.TEXT_SECONDARY);
-                userInfoPanel.add(emailLabel);
+                JMenuItem emailItem = new JMenuItem("📧 " + currentAccount.getEmail());
+                emailItem.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 11));
+                emailItem.setEnabled(false);
+                emailItem.setBackground(ModernTheme.SURFACE);
+                userMenu.add(emailItem);
             }
             
-            // Phone if available
+            // Phone info with smaller font
             if (currentAccount.getPhone() != null && !currentAccount.getPhone().trim().isEmpty()) {
-                JLabel phoneLabel = new JLabel(currentAccount.getPhone());
-                phoneLabel.setFont(ModernTheme.FONT_SMALL);
-                phoneLabel.setForeground(ModernTheme.TEXT_SECONDARY);
-                userInfoPanel.add(phoneLabel);
+                JMenuItem phoneItem = new JMenuItem("📱 " + currentAccount.getPhone());
+                phoneItem.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 11));
+                phoneItem.setEnabled(false);
+                phoneItem.setBackground(ModernTheme.SURFACE);
+                userMenu.add(phoneItem);
             }
+            
+            userMenu.addSeparator();
+            
+            // Edit Profile option with smaller font
+            JMenuItem editProfileItem = new JMenuItem("✏️ Edit Profile");
+            editProfileItem.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 11));
+            editProfileItem.setBackground(ModernTheme.SURFACE);
+            editProfileItem.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            editProfileItem.addActionListener(e -> {
+                openEditProfileDialog();
+            });
+            userMenu.add(editProfileItem);
+            
+            // Show popup on click
+            userProfileBtn.addActionListener(e -> {
+                userMenu.show(userProfileBtn, 0, userProfileBtn.getHeight() + 5);
+            });
+            
+            leftPanel.add(userProfileBtn);
         }
         
-        topPanel.add(userInfoPanel, BorderLayout.CENTER);
+        topPanel.add(leftPanel, BorderLayout.WEST);
         
-        // Right side - Dark Mode & Logout buttons
-        JPanel logoutPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
-        logoutPanel.setBackground(ModernTheme.SURFACE);
+        // RIGHT SIDE - Dark Mode & Logout buttons
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        rightPanel.setBackground(ModernTheme.SURFACE);
         
         // Dark mode toggle button
         JButton darkModeBtn = ModernTheme.createDarkModeToggleButton();
@@ -240,7 +399,7 @@ public class FinanceManagerFullUI extends JFrame {
             ModernTheme.toggleDarkMode();
             refreshUITheme();
         });
-        logoutPanel.add(darkModeBtn);
+        rightPanel.add(darkModeBtn);
         
         // Logout button
         JButton logoutBtn = ModernTheme.createDangerButton("Logout");
@@ -258,43 +417,155 @@ public class FinanceManagerFullUI extends JFrame {
             }
         });
         
-        logoutPanel.add(logoutBtn);
-        topPanel.add(logoutPanel, BorderLayout.EAST);
-        mainPanel.add(topPanel, BorderLayout.NORTH);
+        rightPanel.add(logoutBtn);
+        topPanel.add(rightPanel, BorderLayout.EAST);
+        
+        // Create a wrapper panel for header + separator line
+        JPanel headerWrapper = new JPanel(new BorderLayout());
+        headerWrapper.setBackground(ModernTheme.SURFACE);
+        headerWrapper.add(topPanel, BorderLayout.CENTER);
+        
+        // Add horizontal separator line below the header
+        JSeparator separator = new JSeparator(SwingConstants.HORIZONTAL);
+        separator.setForeground(ModernTheme.BORDER);
+        separator.setBackground(ModernTheme.BORDER);
+        headerWrapper.add(separator, BorderLayout.SOUTH);
+        
+        mainPanel.add(headerWrapper, BorderLayout.NORTH);
 
-        // JTabbedPane setup
-    JTabbedPane tabs = new JTabbedPane();
-    styleTabbedPane(tabs);
-        mainPanel.add(tabs, BorderLayout.CENTER);
+        // --- NEW Sidebar Setup ---
+        sidebarPanel = new SidebarPanel();
+        mainPanel.add(sidebarPanel, BorderLayout.WEST);
+
+        // --- NEW CardLayout Setup ---
+        cardLayout = new CardLayout();
+        mainContentPanel = new JPanel(cardLayout);
+        mainContentPanel.setBackground(ModernTheme.BACKGROUND); // Match frame background
+        mainPanel.add(mainContentPanel, BorderLayout.CENTER);
 
         // =========================================================
         // ===         TRANSACTIONS PANEL                      ===
         // =========================================================
-        JPanel tPanel = new JPanel(new BorderLayout(5, 5));
+        JPanel tPanel = new JPanel(new BorderLayout(0, 0)); // Removed spacing to minimize gap
         tPanel.setBackground(ModernTheme.BACKGROUND);
-        tPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
-    JPanel tTopPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        tPanel.setBorder(new EmptyBorder(0, 4, 4, 4)); // Minimal padding on all sides
+    JPanel tTopPanel = new JPanel();
+        tTopPanel.setLayout(new BoxLayout(tTopPanel, BoxLayout.X_AXIS));
+        tTopPanel.setBorder(new EmptyBorder(8, 10, 8, 10)); // Padding for spacing
         tTopPanel.setBackground(ModernTheme.SURFACE);
+        
+        // Style the year label
+        yearLabel = new JLabel("Select Year:");
+        yearLabel.setFont(ModernTheme.FONT_BODY);
+        yearLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        tTopPanel.add(yearLabel);
+        tTopPanel.add(Box.createHorizontalStrut(10));
+        
+        // Create and style year combo box with fixed width
         yearComboBox = new JComboBox<>();
+        yearComboBox.setPreferredSize(new Dimension(150, 42));
+        yearComboBox.setMaximumSize(new Dimension(150, 42));
         ModernTheme.styleComboBox(yearComboBox);
-        tTopPanel.add(new JLabel("Select Year:"));
         tTopPanel.add(yearComboBox);
+        
+        // Add calendar icon button for month filter
+        tTopPanel.add(Box.createHorizontalStrut(15));
+        
+        // Initialize monthComboBox with default value (not displayed, just for internal use)
+        monthComboBox = new JComboBox<>(new String[] {
+            "All Months", "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        });
+        monthComboBox.setSelectedItem("All Months");
+        
         JButton deleteYearButton = ModernTheme.createDangerButton("Delete All of Selected Year");
         tTopPanel.add(deleteYearButton);
+        tTopPanel.add(Box.createHorizontalStrut(10));
         deleteMonthButton = ModernTheme.createDangerButton("Delete Selected Month");
         deleteMonthButton.setEnabled(false);
         tTopPanel.add(deleteMonthButton);
-    // --- Search controls for Transactions ---
-    tTopPanel.add(Box.createHorizontalStrut(10));
-    tTopPanel.add(new JLabel("Search:"));
-    txnSearchField = new JTextField(18);
+    // --- Search controls for Transactions (right-aligned) ---
+    tTopPanel.add(Box.createHorizontalGlue()); // Push search to the right
+    searchLabel = new JLabel("Search:");
+    searchLabel.setFont(ModernTheme.FONT_BODY);
+    searchLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+    tTopPanel.add(searchLabel);
+    tTopPanel.add(Box.createHorizontalStrut(8));
+    txnSearchField = new JTextField(20);
+    txnSearchField.setMaximumSize(new Dimension(250, 42));
     ModernTheme.styleTextField(txnSearchField);
     tTopPanel.add(txnSearchField);
+    
+    // Modern filter button instead of dropdown
     String[] txnCols = new String[]{"All Columns","S.No.","Date","Timestamp","Day","Payment Method","Category","Type","Payee","Description","Amount"};
     txnSearchColumn = new JComboBox<>(txnCols);
-    ModernTheme.styleComboBox(txnSearchColumn);
     txnSearchColumn.setSelectedIndex(0);
-    tTopPanel.add(txnSearchColumn);
+    txnSearchColumn.setVisible(false); // Hide the combo box, we'll use popup instead
+    
+    filterButton = new JButton();
+    filterButton.setIcon(ModernIcons.create(IconType.SEARCH, ModernTheme.TEXT_PRIMARY, 16));
+    filterButton.setToolTipText("Filter by column");
+    filterButton.setFont(ModernTheme.FONT_SMALL);
+    filterButton.setFocusPainted(false);
+    filterButton.setBorderPainted(false);
+    filterButton.setContentAreaFilled(true);
+    filterButton.setOpaque(true);
+    filterButton.setBackground(ModernTheme.SURFACE);
+    filterButton.setForeground(ModernTheme.TEXT_PRIMARY);
+    filterButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    filterButton.setBorder(BorderFactory.createCompoundBorder(
+        new ModernTheme.RoundedBorder(8, ModernTheme.BORDER),
+        BorderFactory.createEmptyBorder(6, 10, 6, 10)
+    ));
+    filterButton.setPreferredSize(new Dimension(40, 32));
+    
+    // Create popup menu for column selection
+    columnMenu = new JPopupMenu();
+    columnMenu.setBackground(ModernTheme.SURFACE);
+    columnMenu.setBorder(null);
+    
+    for (String col : txnCols) {
+        JMenuItem colItem = new JMenuItem(col);
+        colItem.setFont(ModernTheme.FONT_BODY);
+        colItem.setBackground(ModernTheme.SURFACE);
+        colItem.setForeground(ModernTheme.TEXT_PRIMARY);
+        colItem.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        
+        // Hover effect
+        colItem.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                colItem.setBackground(ModernTheme.PRIMARY_LIGHT);
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                colItem.setBackground(ModernTheme.SURFACE);
+            }
+        });
+        
+        colItem.addActionListener(e -> {
+            txnSearchColumn.setSelectedItem(col);
+            applyTransactionSearchFilter(txnSearchField.getText(), col);
+        });
+        
+        columnMenu.add(colItem);
+    }
+    
+    filterButton.addActionListener(e -> {
+        columnMenu.show(filterButton, 0, filterButton.getHeight());
+    });
+    
+    // Hover effect for filter button
+    filterButton.addMouseListener(new java.awt.event.MouseAdapter() {
+        public void mouseEntered(java.awt.event.MouseEvent evt) {
+            filterButton.setBackground(ModernTheme.PRIMARY_LIGHT);
+        }
+        public void mouseExited(java.awt.event.MouseEvent evt) {
+            filterButton.setBackground(ModernTheme.SURFACE);
+        }
+    });
+    
+    tTopPanel.add(filterButton);
+    
+    // Remove calendar button from here - will add it above the table instead
         
         // Create a container for top panel and summary cards
     JPanel topContainer = new JPanel(new BorderLayout());
@@ -324,8 +595,208 @@ public class FinanceManagerFullUI extends JFrame {
         topContainer.add(summaryCardsPanel, BorderLayout.CENTER);
         tPanel.add(topContainer, BorderLayout.NORTH);
         
-        monthTabs = new JTabbedPane();
-        tPanel.add(monthTabs, BorderLayout.CENTER);
+        // Create container for filter panel and table
+        JPanel tableContainer = new JPanel(new BorderLayout(0, 0));
+        tableContainer.setBackground(ModernTheme.SURFACE);
+        
+        // Create filter panel with calendar button above the table
+        filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        filterPanel.setBackground(ModernTheme.SURFACE);
+        filterPanel.setBorder(new EmptyBorder(8, 15, 8, 15)); // Just padding, no visible border
+        
+        // Create a container for the month filter button
+        JPanel monthFilterContainer = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        monthFilterContainer.setBackground(ModernTheme.SURFACE);
+        
+        // Create modern calendar icon button
+        calendarButton = new JButton("📅 All Months");
+        calendarButton.setFont(ModernTheme.FONT_BODY);
+        calendarButton.setPreferredSize(new Dimension(160, 38));
+        calendarButton.setFocusPainted(false);
+        calendarButton.setOpaque(true);
+        calendarButton.setBackground(ModernTheme.SURFACE);
+        calendarButton.setForeground(ModernTheme.TEXT_PRIMARY);
+        calendarButton.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(10, ModernTheme.BORDER),
+            BorderFactory.createEmptyBorder(8, 16, 8, 16)
+        ));
+        calendarButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        calendarButton.setToolTipText("Click to filter by month");
+        calendarButton.setHorizontalAlignment(SwingConstants.CENTER);
+        calendarButton.setIconTextGap(8);
+        
+        // Add hover effect with subtle background change
+        calendarButton.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                calendarButton.setBackground(ModernTheme.PRIMARY_LIGHT);
+                calendarButton.setBorder(BorderFactory.createCompoundBorder(
+                    new ModernTheme.RoundedBorder(10, ModernTheme.PRIMARY),
+                    BorderFactory.createEmptyBorder(8, 16, 8, 16)
+                ));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                calendarButton.setBackground(ModernTheme.SURFACE);
+                calendarButton.setBorder(BorderFactory.createCompoundBorder(
+                    new ModernTheme.RoundedBorder(10, ModernTheme.BORDER),
+                    BorderFactory.createEmptyBorder(8, 16, 8, 16)
+                ));
+            }
+        });
+        
+        // Create popup menu for months
+        monthMenu = new JPopupMenu();
+        monthMenu.setBackground(ModernTheme.SURFACE);
+        monthMenu.setBorder(new ModernTheme.RoundedBorder(12, ModernTheme.BORDER));
+        
+        String[] months = {"All Months", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", 
+                          "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+        String[] fullMonths = {"All Months", "January", "February", "March", "April", "May", "June",
+                              "July", "August", "September", "October", "November", "December"};
+        
+        for (int i = 0; i < months.length; i++) {
+            final int index = i;
+            JMenuItem monthItem = new JMenuItem(months[i]);
+            monthItem.setFont(ModernTheme.FONT_BODY);
+            monthItem.setBackground(ModernTheme.SURFACE);
+            monthItem.setForeground(ModernTheme.TEXT_PRIMARY);
+            monthItem.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+            
+            // Hover effect
+            monthItem.addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mouseEntered(java.awt.event.MouseEvent evt) {
+                    monthItem.setBackground(ModernTheme.PRIMARY_LIGHT);
+                }
+                public void mouseExited(java.awt.event.MouseEvent evt) {
+                    monthItem.setBackground(ModernTheme.SURFACE);
+                }
+            });
+            
+            monthItem.addActionListener(e -> {
+                monthComboBox.setSelectedItem(fullMonths[index]);
+                if (months[index].equals("All Months")) {
+                    calendarButton.setText("📅 All Months");
+                } else {
+                    calendarButton.setText("📅 " + fullMonths[index]);
+                }
+                calendarButton.setFont(ModernTheme.FONT_BODY);
+                calendarButton.setForeground(ModernTheme.TEXT_PRIMARY);
+                refreshTransactions();
+            });
+            
+            monthMenu.add(monthItem);
+        }
+        
+        calendarButton.addActionListener(e -> {
+            monthMenu.show(calendarButton, 0, calendarButton.getHeight());
+        });
+        
+        monthFilterContainer.add(calendarButton);
+        filterPanel.add(monthFilterContainer);
+        
+        tableContainer.add(filterPanel, BorderLayout.NORTH);
+        
+        // Create single transaction table
+        String[] transactionColumns = {"S.No", "Date", "Timestamp", "Day", "Payment Method", 
+                                       "Category", "Type", "Payee", "Description", "Amount"};
+        DefaultTableModel transactionModel = new DefaultTableModel(transactionColumns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        transactionsTable = new JTable(transactionModel);
+        transactionsTable.setRowHeight(48);
+        transactionsTable.setShowGrid(false);
+        transactionsTable.setIntercellSpacing(new Dimension(0, 0));
+        transactionsTable.setBackground(ModernTheme.TABLE_BG);
+        transactionsTable.setForeground(ModernTheme.TABLE_TEXT);
+        transactionsTable.setSelectionBackground(ModernTheme.TABLE_SELECTION);
+        transactionsTable.setSelectionForeground(ModernTheme.TABLE_TEXT);
+        transactionsTable.setFont(ModernTheme.FONT_BODY);
+        
+        // Style table header
+        transactionsTable.getTableHeader().setBackground(ModernTheme.TABLE_HEADER);
+        transactionsTable.getTableHeader().setForeground(ModernTheme.TABLE_TEXT);
+        transactionsTable.getTableHeader().setFont(ModernTheme.FONT_HEADER.deriveFont(13f));
+        transactionsTable.getTableHeader().setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        transactionsTable.getTableHeader().setPreferredSize(new Dimension(0, 45));
+        
+        // Apply custom renderer for income/expense color coding with theme support
+        transactionsTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                
+                // Get the Type column value (index 6)
+                String type = (String) table.getValueAt(row, 6);
+                
+                setFont(ModernTheme.FONT_BODY);
+                setBorder(BorderFactory.createEmptyBorder(12, 15, 12, 15));
+                
+                // Alternating row colors - theme aware
+                if (isSelected) {
+                    setBackground(ModernTheme.TABLE_SELECTION);
+                    setForeground(ModernTheme.TABLE_TEXT);
+                } else {
+                    if (row % 2 == 0) {
+                        setBackground(ModernTheme.TABLE_ROW_EVEN);
+                    } else {
+                        setBackground(ModernTheme.TABLE_ROW_ODD);
+                    }
+                    setForeground(ModernTheme.TABLE_TEXT);
+                }
+                
+                // Color code based on type
+                if (column == 6) { // Type column
+                    if ("Income".equals(type)) {
+                        setForeground(new Color(34, 197, 94)); // Bright Green
+                        setText("↑ INCOME");
+                        setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 13f));
+                    } else if ("Expense".equals(type)) {
+                        setForeground(new Color(239, 68, 68)); // Bright Red
+                        setText("↓ EXPENSE");
+                        setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 13f));
+                    }
+                } else if (column == 9) { // Amount column
+                    if ("Income".equals(type)) {
+                        setForeground(new Color(74, 222, 128)); // Lighter green for amounts
+                        setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 14f));
+                    } else if ("Expense".equals(type)) {
+                        setForeground(new Color(248, 113, 113)); // Lighter red for amounts
+                        setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 14f));
+                    }
+                    setHorizontalAlignment(SwingConstants.RIGHT);
+                } else {
+                    setHorizontalAlignment(SwingConstants.LEFT);
+                }
+                
+                return c;
+            }
+        });
+        
+        // Create rounded border scroll pane with theme support
+        transactionsScrollPane = new JScrollPane(transactionsTable) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(ModernTheme.TABLE_BG);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        transactionsScrollPane.setBorder(null);
+        transactionsScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        transactionsScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        transactionsScrollPane.setBackground(ModernTheme.TABLE_BG);
+        transactionsScrollPane.getViewport().setBackground(ModernTheme.TABLE_BG);
+        transactionsScrollPane.setOpaque(false);
+        styleModernScrollBar(transactionsScrollPane);
+        tableContainer.add(transactionsScrollPane, BorderLayout.CENTER);
+        
+        tPanel.add(tableContainer, BorderLayout.CENTER);
     JPanel tBottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
     tBottomPanel.setBackground(ModernTheme.SURFACE);
     JButton addTxnBtn = ModernTheme.createPrimaryButton("Add Transaction");
@@ -338,37 +809,56 @@ public class FinanceManagerFullUI extends JFrame {
     JButton recycleBinBtn = ModernTheme.createSecondaryButton("Recycle Bin");
     recycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
     recycleBinBtn.setIconTextGap(8);
-    JButton exportButton = ModernTheme.createSecondaryButton("Export to File...");
-    exportButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 16));
-    exportButton.setIconTextGap(8);
-        tTopPanel.add(exportButton);
+    
+    // Create modern rounded export button
+    exportButton = new JButton("Export");
+    exportButton.setFont(ModernTheme.FONT_BODY);
+    exportButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 14));
+    exportButton.setIconTextGap(6);
+    exportButton.setFocusPainted(false);
+    exportButton.setBorderPainted(false);
+    exportButton.setContentAreaFilled(true);
+    exportButton.setOpaque(true);
+    exportButton.setBackground(ModernTheme.SURFACE);
+    exportButton.setForeground(ModernTheme.TEXT_PRIMARY);
+    exportButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    exportButton.setBorder(BorderFactory.createCompoundBorder(
+        new ModernTheme.RoundedBorder(8, ModernTheme.BORDER),
+        BorderFactory.createEmptyBorder(6, 12, 6, 12)
+    ));
+    
+    // Add hover effect
+    exportButton.addMouseListener(new java.awt.event.MouseAdapter() {
+        public void mouseEntered(java.awt.event.MouseEvent evt) {
+            exportButton.setBackground(ModernTheme.PRIMARY_LIGHT);
+        }
+        public void mouseExited(java.awt.event.MouseEvent evt) {
+            exportButton.setBackground(ModernTheme.SURFACE);
+        }
+    });
+    
         tBottomPanel.add(addTxnBtn);
         tBottomPanel.add(deleteTxnBtn);
         tBottomPanel.add(selectAllTxnBtn);
         tBottomPanel.add(recycleBinBtn);
+        tBottomPanel.add(Box.createHorizontalStrut(20)); // Add spacing
+        tBottomPanel.add(exportButton);
         tPanel.add(tBottomPanel, BorderLayout.SOUTH);
-        tabs.addTab("Transactions", tPanel);
+       mainContentPanel.add(tPanel, "Transactions");
         // Action Listeners
         recycleBinBtn.addActionListener(e -> openRecycleBin()); // Connect button
         yearComboBox.addActionListener(e -> refreshTransactions());
+        // Month filtering is handled by calendar button's popup menu
         addTxnBtn.addActionListener(e -> openTransactionDialog());
         deleteTxnBtn.addActionListener(e -> deleteSelectedTransaction());
         selectAllTxnBtn.addActionListener(e -> {
-            JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
-            if (currentScrollPane == null) return;
-            JTable currentTable = (JTable) currentScrollPane.getViewport().getView();
-            int rowCount = currentTable.getRowCount();
+            int rowCount = transactionsTable.getRowCount();
             if (rowCount > 0) {
-                currentTable.setRowSelectionInterval(0, rowCount - 1);
+                transactionsTable.setRowSelectionInterval(0, rowCount - 1);
             }
         });
         deleteMonthButton.addActionListener(e -> deleteSelectedMonth());
         deleteYearButton.addActionListener(e -> deleteSelectedYear());
-        monthTabs.addChangeListener(e -> {
-            deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0);
-            applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
-            updateSummaryCards(); // Update cards when month tab changes
-        });
         exportButton.addActionListener(e -> openExportDialog());
         // Live search listeners
         txnSearchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
@@ -418,7 +908,7 @@ public class FinanceManagerFullUI extends JFrame {
     bankButtonPanel.add(addBankBtn);
     bankButtonPanel.add(deleteBankBtn);
     bPanel.add(bankButtonPanel, BorderLayout.SOUTH);
-        tabs.addTab("Bank Accounts", bPanel);
+        mainContentPanel.add(bPanel, "Bank Accounts");
         bankAccountList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 BankAccount selected = bankAccountList.getSelectedValue();
@@ -448,7 +938,8 @@ public class FinanceManagerFullUI extends JFrame {
         depositDetailPanel = new JPanel(new BorderLayout());
         depositDetailPanel.setBackground(ModernTheme.SURFACE);
         depositDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
-        depositDetailPanel.add(new JLabel("Select a deposit to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        JLabel initialLabel = ModernTheme.createPlaceholderLabel("Select a deposit to view details.");
+        depositDetailPanel.add(initialLabel, BorderLayout.CENTER);
         depositSplitPane.setRightComponent(depositDetailPanel);
         dPanel.add(depositSplitPane, BorderLayout.CENTER);
         JPanel depositButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -466,7 +957,7 @@ public class FinanceManagerFullUI extends JFrame {
         depositButtonPanel.add(deleteDepositBtn);
         depositButtonPanel.add(depositRecycleBinBtn);
         dPanel.add(depositButtonPanel, BorderLayout.SOUTH);
-        tabs.addTab("Deposits", dPanel);
+        mainContentPanel.add(dPanel, "Deposits");
         // Action Listeners
         depositList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
@@ -501,7 +992,8 @@ public class FinanceManagerFullUI extends JFrame {
         investmentDetailPanel = new JPanel(new BorderLayout());
         investmentDetailPanel.setBackground(ModernTheme.SURFACE);
         investmentDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
-        investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        JLabel investmentInitialLabel = ModernTheme.createPlaceholderLabel("Select an investment to view details.");
+        investmentDetailPanel.add(investmentInitialLabel, BorderLayout.CENTER);
         investmentSplitPane.setRightComponent(investmentDetailPanel);
 
         iPanel.add(investmentSplitPane, BorderLayout.CENTER);
@@ -522,7 +1014,7 @@ public class FinanceManagerFullUI extends JFrame {
         investmentButtonPanel.add(investmentRecycleBinBtn);
         iPanel.add(investmentButtonPanel, BorderLayout.SOUTH);
 
-        tabs.addTab("Investments", iPanel);
+        mainContentPanel.add(iPanel, "Investments");
 
         // Actions
         investmentList.addListSelectionListener(e -> {
@@ -564,8 +1056,9 @@ taxSplitPane.setLeftComponent(taxListScroll);
 // --- Right Side: Detail Panel ---
 taxDetailPanel = new JPanel(new BorderLayout());
 taxDetailPanel.setBackground(ModernTheme.SURFACE);
-taxDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
-taxDetailPanel.add(new JLabel("Select a tax profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+taxDetailPanel.setBorder(new EmptyBorder(8, 8, 8, 8)); // Reduced padding for more space
+taxDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a profile to view details."), BorderLayout.CENTER);
+
 taxSplitPane.setRightComponent(taxDetailPanel);
 
 taxPanel.add(taxSplitPane, BorderLayout.CENTER);
@@ -584,7 +1077,7 @@ taxButtonPanel.add(addTaxProfileBtn);
 taxButtonPanel.add(deleteTaxProfileBtn);
 taxPanel.add(taxButtonPanel, BorderLayout.SOUTH);
 
-tabs.addTab("Taxation", taxPanel); // Add the new tab
+mainContentPanel.add(taxPanel, "Taxation");// Add the new tab
 
 // --- Action Listeners ---
 taxProfileList.addListSelectionListener(e -> {
@@ -625,7 +1118,29 @@ loanSplitPane.setLeftComponent(loanListScroll);
 loanDetailPanel = new JPanel(new BorderLayout());
 loanDetailPanel.setBackground(ModernTheme.SURFACE);
 loanDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
-loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+// --- NEW EMPTY STATE ---
+// 1. Create the WatermarkedPanel
+WatermarkedPanel loanEmptyStatePanel = new WatermarkedPanel();
+loanEmptyStatePanel.setLayout(new GridBagLayout()); // To center content
+
+// 2. Create the labels
+JLabel emptyTitle = ModernTheme.createPlaceholderLabel("Select a loan to view details.");
+JLabel emptyHint = new JLabel("Or click 'Add New Loan' to start.");
+emptyHint.setFont(ModernTheme.FONT_BODY);
+emptyHint.setForeground(ModernTheme.TEXT_SECONDARY);
+
+// 3. Add labels to a sub-panel
+JPanel emptyContent = new JPanel(new BorderLayout(0, 10));
+emptyContent.setOpaque(false); // Make it transparent
+emptyContent.add(emptyTitle, BorderLayout.NORTH);
+emptyContent.add(emptyHint, BorderLayout.CENTER);
+
+// 4. Add the content to the watermarked panel
+loanEmptyStatePanel.add(emptyContent); 
+
+// 5. Add the watermarked panel to the detail panel
+loanDetailPanel.add(loanEmptyStatePanel, BorderLayout.CENTER);
+// --- END NEW EMPTY STATE ---
 loanSplitPane.setRightComponent(loanDetailPanel);
 
 lPanel.add(loanSplitPane, BorderLayout.CENTER);
@@ -648,7 +1163,8 @@ loanButtonPanel.add(deleteLoanBtn);
 loanButtonPanel.add(loanRecycleBinBtn);
 lPanel.add(loanButtonPanel, BorderLayout.SOUTH);
 
-tabs.addTab("Loans / EMI", lPanel); // Add the new tab// --- Action Listeners ---
+mainContentPanel.add(lPanel, "Loans / EMI"); // Add the new tab
+// --- Action Listeners ---
 loanList.addListSelectionListener(e -> {
     if (!e.getValueIsAdjusting()) {
         Loan selected = loanList.getSelectedValue();
@@ -681,8 +1197,10 @@ lendingSplitPane.setLeftComponent(new JScrollPane(lendingList));
 
 // --- Right Side: Detail Panel ---
 lendingDetailPanel = new JPanel(new BorderLayout());
+lendingDetailPanel.setBackground(ModernTheme.SURFACE);
 lendingDetailPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
-lendingDetailPanel.add(new JLabel("Select a lending record to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+JLabel lendingInitialLabel = ModernTheme.createPlaceholderLabel("Select a lending record to view details.");
+lendingDetailPanel.add(lendingInitialLabel, BorderLayout.CENTER);
 lendingSplitPane.setRightComponent(lendingDetailPanel);
 
 lePanel.add(lendingSplitPane, BorderLayout.CENTER);
@@ -698,7 +1216,7 @@ lendingButtonPanel.add(deleteLendingBtn);
 lendingButtonPanel.add(lendingRecycleBinBtn);
 lePanel.add(lendingButtonPanel, BorderLayout.SOUTH);
 
-tabs.addTab("Lending", lePanel); // Add the new "Lending" tab
+mainContentPanel.add(lePanel, "Lending"); // Add the new "Lending" tab
 
 // --- Action Listeners ---
 lendingList.addListSelectionListener(e -> {
@@ -740,7 +1258,7 @@ cardSplitPane.setLeftComponent(cardListScroll);
 cardDetailPanel = new JPanel(new BorderLayout());
 cardDetailPanel.setBackground(ModernTheme.SURFACE);
 cardDetailPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
-cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+cardDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a card to view details."), BorderLayout.CENTER);
 cardSplitPane.setRightComponent(cardDetailPanel);
 
 cPanel.add(cardSplitPane, BorderLayout.CENTER);
@@ -763,7 +1281,7 @@ cardButtonPanel.add(deleteCardBtn);
 cardButtonPanel.add(cardRecycleBinBtn);
 cPanel.add(cardButtonPanel, BorderLayout.SOUTH);
 
-tabs.addTab("Cards", cPanel); // Renamed tab
+mainContentPanel.add(cPanel, "Cards");// Renamed tab
 
 // --- Action Listeners ---
 cardList.addListSelectionListener(e -> {
@@ -783,8 +1301,17 @@ refreshCards(); // Method to be added below
     // =========================================================
     // ===         SUMMARY & REPORTS PANEL                  ===
     // =========================================================
-    initSummaryTab(tabs);
+   initSummaryTab();
+sidebarPanel.addNavigationListener(new ActionListener() {
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        String command = e.getActionCommand();
+        cardLayout.show(mainContentPanel, command);
+    }
+});
 
+// Show the first card by default
+cardLayout.show(mainContentPanel, "Transactions");
 
     
     } // End of Constructor
@@ -807,94 +1334,84 @@ refreshCards(); // Method to be added below
     }
 
     private void refreshTransactions() {
-        monthTabs.removeAll();
         String selectedYear = (String) yearComboBox.getSelectedItem();
-            if (selectedYear == null) {
-                return;
-            }
+        String selectedMonth = (String) monthComboBox.getSelectedItem();
+        if (selectedYear == null) return;
+        
+        // Clear current table
+        DefaultTableModel model = (DefaultTableModel) transactionsTable.getModel();
+        model.setRowCount(0);
         
         try {
             Map<String, List<Transaction>> groupedData = manager.getTransactionsGroupedByMonth(selectedYear);
-                String[] tcols = {"S.No.", "Date", "Timestamp", "Day", "Payment Method", "Category", "Type", "Payee", "Description", "Amount", "ID"};
-            int serialNumber = 1; // Start serial number from 1 for each user
+            int serialNumber = 1;
+            double totalIncome = 0.0;
+            double totalExpense = 0.0;
+            boolean hasTransactions = false;
+            
+            // Filter by selected month
             for (String monthYear : groupedData.keySet()) {
-                    DefaultTableModel monthModel = new DefaultTableModel(tcols, 0) {
-                        @Override
-                        public Class<?> getColumnClass(int column) {
-                            if (column == 0 || column == 10) return Integer.class;
-                            if (column == 9) return Double.class;
-                            return String.class;
-                        }
-                    };
-                List<Transaction> txs = groupedData.get(monthYear);
+                String monthName = getMonthName(monthYear);
                 
-                // Calculate month totals
-                double monthIncome = 0.0;
-                double monthExpense = 0.0;
-                
-                for (Transaction t : txs) {
-                        monthModel.addRow(new Object[]{serialNumber++, t.getDate(), t.getTimestamp(), t.getDay(), t.getPaymentMethod(), t.getCategory(), t.getType(), t.getPayee(), t.getDescription(), t.getAmount(), t.getId()});
-                        
-                        // Calculate totals for this month
-                        if ("Income".equalsIgnoreCase(t.getType())) {
-                            monthIncome += t.getAmount();
-                        } else if ("Expense".equalsIgnoreCase(t.getType())) {
-                            monthExpense += t.getAmount();
-                        }
+                // Skip if not "All Months" and doesn't match selected month
+                // monthName is like "October 2025", selectedMonth is like "October"
+                if (!"All Months".equals(selectedMonth) && !monthName.startsWith(selectedMonth + " ")) {
+                    continue;
                 }
-                JTable monthTable = new JTable(monthModel);
-                // Apply modern table styling
-                ModernTheme.styleTable(monthTable);
                 
-                // Add grid lines between columns for modern look
-                monthTable.setShowGrid(true);
-                monthTable.setGridColor(new Color(220, 220, 220)); // Light gray grid lines
-                monthTable.setIntercellSpacing(new Dimension(1, 1)); // 1px spacing for grid lines
-                
-                // Hide the ID column (last column)
-                monthTable.getColumnModel().getColumn(10).setMinWidth(0);
-                monthTable.getColumnModel().getColumn(10).setMaxWidth(0);
-                monthTable.getColumnModel().getColumn(10).setWidth(0);
-                
-                // Enable sorting and filtering per-month table
-                javax.swing.table.TableRowSorter<DefaultTableModel> sorter = new javax.swing.table.TableRowSorter<>(monthModel);
-                monthTable.setRowSorter(sorter);
-                monthTable.putClientProperty("sorter", sorter);
-                monthTable.putClientProperty("monthYear", monthYear);
-                
-                // Store month totals in the scroll pane's client properties
-                JScrollPane scrollPane = new JScrollPane(monthTable);
-                scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-                scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-                styleModernScrollBar(scrollPane);
-                scrollPane.putClientProperty("monthIncome", monthIncome);
-                scrollPane.putClientProperty("monthExpense", monthExpense);
-                
-                String tabTitle = getMonthName(monthYear);
-                monthTabs.addTab(tabTitle, scrollPane);
+                List<Transaction> txs = groupedData.get(monthYear);
+                for (Transaction t : txs) {
+                    model.addRow(new Object[]{
+                        serialNumber++, 
+                        t.getDate(), 
+                        t.getTimestamp(), 
+                        t.getDay(), 
+                        t.getPaymentMethod(), 
+                        t.getCategory(), 
+                        t.getType(), 
+                        t.getPayee(), 
+                        t.getDescription(), 
+                        t.getAmount()
+                    });
+                    
+                    // Calculate totals
+                    if ("Income".equalsIgnoreCase(t.getType())) {
+                        totalIncome += t.getAmount();
+                    } else if ("Expense".equalsIgnoreCase(t.getType())) {
+                        totalExpense += t.getAmount();
+                    }
+                    hasTransactions = true;
+                }
             }
+            
+            // Update summary cards
+            incomeValueLabel.setText(String.format("₹%.2f", totalIncome));
+            expenseValueLabel.setText(String.format("₹%.2f", totalExpense));
+            balanceValueLabel.setText(String.format("₹%.2f", totalIncome - totalExpense));
+            
+            deleteMonthButton.setEnabled(hasTransactions && !"All Months".equals(selectedMonth));
+            
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading transactions: " + e.getMessage());
         }
         
-        deleteMonthButton.setEnabled(monthTabs.getTabCount() > 0);
-        
-        // Update summary cards for the first month (or selected tab)
-        updateSummaryCards();
         // Re-apply any active search filter after refresh
         if (txnSearchField != null && txnSearchColumn != null) {
             applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
         }
     }
 
-    // Applies a RowFilter to the currently selected month's table based on the text and target column
+    // Applies a RowFilter to the transactions table based on the text and target column
     private void applyTransactionSearchFilter(String query, String columnLabel) {
-        JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
-        if (currentScrollPane == null) return;
-        JTable table = (JTable) currentScrollPane.getViewport().getView();
+        if (transactionsTable == null) return;
+        
         @SuppressWarnings("unchecked")
-        javax.swing.table.TableRowSorter<DefaultTableModel> sorter = (javax.swing.table.TableRowSorter<DefaultTableModel>) table.getClientProperty("sorter");
-        if (sorter == null) return;
+        javax.swing.table.TableRowSorter<DefaultTableModel> sorter = 
+            (javax.swing.table.TableRowSorter<DefaultTableModel>) transactionsTable.getRowSorter();
+        if (sorter == null) {
+            sorter = new javax.swing.table.TableRowSorter<>((DefaultTableModel) transactionsTable.getModel());
+            transactionsTable.setRowSorter(sorter);
+        }
 
         if (query == null) query = "";
         String q = query.trim();
@@ -933,39 +1450,122 @@ refreshCards(); // Method to be added below
     }
 
     // Apply rounded, modern tabs consistent with Login/Forgot screens
-    private void styleTabbedPane(JTabbedPane tabs) {
-        tabs.setFont(ModernTheme.FONT_BODY);
-        tabs.setBackground(ModernTheme.SURFACE);
-        tabs.setOpaque(true);
-        tabs.setBorder(new EmptyBorder(8, 8, 0, 8));
-        tabs.setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI() {
+ 
+    /**
+     * Applies a modern cell renderer to the transaction table with:
+     * - Alternating row colors
+     * - Custom formatting for Amount column (₹ symbol, color-coded Income/Expense)
+     * - Badge-style rendering for Type column
+     * - Enhanced typography and spacing
+     */
+    private void applyModernTableRenderer(JTable table) {
+        DefaultTableCellRenderer modernRenderer = new DefaultTableCellRenderer() {
             @Override
-            protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
-                                              int x, int y, int w, int h, boolean isSelected) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int arc = 12;
-                Color bg = isSelected ? ModernTheme.PRIMARY : ModernTheme.SURFACE;
-                g2.setColor(bg);
-                g2.fillRoundRect(x, y + 5, w, h - 5, arc, arc);
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                
+                // Set font
+                setFont(ModernTheme.FONT_BODY);
+                setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+                
+                // Alternating row colors for better readability
                 if (!isSelected) {
-                    g2.setColor(ModernTheme.BORDER);
-                    g2.drawRoundRect(x, y + 5, w, h - 5, arc, arc);
+                    if (row % 2 == 0) {
+                        c.setBackground(ModernTheme.SURFACE);
+                    } else {
+                        c.setBackground(ModernTheme.isDarkMode() ? 
+                            new Color(45, 45, 45) : new Color(248, 249, 250));
+                    }
+                    c.setForeground(ModernTheme.TEXT_PRIMARY);
+                } else {
+                    c.setBackground(ModernTheme.PRIMARY_LIGHT);
+                    c.setForeground(ModernTheme.TEXT_PRIMARY);
                 }
-                g2.dispose();
+                
+                // Center align S.No. column
+                if (column == 0) {
+                    setHorizontalAlignment(SwingConstants.CENTER);
+                    setFont(ModernTheme.FONT_SMALL.deriveFont(Font.BOLD));
+                }
+                // Right align Amount column
+                else if (column == 9) {
+                    setHorizontalAlignment(SwingConstants.RIGHT);
+                    setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD));
+                    
+                    // Format amount with ₹ symbol and color code based on type
+                    if (value != null) {
+                        double amount = (Double) value;
+                        int modelRow = table.convertRowIndexToModel(row);
+                        String type = (String) table.getModel().getValueAt(modelRow, 6);
+                        
+                        setText(String.format("₹%.2f", amount));
+                        
+                        if (!isSelected) {
+                            if ("Income".equalsIgnoreCase(type)) {
+                                c.setForeground(new Color(34, 139, 34)); // Green for income
+                            } else if ("Expense".equalsIgnoreCase(type)) {
+                                c.setForeground(new Color(220, 53, 69)); // Red for expense
+                            }
+                        }
+                    }
+                }
+                // Left align other text columns
+                else {
+                    setHorizontalAlignment(SwingConstants.LEFT);
+                }
+                
+                return c;
             }
-
+        };
+        
+        // Apply renderer to all columns except Type column (which gets special treatment)
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            if (i != 6) { // Not the Type column
+                table.getColumnModel().getColumn(i).setCellRenderer(modernRenderer);
+            }
+        }
+        
+        // Special badge-style renderer for Type column (Income/Expense)
+        table.getColumnModel().getColumn(6).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
-            protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
-                                     int tabIndex, String title, Rectangle textRect, boolean isSelected) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                g2.setFont(ModernTheme.FONT_BODY);
-                g2.setColor(isSelected ? ModernTheme.TEXT_WHITE : ModernTheme.TEXT_PRIMARY);
-                int x = textRect.x;
-                int y = textRect.y + metrics.getAscent();
-                g2.drawString(title, x, y);
-                g2.dispose();
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                
+                label.setFont(ModernTheme.FONT_SMALL.deriveFont(Font.BOLD));
+                label.setHorizontalAlignment(SwingConstants.CENTER);
+                label.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
+                
+                // Alternating row background for non-selected rows
+                if (!isSelected) {
+                    if (row % 2 == 0) {
+                        label.setBackground(ModernTheme.SURFACE);
+                    } else {
+                        label.setBackground(ModernTheme.isDarkMode() ? 
+                            new Color(45, 45, 45) : new Color(248, 249, 250));
+                    }
+                }
+                
+                // Badge style for Income/Expense
+                if (value != null && !isSelected) {
+                    String type = value.toString();
+                    if ("Income".equalsIgnoreCase(type)) {
+                        label.setForeground(new Color(34, 139, 34));
+                        label.setText("⬆ " + type.toUpperCase());
+                    } else if ("Expense".equalsIgnoreCase(type)) {
+                        label.setForeground(new Color(220, 53, 69));
+                        label.setText("⬇ " + type.toUpperCase());
+                    } else {
+                        label.setForeground(ModernTheme.TEXT_PRIMARY);
+                    }
+                } else if (isSelected) {
+                    label.setBackground(ModernTheme.PRIMARY_LIGHT);
+                    label.setForeground(ModernTheme.TEXT_PRIMARY);
+                }
+                
+                label.setOpaque(true);
+                return label;
             }
         });
     }
@@ -1046,7 +1646,7 @@ refreshCards(); // Method to be added below
         });
     }
 
-    private void initSummaryTab(JTabbedPane tabs) {
+    private void initSummaryTab() {
         JPanel summaryPanel = new JPanel(new BorderLayout(10, 10));
         summaryPanel.setBackground(ModernTheme.BACKGROUND);
         summaryPanel.setBorder(new EmptyBorder(12, 12, 12, 12));
@@ -1135,7 +1735,7 @@ refreshCards(); // Method to be added below
         summaryExportPdfButton.addActionListener(e -> exportSummaryAsPdf());
         summaryYearCombo.addActionListener(e -> { if (summaryTabInitialized) regenerateSummary(); });
 
-        tabs.addTab("Summary & Reports", summaryPanel);
+        mainContentPanel.add(summaryPanel, "Summary & Reports");
 
         summaryTabInitialized = true;
         regenerateSummary();
@@ -1788,11 +2388,11 @@ refreshCards(); // Method to be added below
     }
 
     private void deleteSelectedTransaction() {
-        JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
-        if (currentScrollPane == null) {
-            JOptionPane.showMessageDialog(this, "Please select a transaction tab.", "No Tab", JOptionPane.WARNING_MESSAGE); return;
+        if (transactionsTable == null) {
+            JOptionPane.showMessageDialog(this, "No transactions available.", "No Table", JOptionPane.WARNING_MESSAGE);
+            return;
         }
-        JTable currentTable = (JTable) currentScrollPane.getViewport().getView();
+        JTable currentTable = transactionsTable;
         int selectedRow = currentTable.getSelectedRow();
         if (selectedRow == -1) {
             JOptionPane.showMessageDialog(this, "Please select a transaction to delete.", "No Transaction", JOptionPane.WARNING_MESSAGE); return;
@@ -1814,17 +2414,31 @@ refreshCards(); // Method to be added below
     }
 
     private void deleteSelectedMonth() {
-        int selectedIndex = monthTabs.getSelectedIndex();
-        if (selectedIndex == -1) {
-             JOptionPane.showMessageDialog(this, "No month is selected.", "Error", JOptionPane.ERROR_MESSAGE); return;
+        String selectedMonth = (String) monthComboBox.getSelectedItem();
+        if (selectedMonth == null || "All Months".equals(selectedMonth)) {
+            JOptionPane.showMessageDialog(this, "Please select a specific month to delete.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
         }
-        JScrollPane scrollPane = (JScrollPane) monthTabs.getComponentAt(selectedIndex);
-        JTable table = (JTable) scrollPane.getViewport().getView();
-        String monthYear = (String) table.getClientProperty("monthYear");
-        String tabTitle = monthTabs.getTitleAt(selectedIndex);
-        int choice = JOptionPane.showConfirmDialog(this, "Move ALL transactions for " + tabTitle + " to the recycle bin?", "Confirm Month Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        
+        String selectedYear = (String) yearComboBox.getSelectedItem();
+        if (selectedYear == null) return;
+        
+        int choice = JOptionPane.showConfirmDialog(this, 
+            "Move ALL transactions for " + selectedMonth + " " + selectedYear + " to the recycle bin?", 
+            "Confirm Month Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice == JOptionPane.YES_OPTION) {
             try {
+                // Convert month name to month number
+                String[] months = {"January", "February", "March", "April", "May", "June",
+                                  "July", "August", "September", "October", "November", "December"};
+                int monthNum = 1;
+                for (int i = 0; i < months.length; i++) {
+                    if (months[i].equals(selectedMonth)) {
+                        monthNum = i + 1;
+                        break;
+                    }
+                }
+                String monthYear = selectedYear + "-" + String.format("%02d", monthNum);
                 manager.deleteTransactionsByMonth(monthYear);
                 refreshTransactions();
             } catch (SQLException e) {
@@ -1924,37 +2538,92 @@ refreshCards(); // Method to be added below
     // --- BANK ACCOUNT METHODS ---
     private void showAccountDetails(BankAccount acc) {
         bankDetailPanel.removeAll();
+        bankDetailPanel.setBackground(ModernTheme.SURFACE); // Ensure proper background
+        
         if(acc == null) {
-            bankDetailPanel.add(new JLabel("Select an account.", SwingConstants.CENTER));
+            JLabel selectLabel = ModernTheme.createPlaceholderLabel("Select an account.");
+            bankDetailPanel.add(selectLabel);
         } else {
             JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10));
+            detailGrid.setBackground(ModernTheme.SURFACE);
+            
+            // Title with modern theme
             JLabel title = new JLabel(acc.getBankName());
-            title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 24));
+            title.setFont(ModernTheme.FONT_TITLE);
+            title.setForeground(ModernTheme.TEXT_PRIMARY);
             detailGrid.add(title);
+            
+            // Subtitle with modern theme
             String accType = acc.getAccountType();
             if ("Current".equals(accType)) accType += " (" + acc.getAccountSubtype() + ")";
             JLabel subTitle = new JLabel(accType + " Account");
-            subTitle.setFont(new java.awt.Font("Arial", java.awt.Font.ITALIC, 18));
+            subTitle.setFont(ModernTheme.FONT_SUBTITLE);
+            subTitle.setForeground(ModernTheme.TEXT_SECONDARY);
             detailGrid.add(subTitle);
+            
+            // Balance with modern theme
             JLabel balanceLabel = new JLabel(String.format("Balance: ₹%.2f", acc.getBalance()));
-            balanceLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 20));
+            balanceLabel.setFont(ModernTheme.FONT_HEADER);
+            balanceLabel.setForeground(ModernTheme.TEXT_PRIMARY);
             detailGrid.add(balanceLabel);
-            detailGrid.add(new JSeparator());
-            detailGrid.add(new JLabel("Holder: " + acc.getHolderName()));
-            detailGrid.add(new JLabel("Account #: " + acc.getAccountNumber()));
-            detailGrid.add(new JLabel("IFSC: " + acc.getIfscCode()));
+            
+            // Separator
+            JSeparator sep1 = new JSeparator();
+            sep1.setForeground(ModernTheme.BORDER);
+            detailGrid.add(sep1);
+            
+            // Detail labels with modern theme
+            JLabel holderLabel = new JLabel("Holder: " + acc.getHolderName());
+            holderLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            holderLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(holderLabel);
+            
+            JLabel accountLabel = new JLabel("Account #: " + acc.getAccountNumber());
+            accountLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            accountLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(accountLabel);
+            
+            JLabel ifscLabel = new JLabel("IFSC: " + acc.getIfscCode());
+            ifscLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            ifscLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(ifscLabel);
+            
             if ("Savings".equals(acc.getAccountType())) {
-                detailGrid.add(new JSeparator());
-                detailGrid.add(new JLabel("Interest Rate: " + acc.getInterestRate() + "%"));
-                detailGrid.add(new JLabel("Annual Expenses: ₹" + acc.getAnnualExpense()));
+                JSeparator sep2 = new JSeparator();
+                sep2.setForeground(ModernTheme.BORDER);
+                detailGrid.add(sep2);
+                
+                JLabel interestLabel = new JLabel("Interest Rate: " + acc.getInterestRate() + "%");
+                interestLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                interestLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(interestLabel);
+                
+                JLabel expenseLabel = new JLabel("Annual Expenses: ₹" + acc.getAnnualExpense());
+                expenseLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                expenseLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(expenseLabel);
+                
                 double interestAmount = acc.getEstimatedAnnualInterest();
                 JLabel calcLabel = new JLabel(String.format("Estimated Annual Interest: ₹%.2f", interestAmount));
-                calcLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 14));
+                calcLabel.setFont(ModernTheme.FONT_HEADER);
+                calcLabel.setForeground(ModernTheme.SUCCESS); // Green color for positive amount
                 detailGrid.add(calcLabel);
             } else if ("Current".equals(acc.getAccountType())) {
-                 detailGrid.add(new JSeparator());
-                 if ("Salary".equals(acc.getAccountSubtype())) detailGrid.add(new JLabel("Company: " + acc.getCompanyName()));
-                 else if ("Business".equals(acc.getAccountSubtype())) detailGrid.add(new JLabel("Business: " + acc.getBusinessName()));
+                JSeparator sep2 = new JSeparator();
+                sep2.setForeground(ModernTheme.BORDER);
+                detailGrid.add(sep2);
+                
+                if ("Salary".equals(acc.getAccountSubtype())) {
+                    JLabel companyLabel = new JLabel("Company: " + acc.getCompanyName());
+                    companyLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                    companyLabel.setFont(ModernTheme.FONT_BODY);
+                    detailGrid.add(companyLabel);
+                } else if ("Business".equals(acc.getAccountSubtype())) {
+                    JLabel businessLabel = new JLabel("Business: " + acc.getBusinessName());
+                    businessLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                    businessLabel.setFont(ModernTheme.FONT_BODY);
+                    detailGrid.add(businessLabel);
+                }
             }
             bankDetailPanel.add(detailGrid, BorderLayout.NORTH);
         }
@@ -2122,7 +2791,7 @@ refreshCards(); // Method to be added below
     public void refreshDeposits() {
         depositListModel.clear();
         depositDetailPanel.removeAll();
-        depositDetailPanel.add(new JLabel("Select a deposit to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        depositDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a deposit to view details."), BorderLayout.CENTER);
         depositDetailPanel.revalidate();
         depositDetailPanel.repaint();
         try {
@@ -2135,44 +2804,130 @@ refreshCards(); // Method to be added below
 
     private void showDepositDetails(Deposit deposit) {
         depositDetailPanel.removeAll();
+        depositDetailPanel.setBackground(ModernTheme.SURFACE);
+        
         if (deposit == null) {
-            depositDetailPanel.add(new JLabel("Select a deposit to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+            JLabel selectLabel = ModernTheme.createPlaceholderLabel("Select a deposit to view details.");
+            depositDetailPanel.add(selectLabel, BorderLayout.CENTER);
             depositDetailPanel.revalidate(); depositDetailPanel.repaint(); return;
         }
+        
         JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10));
+        detailGrid.setBackground(ModernTheme.SURFACE);
+        
         String titleText = deposit.getDepositType() + ": " + (deposit.getHolderName() != null && !deposit.getHolderName().isEmpty() ? deposit.getHolderName() : (deposit.getDescription() != null && !deposit.getDescription().isEmpty() ? deposit.getDescription() : "Deposit #" + deposit.getId()));
         JLabel title = new JLabel(titleText);
-        title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
+        title.setFont(ModernTheme.FONT_SUBTITLE);
+        title.setForeground(ModernTheme.TEXT_PRIMARY);
         detailGrid.add(title);
-        detailGrid.add(new JSeparator());
-        if (deposit.getGoal() != null && !deposit.getGoal().isEmpty()) detailGrid.add(new JLabel("Goal: " + deposit.getGoal()));
-        if (deposit.getDescription() != null && !deposit.getDescription().isEmpty()) detailGrid.add(new JLabel("Description: " + deposit.getDescription()));
-        detailGrid.add(new JLabel("Added On: " + (deposit.getCreationDate() != null ? deposit.getCreationDate().substring(0, 10) : "N/A")));
+        
+        JSeparator sep1 = new JSeparator();
+        sep1.setForeground(ModernTheme.BORDER);
+        detailGrid.add(sep1);
+        
+        if (deposit.getGoal() != null && !deposit.getGoal().isEmpty()) {
+            JLabel goalLabel = new JLabel("Goal: " + deposit.getGoal());
+            goalLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            goalLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(goalLabel);
+        }
+        
+        if (deposit.getDescription() != null && !deposit.getDescription().isEmpty()) {
+            JLabel descLabel = new JLabel("Description: " + deposit.getDescription());
+            descLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            descLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(descLabel);
+        }
+        
+        JLabel dateLabel = new JLabel("Added On: " + (deposit.getCreationDate() != null ? deposit.getCreationDate().substring(0, 10) : "N/A"));
+        dateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        dateLabel.setFont(ModernTheme.FONT_BODY);
+        detailGrid.add(dateLabel);
         switch(deposit.getDepositType()) {
             case "FD":
-                detailGrid.add(new JSeparator());
-                detailGrid.add(new JLabel(String.format("Principal: ₹%.2f", deposit.getPrincipalAmount())));
-                detailGrid.add(new JLabel(String.format("Rate: %.2f%%", deposit.getInterestRate())));
-                detailGrid.add(new JLabel("Tenure: " + deposit.getTenure() + " " + deposit.getTenureUnit()));
-                detailGrid.add(new JLabel("Maturity Date: " + deposit.calculateMaturityDate()));
-                detailGrid.add(new JLabel(String.format("Est. Maturity Value: ₹%.2f", deposit.calculateFDMaturityAmount())));
+                JSeparator sep2 = new JSeparator();
+                sep2.setForeground(ModernTheme.BORDER);
+                detailGrid.add(sep2);
+                
+                JLabel principalLabel = new JLabel(String.format("Principal: ₹%.2f", deposit.getPrincipalAmount()));
+                principalLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                principalLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(principalLabel);
+                
+                JLabel rateLabel = new JLabel(String.format("Rate: %.2f%%", deposit.getInterestRate()));
+                rateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                rateLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(rateLabel);
+                
+                JLabel tenureLabel = new JLabel("Tenure: " + deposit.getTenure() + " " + deposit.getTenureUnit());
+                tenureLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                tenureLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(tenureLabel);
+                
+                JLabel maturityDateLabel = new JLabel("Maturity Date: " + deposit.calculateMaturityDate());
+                maturityDateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                maturityDateLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(maturityDateLabel);
+                
+                JLabel maturityValueLabel = new JLabel(String.format("Est. Maturity Value: ₹%.2f", deposit.calculateFDMaturityAmount()));
+                maturityValueLabel.setForeground(ModernTheme.SUCCESS);
+                maturityValueLabel.setFont(ModernTheme.FONT_HEADER);
+                detailGrid.add(maturityValueLabel);
                 break;
+                
             case "RD":
-                detailGrid.add(new JSeparator());
-                detailGrid.add(new JLabel(String.format("Monthly Deposit: ₹%.2f", deposit.getMonthlyAmount())));
-                detailGrid.add(new JLabel(String.format("Rate: %.2f%%", deposit.getInterestRate())));
-                detailGrid.add(new JLabel("Tenure: " + deposit.getTenure() + " " + deposit.getTenureUnit()));
-                detailGrid.add(new JLabel("Maturity Date: " + deposit.calculateMaturityDate()));
-                detailGrid.add(new JLabel(String.format("Total Principal: ₹%.2f", deposit.getMonthlyAmount() * ("Months".equals(deposit.getTenureUnit()) ? deposit.getTenure() : 0))));
+                JSeparator sep3 = new JSeparator();
+                sep3.setForeground(ModernTheme.BORDER);
+                detailGrid.add(sep3);
+                
+                JLabel monthlyLabel = new JLabel(String.format("Monthly Deposit: ₹%.2f", deposit.getMonthlyAmount()));
+                monthlyLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                monthlyLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(monthlyLabel);
+                
+                JLabel rdRateLabel = new JLabel(String.format("Rate: %.2f%%", deposit.getInterestRate()));
+                rdRateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                rdRateLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(rdRateLabel);
+                
+                JLabel rdTenureLabel = new JLabel("Tenure: " + deposit.getTenure() + " " + deposit.getTenureUnit());
+                rdTenureLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                rdTenureLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(rdTenureLabel);
+                
+                JLabel rdMaturityLabel = new JLabel("Maturity Date: " + deposit.calculateMaturityDate());
+                rdMaturityLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                rdMaturityLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(rdMaturityLabel);
+                
+                JLabel totalPrincipalLabel = new JLabel(String.format("Total Principal: ₹%.2f", deposit.getMonthlyAmount() * ("Months".equals(deposit.getTenureUnit()) ? deposit.getTenure() : 0)));
+                totalPrincipalLabel.setForeground(ModernTheme.SUCCESS);
+                totalPrincipalLabel.setFont(ModernTheme.FONT_HEADER);
+                detailGrid.add(totalPrincipalLabel);
                 break;
+                
             case "Gullak":
-                detailGrid.add(new JSeparator());
-                detailGrid.add(new JLabel(String.format("Current Total: ₹%.2f", deposit.getCurrentTotal())));
-                detailGrid.add(new JLabel(String.format("Amount Due (Withdrawn): ₹%.2f", deposit.getGullakDueAmount())));
-                detailGrid.add(new JLabel("Last Updated: " + (deposit.getLastUpdated() != null ? deposit.getLastUpdated() : "Never")));
+                JSeparator sep4 = new JSeparator();
+                sep4.setForeground(ModernTheme.BORDER);
+                detailGrid.add(sep4);
+                
+                JLabel currentTotalLabel = new JLabel(String.format("Current Total: ₹%.2f", deposit.getCurrentTotal()));
+                currentTotalLabel.setForeground(ModernTheme.SUCCESS);
+                currentTotalLabel.setFont(ModernTheme.FONT_HEADER);
+                detailGrid.add(currentTotalLabel);
+                
+                JLabel dueAmountLabel = new JLabel(String.format("Amount Due (Withdrawn): ₹%.2f", deposit.getGullakDueAmount()));
+                dueAmountLabel.setForeground(ModernTheme.DANGER);
+                dueAmountLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(dueAmountLabel);
+                
+                JLabel lastUpdatedLabel = new JLabel("Last Updated: " + (deposit.getLastUpdated() != null ? deposit.getLastUpdated() : "Never"));
+                lastUpdatedLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+                lastUpdatedLabel.setFont(ModernTheme.FONT_SMALL);
+                detailGrid.add(lastUpdatedLabel);
                 break;
         }
-        JButton editButton = new JButton("View / Edit Details");
+        JButton editButton = ModernTheme.createPrimaryButton("View / Edit Details");
         editButton.addActionListener(e -> {
             if ("Gullak".equals(deposit.getDepositType())) openGullakDialog(deposit);
             else openAddEditDepositDialog(deposit);
@@ -2224,36 +2979,10 @@ refreshCards(); // Method to be added below
     // --- OTHER REFRESH/DIALOG METHODS ---
 
     
-    // --- Method to Update Summary Cards Based on Selected Month ---
+    // --- Method to Update Summary Cards Based on Current View ---
     private void updateSummaryCards() {
-        JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
-        if (currentScrollPane == null) {
-            // No month selected, reset to 0
-            if (incomeValueLabel != null) incomeValueLabel.setText("₹0.00");
-            if (expenseValueLabel != null) expenseValueLabel.setText("₹0.00");
-            if (balanceValueLabel != null) balanceValueLabel.setText("₹0.00");
-            return;
-        }
-        
-        // Get the stored totals for the selected month
-        Double monthIncome = (Double) currentScrollPane.getClientProperty("monthIncome");
-        Double monthExpense = (Double) currentScrollPane.getClientProperty("monthExpense");
-        
-        if (monthIncome == null) monthIncome = 0.0;
-        if (monthExpense == null) monthExpense = 0.0;
-        
-        double netBalance = monthIncome - monthExpense;
-        
-        // Update the labels
-        if (incomeValueLabel != null) {
-            incomeValueLabel.setText(String.format("₹%,.2f", monthIncome));
-        }
-        if (expenseValueLabel != null) {
-            expenseValueLabel.setText(String.format("₹%,.2f", monthExpense));
-        }
-        if (balanceValueLabel != null) {
-            balanceValueLabel.setText(String.format("₹%,.2f", netBalance));
-        }
+        // Summary cards are now updated in refreshTransactions()
+        // This method can be kept for compatibility but doesn't need to do anything
     }
     
     // --- Helper Method to Create Summary Cards ---
@@ -2298,11 +3027,26 @@ refreshCards(); // Method to be added below
     // --- Logout Method ---
         // --- Refresh UI Theme Method ---
         private void refreshUITheme() {
-            // Update all components to use new colors
-            SwingUtilities.updateComponentTreeUI(this);
+            // Update main container backgrounds
             getContentPane().setBackground(ModernTheme.BACKGROUND);
-        
-            // Refresh all tabs
+            
+            // Update all panels recursively
+            updateComponentTheme(this);
+            
+            // Refresh logo to match current theme
+            if (headerLogo != null) {
+                headerLogo.refreshLogo();
+            }
+            
+                // Update sidebar styling
+                if (sidebarPanel != null) {
+                    sidebarPanel.updateTheme();
+                }
+            
+            // Update profile widget theme
+            updateProfileWidgetTheme();
+            
+            // Refresh all data to update table styling
             refreshTransactions();
             refreshBankAccounts();
             refreshDeposits();
@@ -2315,6 +3059,249 @@ refreshCards(); // Method to be added below
             repaint();
             revalidate();
         }
+        
+        /**
+         * Updates profile widget colors when theme changes
+         */
+        private void updateProfileWidgetTheme() {
+            if (leftPanel != null) {
+                leftPanel.setBackground(ModernTheme.SURFACE);
+            }
+            
+            if (userProfileBtn != null) {
+                userProfileBtn.setBackground(ModernTheme.BACKGROUND);
+                userProfileBtn.repaint();
+            }
+            
+            if (avatarPanel != null) {
+                avatarPanel.repaint(); // Repaint to update PRIMARY color
+            }
+            
+            if (nameLabel != null) {
+                nameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            }
+            
+            if (typeLabel != null) {
+                // Update badge background based on account type
+                src.auth.Account currentAccount = SessionContext.getCurrentAccount();
+                if (currentAccount != null) {
+                    typeLabel.setBackground(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
+                        ? ModernTheme.PRIMARY : ModernTheme.SUCCESS);
+                }
+                typeLabel.repaint();
+            }
+            
+            if (dropdownIcon != null) {
+                dropdownIcon.setForeground(ModernTheme.TEXT_SECONDARY);
+            }
+        }
+        
+        /**
+         * Recursively updates theme for all components
+         */
+        private void updateComponentTheme(Container container) {
+            for (Component component : container.getComponents()) {
+                // Update background colors for panels
+                if (component instanceof JPanel) {
+                    component.setBackground(ModernTheme.SURFACE);
+                }
+                
+                // Update table styling
+                if (component instanceof JTable) {
+                    JTable table = (JTable) component;
+                    ModernTheme.styleTable(table);
+                }
+                
+                // Update list styling
+                if (component instanceof JList) {
+                    JList<?> list = (JList<?>) component;
+                    styleList(list);
+                }
+                
+                // Update scroll pane styling
+                if (component instanceof JScrollPane) {
+                    JScrollPane scrollPane = (JScrollPane) component;
+                    scrollPane.setBackground(ModernTheme.BACKGROUND);
+                    scrollPane.getViewport().setBackground(ModernTheme.SURFACE);
+                    if (scrollPane.getViewport().getView() instanceof JTable) {
+                        ModernTheme.styleTable((JTable) scrollPane.getViewport().getView());
+                    } else if (scrollPane.getViewport().getView() instanceof JList) {
+                        styleList((JList<?>) scrollPane.getViewport().getView());
+                    }
+                }
+                
+                // Update label colors - but preserve specific colors for important elements
+                if (component instanceof JLabel) {
+                    JLabel label = (JLabel) component;
+                    // Don't override success/danger/warning colors, only update default text
+                    Color currentColor = label.getForeground();
+                    if (currentColor.equals(Color.BLACK) || currentColor.equals(new Color(51, 51, 51)) || 
+                        currentColor.equals(new Color(33, 37, 41))) {
+                        label.setForeground(ModernTheme.TEXT_PRIMARY);
+                    }
+                }
+                
+                // Update text field styling
+                if (component instanceof JTextField) {
+                    JTextField textField = (JTextField) component;
+                    ModernTheme.styleTextField(textField);
+                }
+                
+                // Update combo box styling
+                if (component instanceof JComboBox) {
+                    JComboBox<?> comboBox = (JComboBox<?>) component;
+                    ModernTheme.styleComboBox(comboBox);
+                }
+                
+                // Update separators
+                if (component instanceof JSeparator) {
+                    component.setForeground(ModernTheme.BORDER);
+                }
+                
+                // Recursively update child containers
+                if (component instanceof Container) {
+                    updateComponentTheme((Container) component);
+                }
+            }
+            
+            // Force update of detail panels
+            if (bankDetailPanel != null) {
+                bankDetailPanel.setBackground(ModernTheme.SURFACE);
+            }
+            if (depositDetailPanel != null) {
+                depositDetailPanel.setBackground(ModernTheme.SURFACE);
+            }
+            if (investmentDetailPanel != null) {
+                investmentDetailPanel.setBackground(ModernTheme.SURFACE);
+            }
+            
+            // Force update of all lists with proper styling
+            if (bankAccountList != null) {
+                styleList(bankAccountList);
+            }
+            if (depositList != null) {
+                styleList(depositList);
+            }
+            if (investmentList != null) {
+                styleList(investmentList);
+            }
+            if (taxProfileList != null) {
+                styleList(taxProfileList);
+            }
+            if (loanList != null) {
+                styleList(loanList);
+            }
+            if (cardList != null) {
+                styleList(cardList);
+            }
+            
+            // Update calendar button and filter panel
+            if (calendarButton != null) {
+                calendarButton.setBackground(ModernTheme.SURFACE);
+                calendarButton.setForeground(ModernTheme.TEXT_PRIMARY);
+                calendarButton.setBorder(BorderFactory.createCompoundBorder(
+                    new ModernTheme.RoundedBorder(10, ModernTheme.BORDER),
+                    BorderFactory.createEmptyBorder(8, 16, 8, 16)
+                ));
+            }
+            
+            if (filterPanel != null) {
+                filterPanel.setBackground(ModernTheme.SURFACE);
+                filterPanel.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, ModernTheme.BORDER),
+                    BorderFactory.createEmptyBorder(8, 15, 8, 15)
+                ));
+            }
+            
+            // Update transaction tab labels
+            if (yearLabel != null) {
+                yearLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            }
+            
+            if (searchLabel != null) {
+                searchLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            }
+            
+            // Update filter button icon
+            if (filterButton != null) {
+                filterButton.setIcon(ModernIcons.create(IconType.SEARCH, ModernTheme.TEXT_PRIMARY, 16));
+                filterButton.setBackground(ModernTheme.SURFACE);
+                filterButton.setForeground(ModernTheme.TEXT_PRIMARY);
+            }
+            
+            // Update transaction export button icon
+            if (exportButton != null) {
+                exportButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 14));
+                exportButton.setBackground(ModernTheme.SURFACE);
+                exportButton.setForeground(ModernTheme.TEXT_PRIMARY);
+            }
+            
+            // Update summary export button icons
+            if (summaryExportCsvButton != null) {
+                summaryExportCsvButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 16));
+            }
+            if (summaryExportPdfButton != null) {
+                summaryExportPdfButton.setIcon(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_PRIMARY, 16));
+            }
+            
+            // Update month filter popup menu
+            if (monthMenu != null) {
+                monthMenu.setBackground(ModernTheme.SURFACE);
+                monthMenu.setBorder(new ModernTheme.RoundedBorder(12, ModernTheme.BORDER));
+                
+                // Update all menu items
+                for (Component comp : monthMenu.getComponents()) {
+                    if (comp instanceof JMenuItem) {
+                        JMenuItem item = (JMenuItem) comp;
+                        item.setBackground(ModernTheme.SURFACE);
+                        item.setForeground(ModernTheme.TEXT_PRIMARY);
+                    }
+                }
+            }
+            
+            // Update column filter popup menu
+            if (columnMenu != null) {
+                columnMenu.setBackground(ModernTheme.SURFACE);
+                
+                // Update all menu items
+                for (Component comp : columnMenu.getComponents()) {
+                    if (comp instanceof JMenuItem) {
+                        JMenuItem item = (JMenuItem) comp;
+                        item.setBackground(ModernTheme.SURFACE);
+                        item.setForeground(ModernTheme.TEXT_PRIMARY);
+                    }
+                }
+            }
+        }
+    
+    /**
+     * Opens the Edit Profile dialog
+     */
+    private void openEditProfileDialog() {
+        EditProfileDialog dialog = new EditProfileDialog(this);
+        dialog.setVisible(true);
+        
+        if (dialog.isSucceeded()) {
+            // Refresh UI to show updated information
+            updateProfileWidget();
+        }
+    }
+    
+    /**
+     * Updates the profile widget with current account information
+     */
+    private void updateProfileWidget() {
+        src.auth.Account currentAccount = SessionContext.getCurrentAccount();
+        if (currentAccount != null && nameLabel != null) {
+            nameLabel.setText(currentAccount.getAccountName());
+            
+            if (typeLabel != null) {
+                typeLabel.setText(currentAccount.getAccountType().toString());
+                typeLabel.setBackground(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
+                    ? ModernTheme.PRIMARY : ModernTheme.SUCCESS);
+            }
+        }
+    }
     
     private void performLogout() {
         try {
@@ -2354,7 +3341,7 @@ public void refreshCards() {
     System.out.println("--- Refreshing Cards ---"); // Add log
     cardListModel.clear();
     cardDetailPanel.removeAll(); // Clear details
-    cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    cardDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a card to view details."), BorderLayout.CENTER);
     cardDetailPanel.revalidate();
     cardDetailPanel.repaint();
     try {
@@ -2380,34 +3367,66 @@ public void refreshCards() {
 private void showCardDetails(Card card) {
     cardDetailPanel.removeAll();
     if (card == null) {
-        cardDetailPanel.add(new JLabel("Select a card to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        cardDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a card to view details."), BorderLayout.CENTER);
         cardDetailPanel.revalidate(); cardDetailPanel.repaint();
         return;
     }
 
     JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column
+    detailGrid.setBackground(ModernTheme.SURFACE);
 
     JLabel title = new JLabel(card.getCardName());
-    title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
+    title.setFont(ModernTheme.FONT_SUBTITLE);
+    title.setForeground(ModernTheme.TEXT_PRIMARY);
     detailGrid.add(title);
-    detailGrid.add(new JLabel(card.getCardType()));
-    detailGrid.add(new JLabel("Number: " + card.getMaskedCardNumber())); // Show masked number
-    detailGrid.add(new JLabel("Valid Thru: " + (card.getValidThrough() != null ? card.getValidThrough() : "N/A")));
+    
+    JLabel cardTypeLabel = new JLabel(card.getCardType());
+    cardTypeLabel.setFont(ModernTheme.FONT_BODY);
+    cardTypeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+    detailGrid.add(cardTypeLabel);
+    
+    JLabel numberLabel = new JLabel("Number: " + card.getMaskedCardNumber()); // Show masked number
+    numberLabel.setFont(ModernTheme.FONT_BODY);
+    numberLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+    detailGrid.add(numberLabel);
+    
+    JLabel validThruLabel = new JLabel("Valid Thru: " + (card.getValidThrough() != null ? card.getValidThrough() : "N/A"));
+    validThruLabel.setFont(ModernTheme.FONT_BODY);
+    validThruLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+    detailGrid.add(validThruLabel);
 
     detailGrid.add(new JSeparator());
 
     if ("Credit Card".equals(card.getCardType())) {
-        detailGrid.add(new JLabel(String.format("Limit: ₹%.2f", card.getCreditLimit())));
-        detailGrid.add(new JLabel(String.format("Current Spend: ₹%.2f", card.getCurrentExpenses())));
-        detailGrid.add(new JLabel(String.format("Amount Due: ₹%.2f", card.getAmountToPay())));
-        detailGrid.add(new JLabel("Days Until Due: " + card.getDaysLeftToPay()));
+        JLabel limitLabel = new JLabel(String.format("Limit: ₹%.2f", card.getCreditLimit()));
+        limitLabel.setFont(ModernTheme.FONT_BODY);
+        limitLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        detailGrid.add(limitLabel);
+        
+        JLabel spendLabel = new JLabel(String.format("Current Spend: ₹%.2f", card.getCurrentExpenses()));
+        spendLabel.setFont(ModernTheme.FONT_BODY);
+        spendLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        detailGrid.add(spendLabel);
+        
+        JLabel dueLabel = new JLabel(String.format("Amount Due: ₹%.2f", card.getAmountToPay()));
+        dueLabel.setFont(ModernTheme.FONT_BODY);
+        dueLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        detailGrid.add(dueLabel);
+        
+        JLabel daysLabel = new JLabel("Days Until Due: " + card.getDaysLeftToPay());
+        daysLabel.setFont(ModernTheme.FONT_BODY);
+        daysLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        detailGrid.add(daysLabel);
+        
         detailGrid.add(new JSeparator());
     }
 
     // --- Buttons for Actions ---
     JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    JButton viewSensitiveButton = new JButton("View Full Details (Requires OTP)");
-    JButton editButton = new JButton("Edit Basic Info");
+    buttonSubPanel.setBackground(ModernTheme.SURFACE);
+    
+    JButton viewSensitiveButton = ModernTheme.createPrimaryButton("View Full Details (Requires OTP)");
+    JButton editButton = ModernTheme.createSecondaryButton("Edit Basic Info");
 
     buttonSubPanel.add(viewSensitiveButton);
     buttonSubPanel.add(editButton);
@@ -2535,7 +3554,7 @@ public void refreshAfterCardRestore() {
         System.out.println("--- Refreshing Investments ---");
         investmentListModel.clear();
         investmentDetailPanel.removeAll(); // Clear details
-        investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        investmentDetailPanel.add(ModernTheme.createPlaceholderLabel("Select an investment to view details."), BorderLayout.CENTER);
         investmentDetailPanel.revalidate();
         investmentDetailPanel.repaint();
         try {
@@ -2556,17 +3575,29 @@ public void refreshAfterCardRestore() {
      */
     private void showInvestmentDetails(Investment inv) {
         investmentDetailPanel.removeAll();
+        investmentDetailPanel.setBackground(ModernTheme.SURFACE);
+        
         if (inv == null) {
-            investmentDetailPanel.add(new JLabel("Select an investment to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+            JLabel selectLabel = ModernTheme.createPlaceholderLabel("Select an investment to view details.");
+            investmentDetailPanel.add(selectLabel, BorderLayout.CENTER);
         } else {
             JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column layout
+            detailGrid.setBackground(ModernTheme.SURFACE);
+            
             String titleName = (inv.getDescription() != null && !inv.getDescription().isEmpty()) ? inv.getDescription() : inv.getTickerSymbol();
             JLabel title = new JLabel(titleName + " (" + inv.getAssetType() + ")");
-            title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
+            title.setFont(ModernTheme.FONT_SUBTITLE);
+            title.setForeground(ModernTheme.TEXT_PRIMARY);
             detailGrid.add(title);
-            detailGrid.add(new JLabel("Holder: " + inv.getHolderName()));
+            
+            JLabel holderLabel = new JLabel("Holder: " + inv.getHolderName());
+            holderLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            holderLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(holderLabel);
 
-            detailGrid.add(new JSeparator());
+            JSeparator sep1 = new JSeparator();
+            sep1.setForeground(ModernTheme.BORDER);
+            detailGrid.add(sep1);
             
             // Calculated Values
             double initialCost = inv.getTotalInitialCost();
@@ -2574,34 +3605,58 @@ public void refreshAfterCardRestore() {
             double pnl = inv.getProfitOrLoss();
             double pnlPercent = inv.getProfitOrLossPercentage();
 
-            detailGrid.add(new JLabel(String.format("Total Initial Cost: ₹%.2f", initialCost)));
-            detailGrid.add(new JLabel(String.format("Total Current Value: ₹%.2f", currentValue)));
+            JLabel initialCostLabel = new JLabel(String.format("Total Initial Cost: ₹%.2f", initialCost));
+            initialCostLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            initialCostLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(initialCostLabel);
+            
+            JLabel currentValueLabel = new JLabel(String.format("Total Current Value: ₹%.2f", currentValue));
+            currentValueLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            currentValueLabel.setFont(ModernTheme.FONT_BODY);
+            detailGrid.add(currentValueLabel);
             
             // Profit/Loss Label
             String pnlText = String.format("Profit/Loss: ₹%.2f (%.2f%%)", pnl, pnlPercent);
             JLabel pnlLabel = new JLabel(pnlText);
-            // Set color based on profit or loss
+            // Set color based on profit or loss using theme colors
             if (pnl > 0) {
-                pnlLabel.setForeground(new java.awt.Color(0, 128, 0)); // Dark Green
+                pnlLabel.setForeground(ModernTheme.SUCCESS); // Green for profit
             } else if (pnl < 0) {
-                pnlLabel.setForeground(java.awt.Color.RED);
+                pnlLabel.setForeground(ModernTheme.DANGER); // Red for loss
+            } else {
+                pnlLabel.setForeground(ModernTheme.TEXT_PRIMARY); // Default for no change
             }
-            pnlLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 14));
+            pnlLabel.setFont(ModernTheme.FONT_HEADER);
             detailGrid.add(pnlLabel);
 
-            detailGrid.add(new JSeparator());
+            JSeparator sep2 = new JSeparator();
+            sep2.setForeground(ModernTheme.BORDER);
+            detailGrid.add(sep2);
             
             // Unit Details (if applicable)
             if (inv.getQuantity() > 0) {
-                detailGrid.add(new JLabel(String.format("Quantity: %.4f units", inv.getQuantity())));
-                detailGrid.add(new JLabel(String.format("Avg. Cost Price: ₹%.2f /unit", inv.getInitialUnitCost())));
-                detailGrid.add(new JLabel(String.format("Current Price: ₹%.2f /unit", inv.getCurrentUnitPrice())));
+                JLabel quantityLabel = new JLabel(String.format("Quantity: %.4f units", inv.getQuantity()));
+                quantityLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                quantityLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(quantityLabel);
+                
+                JLabel avgCostLabel = new JLabel(String.format("Avg. Cost Price: ₹%.2f /unit", inv.getInitialUnitCost()));
+                avgCostLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                avgCostLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(avgCostLabel);
+                
+                JLabel currentPriceLabel = new JLabel(String.format("Current Price: ₹%.2f /unit", inv.getCurrentUnitPrice()));
+                currentPriceLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+                currentPriceLabel.setFont(ModernTheme.FONT_BODY);
+                detailGrid.add(currentPriceLabel);
             }
 
             // --- Buttons for Actions ---
             JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            JButton updatePriceButton = new JButton("Update Current Price");
-            JButton editButton = new JButton("Edit Details");
+            buttonSubPanel.setBackground(ModernTheme.SURFACE);
+            
+            JButton updatePriceButton = ModernTheme.createSecondaryButton("Update Current Price");
+            JButton editButton = ModernTheme.createPrimaryButton("Edit Details");
             buttonSubPanel.add(updatePriceButton);
             buttonSubPanel.add(editButton);
 
@@ -2708,7 +3763,7 @@ public void refreshTaxProfiles() {
     System.out.println("--- Refreshing Tax Profiles ---");
     taxProfileListModel.clear();
     taxDetailPanel.removeAll();
-    taxDetailPanel.add(new JLabel("Select a profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    taxDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a profile to view details."), BorderLayout.CENTER);
     taxDetailPanel.revalidate();
     taxDetailPanel.repaint();
     try {
@@ -2728,56 +3783,119 @@ public void refreshTaxProfiles() {
  */
 private void showTaxProfileDetails(TaxProfile tp) {
     taxDetailPanel.removeAll();
+    taxDetailPanel.setBackground(ModernTheme.SURFACE);
+    
     if (tp == null) {
-        taxDetailPanel.add(new JLabel("Select a profile to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        JLabel selectLabel = ModernTheme.createPlaceholderLabel("Select a profile to view details.");
+        taxDetailPanel.add(selectLabel, BorderLayout.CENTER);
     } else {
-        JPanel detailGrid = new JPanel(new GridLayout(0, 1, 5, 10)); // Single column layout
+        // Create main content panel with efficient layout
+        JPanel mainContent = new JPanel(new BorderLayout(8, 8));
+        mainContent.setBackground(ModernTheme.SURFACE);
 
+        // === TOP SECTION - Header Info ===
+        JPanel headerPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        headerPanel.setBackground(ModernTheme.SURFACE);
+        
         JLabel title = new JLabel(tp.getProfileName() + " (" + tp.getFinancialYear() + ")");
-        title.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 18));
-        detailGrid.add(title);
-        detailGrid.add(new JLabel("Profile Type: " + tp.getProfileType()));
+        title.setFont(ModernTheme.FONT_SUBTITLE);
+        title.setForeground(ModernTheme.TEXT_PRIMARY);
+        headerPanel.add(title);
+        
+        JLabel profileTypeLabel = new JLabel("Profile Type: " + tp.getProfileType());
+        profileTypeLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        profileTypeLabel.setFont(ModernTheme.FONT_SMALL);
+        headerPanel.add(profileTypeLabel);
 
-        detailGrid.add(new JSeparator());
+        // === CENTER SECTION - Financial Data in Compact Grid ===
+        JPanel financialPanel = new JPanel(new GridLayout(2, 2, 15, 8));
+        financialPanel.setBackground(ModernTheme.SURFACE);
+        financialPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1), 
+            "Financial Summary",
+            0, 0, ModernTheme.FONT_SMALL, ModernTheme.TEXT_SECONDARY));
 
-        // --- Core Calculation Display ---
+        // Income section
+        JPanel incomePanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        incomePanel.setBackground(ModernTheme.SURFACE);
         JLabel grossLabel = new JLabel(String.format("Gross Income: ₹%.2f", tp.getGrossIncome()));
-        grossLabel.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
-        detailGrid.add(grossLabel);
+        grossLabel.setFont(ModernTheme.FONT_BODY);
+        grossLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        JLabel deducLabel = new JLabel(String.format("Deductions: -₹%.2f", tp.getTotalDeductions()));
+        deducLabel.setForeground(ModernTheme.DANGER);
+        deducLabel.setFont(ModernTheme.FONT_SMALL);
+        incomePanel.add(grossLabel);
+        incomePanel.add(deducLabel);
 
-        JLabel deducLabel = new JLabel(String.format("Total Deductions: - ₹%.2f", tp.getTotalDeductions()));
-        deducLabel.setForeground(java.awt.Color.RED);
-        deducLabel.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
-        detailGrid.add(deducLabel);
+        // Taxable income - highlighted
+        JPanel taxablePanel = new JPanel(new BorderLayout());
+        taxablePanel.setBackground(ModernTheme.SURFACE);
+        taxablePanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ModernTheme.PRIMARY, 2),
+            BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+        JLabel taxableLabel = new JLabel(String.format("₹%.2f", tp.getTaxableIncome()));
+        taxableLabel.setFont(ModernTheme.FONT_HEADER);
+        taxableLabel.setForeground(ModernTheme.PRIMARY);
+        taxableLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        JLabel taxableTitle = new JLabel("Taxable Income");
+        taxableTitle.setFont(ModernTheme.FONT_SMALL);
+        taxableTitle.setForeground(ModernTheme.TEXT_SECONDARY);
+        taxableTitle.setHorizontalAlignment(SwingConstants.CENTER);
+        taxablePanel.add(taxableTitle, BorderLayout.NORTH);
+        taxablePanel.add(taxableLabel, BorderLayout.CENTER);
 
-        detailGrid.add(new JSeparator());
+        // Tax paid
+        JPanel taxPaidPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        taxPaidPanel.setBackground(ModernTheme.SURFACE);
+        JLabel taxPaidTitle = new JLabel("Tax Paid (TDS):");
+        taxPaidTitle.setFont(ModernTheme.FONT_SMALL);
+        taxPaidTitle.setForeground(ModernTheme.TEXT_SECONDARY);
+        JLabel taxPaidLabel = new JLabel(String.format("₹%.2f", tp.getTaxPaid()));
+        taxPaidLabel.setForeground(ModernTheme.SUCCESS);
+        taxPaidLabel.setFont(ModernTheme.FONT_BODY);
+        taxPaidPanel.add(taxPaidTitle);
+        taxPaidPanel.add(taxPaidLabel);
 
-        JLabel taxableLabel = new JLabel(String.format("Total Taxable Income: ₹%.2f", tp.getTaxableIncome()));
-        taxableLabel.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 16));
-        detailGrid.add(taxableLabel);
+        financialPanel.add(incomePanel);
+        financialPanel.add(taxablePanel);
+        financialPanel.add(taxPaidPanel);
+        financialPanel.add(new JLabel("")); // Empty space for balance
 
-        detailGrid.add(new JSeparator());
+        // === BOTTOM SECTION - Notes and Actions ===
+        JPanel bottomPanel = new JPanel(new BorderLayout(0, 8));
+        bottomPanel.setBackground(ModernTheme.SURFACE);
 
-        JLabel taxPaidLabel = new JLabel(String.format("Tax Already Paid (TDS, etc.): ₹%.2f", tp.getTaxPaid()));
-        detailGrid.add(taxPaidLabel);
-
+        // Compact notes section
         if (tp.getNotes() != null && !tp.getNotes().isEmpty()) {
-            detailGrid.add(new JSeparator());
-            JTextArea notesArea = new JTextArea("Notes:\n" + tp.getNotes());
-            notesArea.setEditable(false);
-            notesArea.setLineWrap(true);
-            notesArea.setWrapStyleWord(true);
-            detailGrid.add(notesArea);
+            JPanel notesPanel = new JPanel(new BorderLayout());
+            notesPanel.setBackground(ModernTheme.SURFACE);
+            notesPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(ModernTheme.BORDER, 1), 
+                "Notes",
+                0, 0, ModernTheme.FONT_SMALL, ModernTheme.TEXT_SECONDARY));
+            
+            JLabel notesLabel = new JLabel("<html>" + tp.getNotes().replace("\n", "<br>") + "</html>");
+            notesLabel.setFont(ModernTheme.FONT_SMALL);
+            notesLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+            notesLabel.setVerticalAlignment(SwingConstants.TOP);
+            notesPanel.add(notesLabel, BorderLayout.CENTER);
+            bottomPanel.add(notesPanel, BorderLayout.CENTER);
         }
 
-        // --- Buttons ---
-        JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton editButton = new JButton("Edit Profile");
+        // Action button
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        buttonPanel.setBackground(ModernTheme.SURFACE);
+        JButton editButton = ModernTheme.createPrimaryButton("Edit Profile");
         editButton.addActionListener(e -> openAddEditTaxProfileDialog(tp));
-        buttonSubPanel.add(editButton);
+        buttonPanel.add(editButton);
+        bottomPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        taxDetailPanel.add(detailGrid, BorderLayout.NORTH);
-        taxDetailPanel.add(buttonSubPanel, BorderLayout.CENTER);
+        // Assemble everything
+        mainContent.add(headerPanel, BorderLayout.NORTH);
+        mainContent.add(financialPanel, BorderLayout.CENTER);
+        mainContent.add(bottomPanel, BorderLayout.SOUTH);
+        
+        taxDetailPanel.add(mainContent, BorderLayout.CENTER);
     }
     taxDetailPanel.revalidate();
     taxDetailPanel.repaint();
@@ -2865,13 +3983,15 @@ private void deleteSelectedTaxProfile() {
         
         try {
             if (scope.equals("Month")) {
-                JScrollPane currentScrollPane = (JScrollPane) monthTabs.getSelectedComponent();
-                if (currentScrollPane == null) {
-                    JOptionPane.showMessageDialog(this, "No month tab selected.", "Export Error", JOptionPane.WARNING_MESSAGE);
+                String selectedMonth = (String) monthComboBox.getSelectedItem();
+                if (selectedMonth == null || "All Months".equals(selectedMonth)) {
+                    JOptionPane.showMessageDialog(this, "Please select a specific month to export.", "Export Error", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
-                JTable currentTable = (JTable) currentScrollPane.getViewport().getView();
-                String monthYear = (String) currentTable.getClientProperty("monthYear");
+                
+                // Export from the current filtered table
+                JTable currentTable = transactionsTable;
+                String selectedYear = (String) yearComboBox.getSelectedItem();
                 
                 // Get filtered/sorted data directly from the JTable
                 for (int i = 0; i < currentTable.getRowCount(); i++) {
@@ -2891,7 +4011,7 @@ private void deleteSelectedTaxProfile() {
                          (String) currentTable.getValueAt(i, 7)  // Payee
                      ));
                 }
-                defaultFilename = getMonthName(monthYear) + "_Transactions";
+                defaultFilename = selectedMonth + "_" + selectedYear + "_Transactions";
                 
             } else { // "Year"
                 String selectedYear = (String) yearComboBox.getSelectedItem();
@@ -3037,7 +4157,7 @@ public void refreshLoans() {
     System.out.println("--- Refreshing Loans ---");
     loanListModel.clear();
     loanDetailPanel.removeAll();
-    loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    loanDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a loan to view details."), BorderLayout.CENTER);
     loanDetailPanel.revalidate();
     loanDetailPanel.repaint();
     try {
@@ -3057,10 +4177,14 @@ public void refreshLoans() {
  */
 private void showLoanDetails(Loan loan) {
     loanDetailPanel.removeAll();
+    loanDetailPanel.setBackground(ModernTheme.SURFACE);
+    
     if (loan == null) {
-        loanDetailPanel.add(new JLabel("Select a loan to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        JLabel selectLabel = ModernTheme.createPlaceholderLabel("Select a loan to view details.");
+        loanDetailPanel.add(selectLabel, BorderLayout.CENTER);
     } else {
         JPanel detailGrid = new JPanel(new GridBagLayout());
+        detailGrid.setBackground(ModernTheme.SURFACE);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 5, 4, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -3070,14 +4194,15 @@ private void showLoanDetails(Loan loan) {
 
         // --- Title ---
         JLabel title = new JLabel(loan.getLenderName() + " - " + loan.getLoanType());
-        title.setFont(new Font("Arial", Font.BOLD, 18));
+        title.setFont(ModernTheme.FONT_SUBTITLE);
+        title.setForeground(ModernTheme.TEXT_PRIMARY);
         gbc.gridx = 0; gbc.gridy = row++; gbc.gridwidth = 2;
         detailGrid.add(title, gbc);
 
         // --- EMI ---
         JLabel emiLabel = new JLabel(String.format("Monthly EMI: ₹%.2f", loan.getEmiAmount()));
-        emiLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        emiLabel.setForeground(new Color(0, 100, 0)); // Dark green
+        emiLabel.setFont(ModernTheme.FONT_HEADER);
+        emiLabel.setForeground(ModernTheme.DANGER); // Red for EMI (expense)
         gbc.gridy = row++;
         detailGrid.add(emiLabel, gbc);
 
@@ -3087,49 +4212,107 @@ private void showLoanDetails(Loan loan) {
 
         // --- Loan Details ---
         gbc.gridwidth = 1; // Reset to 1 column
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Principal Amount:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", loan.getPrincipalAmount())), gbc);
+        
+        JLabel principalLabelKey = new JLabel("Principal Amount:");
+        principalLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        principalLabelKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(principalLabelKey, gbc);
+        
+        JLabel principalLabelValue = new JLabel(String.format("₹%.2f", loan.getPrincipalAmount()));
+        principalLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        principalLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(principalLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Annual Interest Rate:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("%.2f %%", loan.getInterestRate())), gbc);
+        JLabel rateLabelKey = new JLabel("Annual Interest Rate:");
+        rateLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        rateLabelKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(rateLabelKey, gbc);
+        
+        JLabel rateLabelValue = new JLabel(String.format("%.2f %%", loan.getInterestRate()));
+        rateLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        rateLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(rateLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Tenure:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(loan.getTenureMonths() + " months"), gbc);
+        JLabel tenureLabelKey = new JLabel("Tenure:");
+        tenureLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        tenureLabelKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(tenureLabelKey, gbc);
+        
+        JLabel tenureLabelValue = new JLabel(loan.getTenureMonths() + " months");
+        tenureLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        tenureLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(tenureLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Start Date:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(loan.getStartDate() != null ? loan.getStartDate() : "N/A"), gbc);
+        JLabel dateLabelKey = new JLabel("Start Date:");
+        dateLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        dateLabelKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(dateLabelKey, gbc);
+        
+        JLabel dateLabelValue = new JLabel(loan.getStartDate() != null ? loan.getStartDate() : "N/A");
+        dateLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        dateLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(dateLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Status:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(loan.getStatus()), gbc);
+        JLabel statusLabelKey = new JLabel("Status:");
+        statusLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        statusLabelKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(statusLabelKey, gbc);
+        
+        JLabel statusLabelValue = new JLabel(loan.getStatus());
+        statusLabelValue.setForeground("Active".equals(loan.getStatus()) ? ModernTheme.SUCCESS : ModernTheme.TEXT_PRIMARY);
+        statusLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(statusLabelValue, gbc);
         row++;
 
         // --- Total Payment Details ---
         gbc.gridy = row++; gbc.gridwidth = 2; gbc.insets = new Insets(5, 0, 5, 0);
-        detailGrid.add(new JSeparator(), gbc);
+        JSeparator sep = new JSeparator();
+        sep.setForeground(ModernTheme.BORDER);
+        detailGrid.add(sep, gbc);
         gbc.insets = new Insets(4, 5, 4, 5);
         gbc.gridwidth = 1;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Principal Paid:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", loan.getPrincipalAmount())), gbc);
+        JLabel totalPrincipalKey = new JLabel("Total Principal Paid:");
+        totalPrincipalKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        totalPrincipalKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(totalPrincipalKey, gbc);
+        
+        JLabel totalPrincipalValue = new JLabel(String.format("₹%.2f", loan.getPrincipalAmount()));
+        totalPrincipalValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        totalPrincipalValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(totalPrincipalValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Interest Paid:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", loan.getTotalInterest())), gbc);
+        JLabel totalInterestKey = new JLabel("Total Interest Paid:");
+        totalInterestKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        totalInterestKey.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(totalInterestKey, gbc);
+        
+        JLabel totalInterestValue = new JLabel(String.format("₹%.2f", loan.getTotalInterest()));
+        totalInterestValue.setForeground(ModernTheme.DANGER);
+        totalInterestValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 1; detailGrid.add(totalInterestValue, gbc);
         row++;
 
+        JLabel totalPayKey = new JLabel("Total Payment:");
+        totalPayKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        totalPayKey.setFont(ModernTheme.FONT_HEADER);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(totalPayKey, gbc);
+        
         JLabel totalPayLabel = new JLabel(String.format("₹%.2f", loan.getTotalPayment()));
-        totalPayLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Payment:"), gbc);
+        totalPayLabel.setFont(ModernTheme.FONT_HEADER);
+        totalPayLabel.setForeground(ModernTheme.TEXT_PRIMARY);
         gbc.gridx = 1; detailGrid.add(totalPayLabel, gbc);
         row++;
 
         // --- Buttons ---
         JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton editButton = new JButton("Edit / Mark as Paid");
+        buttonSubPanel.setBackground(ModernTheme.SURFACE);
+        JButton editButton = ModernTheme.createPrimaryButton("Edit / Mark as Paid");
         editButton.addActionListener(e -> openAddEditLoanDialog(loan));
         buttonSubPanel.add(editButton);
 
@@ -3209,7 +4392,7 @@ public void refreshLendings() {
     System.out.println("--- Refreshing Lendings ---");
     lendingListModel.clear();
     lendingDetailPanel.removeAll();
-    lendingDetailPanel.add(new JLabel("Select a lending record to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+    lendingDetailPanel.add(ModernTheme.createPlaceholderLabel("Select a lending record to view details."), BorderLayout.CENTER);
     lendingDetailPanel.revalidate();
     lendingDetailPanel.repaint();
     try {
@@ -3229,10 +4412,14 @@ public void refreshLendings() {
  */
 private void showLendingDetails(Lending lending) {
     lendingDetailPanel.removeAll();
+    lendingDetailPanel.setBackground(ModernTheme.SURFACE);
+    
     if (lending == null) {
-        lendingDetailPanel.add(new JLabel("Select a record to view details.", SwingConstants.CENTER), BorderLayout.CENTER);
+        JLabel selectLabel = ModernTheme.createPlaceholderLabel("Select a lending record to view details.");
+        lendingDetailPanel.add(selectLabel, BorderLayout.CENTER);
     } else {
         JPanel detailGrid = new JPanel(new GridBagLayout());
+        detailGrid.setBackground(ModernTheme.SURFACE);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 5, 4, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -3242,14 +4429,15 @@ private void showLendingDetails(Lending lending) {
 
         // --- Title ---
         JLabel title = new JLabel(lending.getBorrowerName() + " (" + lending.getLoanType() + ")");
-        title.setFont(new Font("Arial", Font.BOLD, 18));
+        title.setFont(ModernTheme.FONT_SUBTITLE);
+        title.setForeground(ModernTheme.TEXT_PRIMARY);
         gbc.gridx = 0; gbc.gridy = row++; gbc.gridwidth = 2;
         detailGrid.add(title, gbc);
 
         // --- EMI (What they owe you) ---
         JLabel emiLabel = new JLabel(String.format("Expected Monthly Payment: ₹%.2f", lending.getMonthlyPayment()));
-        emiLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        emiLabel.setForeground(new Color(0, 100, 0)); // Dark green
+        emiLabel.setFont(ModernTheme.FONT_HEADER);
+        emiLabel.setForeground(ModernTheme.SUCCESS); // Green for income
         gbc.gridy = row++;
         detailGrid.add(emiLabel, gbc);
 
@@ -3364,4 +4552,4 @@ public void refreshAfterLendingRestore() {
     refreshLendings();
 }
 
-} 
+}
