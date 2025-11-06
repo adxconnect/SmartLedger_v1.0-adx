@@ -4,6 +4,7 @@
 ---
 
 ## 📋 Table of Contents
+<<<<<<< HEAD
 1.  [Project Overview](#project-overview)
 2.  [Technology Stack](#technology-stack)
 3.  [Architecture]    (#architecture)
@@ -14,6 +15,18 @@
 8.  [Progress & Status](#progress--status)
 9.  [Installation & Setup](#installation--setup)
 10. [Usage Guide](#usage-guide)
+=======
+1. [Project Overview](#project-overview)
+2. [Technology Stack](#technology-stack)
+3. [Architecture](#architecture)
+4. [Features & Modules](#features--modules)
+5. [UI/UX Design](#uiux-design)
+6. [Database Schema](#database-schema)
+7. [Project Structure](#project-structure)
+8. [Progress & Status](#progress--status)
+9. [Installation & Setup](#installation--setup)
+10.[Usage Guide](#usage-guide)
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
 
 ---
 
@@ -179,6 +192,7 @@ src/
 - **Financial Year**: Year-wise tax management (e.g., FY 2024-25)
 - **Income Tracking**: Gross income recording
 - **Deductions**: Total deductions tracking
+<<<<<<< HEAD
 - **Taxable Income**: Auto-calculated taxable income (highlighted in bordered section)
 - **Tax Paid**: Record of taxes paid (TDS tracking)
 - **Notes**: Additional tax-related notes with HTML rendering
@@ -189,6 +203,12 @@ src/
   - Color-coded values (red for deductions, green for tax paid, blue for taxable income)
   - Highlighted taxable income in central position
   - No scroll bar required - everything fits on one page
+=======
+- **Taxable Income**: Auto-calculated taxable income
+- **Tax Paid**: Record of taxes paid
+- **Notes**: Additional tax-related notes
+- **CRUD Operations**: Full profile management
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
 
 ### 9. **Summary & Reports**
 - **Comprehensive Dashboard**:
@@ -268,6 +288,7 @@ src/
 - Border: 1px light gray
 - Focus: Blue border with shadow
 
+<<<<<<< HEAD
 **Placeholder Labels**
 - Font: 16pt Bold (FONT_HEADER)
 - Color: Theme-aware (TEXT_PRIMARY)
@@ -275,6 +296,8 @@ src/
 - Usage: All empty state messages ("Select a...")
 - Dark Mode Compatible: Auto-switches to white text
 
+=======
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
 **Tables**
 - Row Height: 40px
 - Header: Bold with bottom border
@@ -357,6 +380,7 @@ src/
   - Action buttons at bottom
 
 ### Dark Mode Implementation
+<<<<<<< HEAD
 - **Toggle Button**: Round 44×44px button in header and login dialog
 - **Icon**: Moon (☾) in light mode, Sun (☀) in dark mode
 - **Color Switching**: Instant theme update
@@ -365,6 +389,13 @@ src/
 - **In-Place Refresh**: Components update without recreating dialogs
 - **Recursive Update**: All nested components automatically themed
 - **Placeholder Labels**: Bold text adapts to theme (black in light, white in dark)
+=======
+- **Toggle Button**: Round 44×44px button in header
+- **Icon**: Moon (☾) in light mode, Sun (☀) in dark mode
+- **Color Switching**: Instant theme update
+- **Supported Areas**: All UI components
+- **Persistence**: State maintained across dialogs
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
 
 ---
 
@@ -754,6 +785,7 @@ Total Files: 94+ Java files
 2. Some lint warnings for unused lambda parameters (cosmetic only)
 3. File-based storage methods still present (legacy code, not in use)
 
+<<<<<<< HEAD
 ### ✨ Recent Enhancements (November 2025)
 
 #### Dark Mode Improvements
@@ -785,6 +817,8 @@ Total Files: 94+ Java files
 - Corrected all refresh methods to use theme-aware placeholders
 - Resolved dark mode toggle causing logout in login dialog
 
+=======
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
 ### 📈 Code Statistics
 - **Total Java Files**: 94+
 - **Total Lines of Code**: ~30,000+
@@ -793,7 +827,10 @@ Total Files: 94+ Java files
 - **Data Models**: 8
 - **Dialog Classes**: 15+
 - **Database Tables**: 14+
+<<<<<<< HEAD
 - **Custom Theme Methods**: 15+ (including new placeholder and refresh methods)
+=======
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
 
 ---
 
@@ -1035,6 +1072,7 @@ For issues, questions, or suggestions:
 **End of Documentation**
 
 *Generated on: October 31, 2025*  
+<<<<<<< HEAD
 *Last Updated: November 6, 2025*  
 *Version: 2.0*  
 *Status: Production Ready* ✅
@@ -1085,3 +1123,7 @@ For issues, questions, or suggestions:
   - Initial documentation
   - Complete feature set implementation
   - Full database schema documentation
+=======
+*Version: 1.0*  
+*Status: Production Ready* ✅
+>>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
