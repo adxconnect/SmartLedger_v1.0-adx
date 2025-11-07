@@ -119,6 +119,7 @@ public class FinanceManagerFullUI extends JFrame {
     private JLabel expenseValueLabel; // Label to show total expense
     private JLabel balanceValueLabel; // Label to show net balance
     private JTable transactionsTable; // Single table for all transactions
+    private final List<Transaction> displayedTransactions = new ArrayList<>();
     private JScrollPane transactionsScrollPane; // ScrollPane for transactions table
     
     // --- Bank Account Tab Variables ---
@@ -704,6 +705,7 @@ public class FinanceManagerFullUI extends JFrame {
         transactionsTable.setSelectionBackground(ModernTheme.TABLE_SELECTION);
         transactionsTable.setSelectionForeground(ModernTheme.TABLE_TEXT);
         transactionsTable.setFont(ModernTheme.FONT_BODY);
+        transactionsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         
         // Style table header
         transactionsTable.getTableHeader().setBackground(ModernTheme.TABLE_HEADER);
@@ -1342,6 +1344,7 @@ cardLayout.show(mainContentPanel, "Transactions");
         // Clear current table
         DefaultTableModel model = (DefaultTableModel) transactionsTable.getModel();
         model.setRowCount(0);
+        displayedTransactions.clear();
         
         try {
             Map<String, List<Transaction>> groupedData = manager.getTransactionsGroupedByMonth(selectedYear);
@@ -1374,6 +1377,7 @@ cardLayout.show(mainContentPanel, "Transactions");
                         t.getDescription(), 
                         t.getAmount()
                     });
+                    displayedTransactions.add(t);
                     
                     // Calculate totals
                     if ("Income".equalsIgnoreCase(t.getType())) {
@@ -2673,24 +2677,65 @@ cardLayout.show(mainContentPanel, "Transactions");
             JOptionPane.showMessageDialog(this, "No transactions available.", "No Table", JOptionPane.WARNING_MESSAGE);
             return;
         }
+
         JTable currentTable = transactionsTable;
-        int selectedRow = currentTable.getSelectedRow();
-        if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "Please select a transaction to delete.", "No Transaction", JOptionPane.WARNING_MESSAGE); return;
+        int[] selectedRows = currentTable.getSelectedRows();
+        if (selectedRows.length == 0) {
+            JOptionPane.showMessageDialog(this, "Please select at least one transaction to delete.", "No Transaction", JOptionPane.WARNING_MESSAGE);
+            return;
         }
-            // Get the actual database ID from the hidden column (index 10)
-            int modelRow = currentTable.convertRowIndexToModel(selectedRow);
-            DefaultTableModel model = (DefaultTableModel) currentTable.getModel();
-            int transactionId = (int) model.getValueAt(modelRow, 10);
-        String desc = String.valueOf(currentTable.getValueAt(selectedRow, 8)); // Use String.valueOf for safety
-        int choice = JOptionPane.showConfirmDialog(this, "Move this transaction to the recycle bin?\nID: " + transactionId + " (" + desc + ")", "Confirm Delete", JOptionPane.YES_NO_OPTION);
-        if (choice == JOptionPane.YES_OPTION) {
-            try {
-                manager.deleteTransactionById(transactionId);
-                refreshTransactions();
-            } catch (SQLException e) {
-                JOptionPane.showMessageDialog(this, "Error deleting: " + e.getMessage());
+
+        java.util.List<Integer> transactionIds = new java.util.ArrayList<>();
+        java.util.List<String> transactionDescriptions = new java.util.ArrayList<>();
+
+        for (int viewRow : selectedRows) {
+            int modelRow = currentTable.convertRowIndexToModel(viewRow);
+            if (modelRow < 0 || modelRow >= displayedTransactions.size()) {
+                continue;
             }
+
+            Transaction selectedTxn = displayedTransactions.get(modelRow);
+            transactionIds.add(selectedTxn.getId());
+
+            String desc = selectedTxn.getDescription();
+            if (desc == null || desc.trim().isEmpty()) {
+                desc = defaultIfEmpty(selectedTxn.getPayee(), "No description");
+            }
+            transactionDescriptions.add(desc);
+        }
+
+        if (transactionIds.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Unable to determine the selected transaction IDs.", "Delete Failed", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        String message;
+        if (transactionIds.size() == 1) {
+            message = "Move this transaction to the recycle bin?\nID: " + transactionIds.get(0) +
+                      " (" + transactionDescriptions.get(0) + ")";
+        } else {
+            StringJoiner preview = new StringJoiner(", ");
+            for (int i = 0; i < Math.min(3, transactionDescriptions.size()); i++) {
+                preview.add(transactionDescriptions.get(i));
+            }
+            if (transactionDescriptions.size() > 3) {
+                preview.add("...");
+            }
+            message = "Move " + transactionIds.size() + " selected transactions to the recycle bin?\nExamples: " + preview;
+        }
+
+        int choice = JOptionPane.showConfirmDialog(this, message, "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            for (int txnId : transactionIds) {
+                manager.deleteTransactionById(txnId);
+            }
+            refreshTransactions();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error deleting transactions: " + e.getMessage(), "Delete Failed", JOptionPane.ERROR_MESSAGE);
         }
     }
 
