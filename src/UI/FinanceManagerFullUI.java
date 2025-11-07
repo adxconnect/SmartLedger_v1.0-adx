@@ -405,16 +405,7 @@ public class FinanceManagerFullUI extends JFrame {
         JButton logoutBtn = ModernTheme.createDangerButton("Logout");
         logoutBtn.setPreferredSize(new Dimension(110, 36));
         logoutBtn.addActionListener(e -> {
-            int confirm = JOptionPane.showConfirmDialog(
-                this,
-                "Are you sure you want to logout?",
-                "Confirm Logout",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE
-            );
-            if (confirm == JOptionPane.YES_OPTION) {
-                performLogout();
-            }
+            showModernLogoutDialog();
         });
         
         rightPanel.add(logoutBtn);
@@ -1206,10 +1197,20 @@ lendingSplitPane.setRightComponent(lendingDetailPanel);
 lePanel.add(lendingSplitPane, BorderLayout.CENTER);
 
 // --- Bottom Button Panel ---
-JPanel lendingButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-JButton addLendingBtn = new JButton("Add New Lending");
-JButton deleteLendingBtn = new JButton("Delete Selected Lending");
-JButton lendingRecycleBinBtn = new JButton("Lending Recycle Bin");
+JPanel lendingButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 10));
+lendingButtonPanel.setBackground(ModernTheme.BACKGROUND);
+
+JButton addLendingBtn = ModernTheme.createPrimaryButton("Add New Lending");
+addLendingBtn.setIcon(ModernIcons.create(IconType.ADD, ModernTheme.TEXT_WHITE, 16));
+addLendingBtn.setPreferredSize(new Dimension(180, 40));
+
+JButton deleteLendingBtn = ModernTheme.createDangerButton("Delete Selected Lending");
+deleteLendingBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+deleteLendingBtn.setPreferredSize(new Dimension(220, 40));
+
+JButton lendingRecycleBinBtn = ModernTheme.createSecondaryButton("Lending Recycle Bin");
+lendingRecycleBinBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+lendingRecycleBinBtn.setPreferredSize(new Dimension(180, 40));
 
 lendingButtonPanel.add(addLendingBtn);
 lendingButtonPanel.add(deleteLendingBtn);
@@ -1384,10 +1385,10 @@ cardLayout.show(mainContentPanel, "Transactions");
                 }
             }
             
-            // Update summary cards
-            incomeValueLabel.setText(String.format("₹%.2f", totalIncome));
-            expenseValueLabel.setText(String.format("₹%.2f", totalExpense));
-            balanceValueLabel.setText(String.format("₹%.2f", totalIncome - totalExpense));
+            // Update summary cards with Indian currency formatting
+            incomeValueLabel.setText(formatIndianCurrency(totalIncome));
+            expenseValueLabel.setText(formatIndianCurrency(totalExpense));
+            balanceValueLabel.setText(formatIndianCurrency(totalIncome - totalExpense));
             
             deleteMonthButton.setEnabled(hasTransactions && !"All Months".equals(selectedMonth));
             
@@ -1399,6 +1400,237 @@ cardLayout.show(mainContentPanel, "Transactions");
         if (txnSearchField != null && txnSearchColumn != null) {
             applyTransactionSearchFilter(txnSearchField.getText(), (String) txnSearchColumn.getSelectedItem());
         }
+    }
+
+    // Modern confirmation dialog with warning icon (PUBLIC for dialogs to use)
+    public int showModernConfirmDialog(String title, String message, String subtitle, boolean isWarning) {
+        JDialog confirmDialog = new JDialog(this, title, true);
+        confirmDialog.setLayout(new BorderLayout(12, 12));
+        confirmDialog.setBackground(ModernTheme.SURFACE);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout(12, 12));
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        
+        // Content panel
+        JPanel contentPanel = new JPanel(new BorderLayout(12, 8));
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        
+        // Icon
+        JLabel iconLabel = new JLabel(isWarning ? "⚠" : "❓");
+        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 36));
+        iconLabel.setForeground(isWarning ? new Color(255, 165, 0) : ModernTheme.PRIMARY);
+        contentPanel.add(iconLabel, BorderLayout.WEST);
+        
+        // Message panel
+        JPanel messagePanel = new JPanel();
+        messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.Y_AXIS));
+        messagePanel.setBackground(ModernTheme.SURFACE);
+        
+        JLabel messageLabel = new JLabel("<html>" + message + "</html>");
+        messageLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 14f));
+        messageLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        
+        JLabel subtitleLabel = new JLabel("<html>" + subtitle + "</html>");
+        subtitleLabel.setFont(ModernTheme.FONT_BODY.deriveFont(12f));
+        subtitleLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        
+        messagePanel.add(messageLabel);
+        messagePanel.add(Box.createVerticalStrut(8));
+        messagePanel.add(subtitleLabel);
+        
+        contentPanel.add(messagePanel, BorderLayout.CENTER);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
+        buttonPanel.setBackground(ModernTheme.SURFACE);
+        
+        JButton noBtn = ModernTheme.createSecondaryButton("No");
+        noBtn.setPreferredSize(new Dimension(100, 38));
+        
+        JButton yesBtn = ModernTheme.createDangerButton("Yes");
+        yesBtn.setPreferredSize(new Dimension(100, 38));
+        
+        final int[] result = {JOptionPane.NO_OPTION};
+        
+        yesBtn.addActionListener(e -> {
+            result[0] = JOptionPane.YES_OPTION;
+            confirmDialog.dispose();
+        });
+        
+        noBtn.addActionListener(e -> {
+            result[0] = JOptionPane.NO_OPTION;
+            confirmDialog.dispose();
+        });
+        
+        buttonPanel.add(yesBtn);
+        buttonPanel.add(noBtn);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        confirmDialog.add(mainPanel);
+        confirmDialog.setSize(500, 200);
+        confirmDialog.setLocationRelativeTo(this);
+        confirmDialog.setVisible(true);
+        
+        return result[0];
+    }
+
+    // Modern success dialog (PUBLIC for dialogs to use)
+    public void showModernSuccessDialog(String title, String message) {
+        JDialog successDialog = new JDialog(this, title, true);
+        successDialog.setLayout(new BorderLayout(12, 12));
+        successDialog.setBackground(ModernTheme.SURFACE);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout(12, 12));
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        
+        // Content panel
+        JPanel contentPanel = new JPanel(new BorderLayout(12, 8));
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        
+        // Success icon (✓ checkmark)
+        JLabel iconLabel = new JLabel("✓");
+        iconLabel.setFont(new Font("Segoe UI Emoji", Font.BOLD, 48));
+        iconLabel.setForeground(new Color(76, 175, 80)); // Green success color
+        contentPanel.add(iconLabel, BorderLayout.WEST);
+        
+        // Message panel
+        JPanel messagePanel = new JPanel();
+        messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.Y_AXIS));
+        messagePanel.setBackground(ModernTheme.SURFACE);
+        
+        JLabel messageLabel = new JLabel("<html>" + message + "</html>");
+        messageLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 14f));
+        messageLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        
+        messagePanel.add(messageLabel);
+        contentPanel.add(messagePanel, BorderLayout.CENTER);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
+        buttonPanel.setBackground(ModernTheme.SURFACE);
+        
+        JButton okBtn = ModernTheme.createSuccessButton("OK");
+        okBtn.setPreferredSize(new Dimension(100, 38));
+        
+        okBtn.addActionListener(e -> successDialog.dispose());
+        
+        buttonPanel.add(okBtn);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        successDialog.add(mainPanel);
+        successDialog.setSize(450, 180);
+        successDialog.setLocationRelativeTo(this);
+        successDialog.setVisible(true);
+    }
+
+    // Modern logout confirmation dialog
+    private void showModernLogoutDialog() {
+        JDialog logoutDialog = new JDialog(this, "Confirm Logout", true);
+        logoutDialog.setLayout(new BorderLayout());
+        logoutDialog.setBackground(ModernTheme.SURFACE);
+        logoutDialog.setUndecorated(true);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout(0, 0));
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ModernTheme.DANGER, 3),
+            BorderFactory.createEmptyBorder(0, 0, 0, 0)
+        ));
+        
+        // Header with close button
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(ModernTheme.DANGER);
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        
+        JLabel titleLabel = new JLabel("Confirm Logout");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 16f));
+        titleLabel.setForeground(Color.WHITE);
+        
+        JButton closeBtn = new JButton("✕");
+        closeBtn.setFont(new Font("Arial", Font.BOLD, 18));
+        closeBtn.setForeground(Color.WHITE);
+        closeBtn.setBackground(ModernTheme.DANGER);
+        closeBtn.setBorder(null);
+        closeBtn.setFocusPainted(false);
+        closeBtn.setContentAreaFilled(false);
+        closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeBtn.setPreferredSize(new Dimension(30, 30));
+        closeBtn.addActionListener(e -> logoutDialog.dispose());
+        
+        headerPanel.add(titleLabel, BorderLayout.WEST);
+        headerPanel.add(closeBtn, BorderLayout.EAST);
+        
+        // Content panel
+        JPanel contentPanel = new JPanel();
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(24, 20, 24, 20));
+        
+        // Icon and message
+        JPanel messagePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
+        messagePanel.setBackground(ModernTheme.SURFACE);
+        
+        // Icon
+        JLabel iconLabel = new JLabel("⚠");
+        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 48));
+        iconLabel.setForeground(ModernTheme.WARNING);
+        messagePanel.add(iconLabel);
+        
+        // Message text
+        JPanel textPanel = new JPanel();
+        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
+        textPanel.setBackground(ModernTheme.SURFACE);
+        
+        JLabel questionLabel = new JLabel("Are you sure you want to logout?");
+        questionLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 15f));
+        questionLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        questionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JLabel infoLabel = new JLabel("You will need to login again to access your account.");
+        infoLabel.setFont(ModernTheme.FONT_SMALL);
+        infoLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        infoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        textPanel.add(questionLabel);
+        textPanel.add(Box.createVerticalStrut(6));
+        textPanel.add(infoLabel);
+        
+        messagePanel.add(textPanel);
+        contentPanel.add(messagePanel);
+        contentPanel.add(Box.createVerticalStrut(20));
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
+        buttonPanel.setBackground(ModernTheme.SURFACE);
+        
+        JButton noBtn = ModernTheme.createSecondaryButton("No, Stay");
+        noBtn.setPreferredSize(new Dimension(120, 40));
+        noBtn.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 13f));
+        noBtn.addActionListener(e -> logoutDialog.dispose());
+        
+        JButton yesBtn = ModernTheme.createDangerButton("Yes, Logout");
+        yesBtn.setPreferredSize(new Dimension(120, 40));
+        yesBtn.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 13f));
+        yesBtn.addActionListener(e -> {
+            logoutDialog.dispose();
+            performLogout();
+        });
+        
+        buttonPanel.add(noBtn);
+        buttonPanel.add(yesBtn);
+        contentPanel.add(buttonPanel);
+        
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        
+        logoutDialog.add(mainPanel);
+        logoutDialog.setSize(480, 230);
+        logoutDialog.setLocationRelativeTo(this);
+        logoutDialog.setVisible(true);
     }
 
     // Applies a RowFilter to the transactions table based on the text and target column
@@ -1572,6 +1804,7 @@ cardLayout.show(mainContentPanel, "Transactions");
 
     // Consistent modern thin scrollbars across panes
     private void styleModernScrollBar(JScrollPane scrollPane) {
+        // Style Vertical ScrollBar
         JScrollBar vbar = scrollPane.getVerticalScrollBar();
         if (vbar != null) {
             vbar.setUnitIncrement(16);
@@ -1617,6 +1850,54 @@ cardLayout.show(mainContentPanel, "Transactions");
                 }
             });
             vbar.setPreferredSize(new Dimension(10, vbar.getPreferredSize().height));
+        }
+        
+        // Style Horizontal ScrollBar
+        JScrollBar hbar = scrollPane.getHorizontalScrollBar();
+        if (hbar != null) {
+            hbar.setUnitIncrement(16);
+            hbar.setUI(new javax.swing.plaf.basic.BasicScrollBarUI() {
+                @Override
+                protected void configureScrollBarColors() {
+                    thumbColor = ModernTheme.PRIMARY;
+                    trackColor = ModernTheme.SURFACE;
+                }
+                @Override
+                protected Dimension getMinimumThumbSize() {
+                    return new Dimension(30, 10);
+                }
+                @Override
+                protected Dimension getMaximumThumbSize() {
+                    return new Dimension(Integer.MAX_VALUE, 10);
+                }
+                @Override
+                protected JButton createDecreaseButton(int orientation) { return createZeroButton(); }
+                @Override
+                protected JButton createIncreaseButton(int orientation) { return createZeroButton(); }
+                private JButton createZeroButton() {
+                    JButton b = new JButton();
+                    b.setPreferredSize(new Dimension(0, 0));
+                    b.setMinimumSize(new Dimension(0, 0));
+                    b.setMaximumSize(new Dimension(0, 0));
+                    return b;
+                }
+                @Override
+                protected void paintThumb(Graphics g, JComponent c, Rectangle thumbBounds) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(ModernTheme.PRIMARY);
+                    g2.fillRoundRect(thumbBounds.x, thumbBounds.y, thumbBounds.width, thumbBounds.height, 10, 10);
+                    g2.dispose();
+                }
+                @Override
+                protected void paintTrack(Graphics g, JComponent c, Rectangle trackBounds) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setColor(ModernTheme.SURFACE);
+                    g2.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
+                    g2.dispose();
+                }
+            });
+            hbar.setPreferredSize(new Dimension(hbar.getPreferredSize().width, 10));
         }
     }
 
@@ -2994,34 +3275,93 @@ cardLayout.show(mainContentPanel, "Transactions");
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 
-                // Gradient background
-                GradientPaint gradient = new GradientPaint(0, 0, bgColor, 0, getHeight(), darkColor);
+                // Modern gradient background with subtle shadow effect
+                GradientPaint gradient = new GradientPaint(0, 0, bgColor, getWidth(), getHeight(), darkColor);
                 g2.setPaint(gradient);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                
+                // Add subtle inner shadow for depth
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.1f));
+                g2.setColor(Color.BLACK);
+                g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 18, 18);
                 
                 g2.dispose();
             }
         };
-        card.setLayout(new BorderLayout(10, 10));
-        card.setPreferredSize(new Dimension(200, 100));
-        card.setBorder(new EmptyBorder(15, 20, 15, 20));
+        card.setLayout(new GridBagLayout());
+        card.setPreferredSize(new Dimension(280, 120));
+        card.setBorder(new EmptyBorder(20, 25, 20, 25));
         card.setOpaque(false);
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        
+        // Icon Label (using emoji icons)
+        String iconText = "";
+        if (title.contains("Income")) {
+            iconText = "💰"; // Money bag for income
+        } else if (title.contains("Expense")) {
+            iconText = "💸"; // Money with wings for expense
+        } else if (title.contains("Balance")) {
+            iconText = "📊"; // Chart for balance
+        }
+        
+        JLabel iconLabel = new JLabel(iconText);
+        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 42));
+        iconLabel.setForeground(Color.WHITE);
+        iconLabel.setHorizontalAlignment(SwingConstants.LEFT);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 1;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(0, 0, 10, 15);
+        card.add(iconLabel, gbc);
+        
+        // Right panel with title and value
+        JPanel rightPanel = new JPanel(new BorderLayout(0, 8));
+        rightPanel.setOpaque(false);
         
         // Title Label
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        titleLabel.setForeground(Color.WHITE);
-        titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        titleLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 13f));
+        titleLabel.setForeground(new Color(255, 255, 255, 200)); // Slightly transparent white
+        titleLabel.setHorizontalAlignment(SwingConstants.LEFT);
+        rightPanel.add(titleLabel, BorderLayout.NORTH);
         
-        // Value Label (passed as parameter)
-        valueLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        // Value Label (passed as parameter) - will use Indian formatting
+        valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         valueLabel.setForeground(Color.WHITE);
-        valueLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        valueLabel.setHorizontalAlignment(SwingConstants.LEFT);
+        rightPanel.add(valueLabel, BorderLayout.CENTER);
         
-        card.add(titleLabel, BorderLayout.NORTH);
-        card.add(valueLabel, BorderLayout.CENTER);
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        gbc.weightx = 1.0;
+        gbc.insets = new Insets(0, 0, 0, 0);
+        gbc.anchor = GridBagConstraints.CENTER;
+        card.add(rightPanel, gbc);
         
         return card;
+    }
+    
+    /**
+     * Formats currency in Indian numbering system (Lakhs and Crores)
+     * with appropriate suffix
+     */
+    private String formatIndianCurrency(double value) {
+        String sign = value < 0 ? "-" : "";
+        value = Math.abs(value);
+        
+        if (value >= 10000000) { // 1 crore or more
+            return String.format("%s₹%.2f Cr", sign, value / 10000000);
+        } else if (value >= 100000) { // 1 lakh or more
+            return String.format("%s₹%.2f L", sign, value / 100000);
+        } else if (value >= 1000) { // 1 thousand or more
+            return String.format("%s₹%.2f K", sign, value / 1000);
+        } else {
+            return String.format("%s₹%.2f", sign, value);
+        }
     }
     
     // --- Logout Method ---
@@ -3053,6 +3393,7 @@ cardLayout.show(mainContentPanel, "Transactions");
             refreshInvestments();
             refreshTaxProfiles();
             refreshLoans();
+            refreshLendings();
             refreshCards();
             regenerateSummary();
         
@@ -4447,24 +4788,55 @@ private void showLendingDetails(Lending lending) {
 
         // --- Loan Details ---
         gbc.gridwidth = 1; // Reset to 1 column
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Principal Lent:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", lending.getPrincipalAmount())), gbc);
+        
+        JLabel principalLabelKey = new JLabel("Principal Lent:");
+        principalLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        principalLabelKey.setFont(ModernTheme.FONT_BODY);
+        JLabel principalLabelValue = new JLabel(String.format("₹%.2f", lending.getPrincipalAmount()));
+        principalLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        principalLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(principalLabelKey, gbc);
+        gbc.gridx = 1; detailGrid.add(principalLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Annual Interest Rate:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("%.2f %%", lending.getInterestRate())), gbc);
+        JLabel interestLabelKey = new JLabel("Annual Interest Rate:");
+        interestLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        interestLabelKey.setFont(ModernTheme.FONT_BODY);
+        JLabel interestLabelValue = new JLabel(String.format("%.2f %%", lending.getInterestRate()));
+        interestLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        interestLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(interestLabelKey, gbc);
+        gbc.gridx = 1; detailGrid.add(interestLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Tenure:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(lending.getTenureMonths() + " months"), gbc);
+        JLabel tenureLabelKey = new JLabel("Tenure:");
+        tenureLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        tenureLabelKey.setFont(ModernTheme.FONT_BODY);
+        JLabel tenureLabelValue = new JLabel(lending.getTenureMonths() + " months");
+        tenureLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        tenureLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(tenureLabelKey, gbc);
+        gbc.gridx = 1; detailGrid.add(tenureLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Date Lent:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(lending.getDateLent() != null ? lending.getDateLent() : "N/A"), gbc);
+        JLabel dateLabelKey = new JLabel("Date Lent:");
+        dateLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        dateLabelKey.setFont(ModernTheme.FONT_BODY);
+        JLabel dateLabelValue = new JLabel(lending.getDateLent() != null ? lending.getDateLent() : "N/A");
+        dateLabelValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        dateLabelValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(dateLabelKey, gbc);
+        gbc.gridx = 1; detailGrid.add(dateLabelValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Status:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(lending.getStatus()), gbc);
+        JLabel statusLabelKey = new JLabel("Status:");
+        statusLabelKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        statusLabelKey.setFont(ModernTheme.FONT_BODY);
+        JLabel statusLabelValue = new JLabel(lending.getStatus());
+        statusLabelValue.setForeground(lending.getStatus().equalsIgnoreCase("Repaid") ? ModernTheme.SUCCESS : ModernTheme.WARNING);
+        statusLabelValue.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD));
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(statusLabelKey, gbc);
+        gbc.gridx = 1; detailGrid.add(statusLabelValue, gbc);
         row++;
 
         // --- Total Payment Details ---
@@ -4473,23 +4845,42 @@ private void showLendingDetails(Lending lending) {
         gbc.insets = new Insets(4, 5, 4, 5);
         gbc.gridwidth = 1;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Principal:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", lending.getPrincipalAmount())), gbc);
+        JLabel totalPrincipalKey = new JLabel("Total Principal:");
+        totalPrincipalKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        totalPrincipalKey.setFont(ModernTheme.FONT_BODY);
+        JLabel totalPrincipalValue = new JLabel(String.format("₹%.2f", lending.getPrincipalAmount()));
+        totalPrincipalValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        totalPrincipalValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(totalPrincipalKey, gbc);
+        gbc.gridx = 1; detailGrid.add(totalPrincipalValue, gbc);
         row++;
 
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total Interest to Receive:"), gbc);
-        gbc.gridx = 1; detailGrid.add(new JLabel(String.format("₹%.2f", lending.getTotalInterestToReceive())), gbc);
+        JLabel totalInterestKey = new JLabel("Total Interest to Receive:");
+        totalInterestKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        totalInterestKey.setFont(ModernTheme.FONT_BODY);
+        JLabel totalInterestValue = new JLabel(String.format("₹%.2f", lending.getTotalInterestToReceive()));
+        totalInterestValue.setForeground(ModernTheme.TEXT_PRIMARY);
+        totalInterestValue.setFont(ModernTheme.FONT_BODY);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(totalInterestKey, gbc);
+        gbc.gridx = 1; detailGrid.add(totalInterestValue, gbc);
         row++;
 
+        JLabel totalReceiveKey = new JLabel("Total to Receive:");
+        totalReceiveKey.setForeground(ModernTheme.TEXT_SECONDARY);
+        totalReceiveKey.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD));
         JLabel totalPayLabel = new JLabel(String.format("₹%.2f", lending.getTotalToReceive()));
-        totalPayLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(new JLabel("Total to Receive:"), gbc);
+        totalPayLabel.setFont(ModernTheme.FONT_HEADER);
+        totalPayLabel.setForeground(ModernTheme.SUCCESS);
+        gbc.gridx = 0; gbc.gridy = row; detailGrid.add(totalReceiveKey, gbc);
         gbc.gridx = 1; detailGrid.add(totalPayLabel, gbc);
         row++;
 
         // --- Buttons ---
-        JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton editButton = new JButton("Edit / Mark as Repaid");
+        JPanel buttonSubPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        buttonSubPanel.setBackground(ModernTheme.SURFACE);
+        
+        JButton editButton = ModernTheme.createPrimaryButton("Edit / Mark as Repaid");
+        editButton.setPreferredSize(new Dimension(180, 38));
         editButton.addActionListener(e -> openAddEditLendingDialog(lending));
         buttonSubPanel.add(editButton);
 
