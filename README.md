@@ -4,7 +4,7 @@
 ---
 
 ## 📋 Table of Contents
-<<<<<<< HEAD
+
 1.  [Project Overview](#project-overview)
 2.  [Technology Stack](#technology-stack)
 3.  [Architecture]    (#architecture)
@@ -15,7 +15,9 @@
 8.  [Progress & Status](#progress--status)
 9.  [Installation & Setup](#installation--setup)
 10. [Usage Guide](#usage-guide)
+
 =======
+
 1. [Project Overview](#project-overview)
 2. [Technology Stack](#technology-stack)
 3. [Architecture](#architecture)
