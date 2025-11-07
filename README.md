@@ -1,4 +1,4 @@
-# Finance Manager - FinanceHub
+# Finance Manager - SmartLedger
 ## Comprehensive Project Documentation
 
 ---
