@@ -4,7 +4,7 @@
 ---
 
 ## 📋 Table of Contents
-<<<<<<< HEAD
+
 1.  [Project Overview](#project-overview)
 2.  [Technology Stack](#technology-stack)
 3.  [Architecture]    (#architecture)
