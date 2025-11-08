@@ -114,32 +114,44 @@ public class AddEditTaxProfileDialog extends JDialog {
 
         // Content wrapper
         JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
-        contentWrapper.setBackground(Color.WHITE);
+        contentWrapper.setBackground(ModernTheme.BACKGROUND);
         contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
         
         // --- Main Form Panel ---
         JPanel formPanel = new JPanel(new BorderLayout(10, 10));
-        formPanel.setBackground(Color.WHITE);
+        formPanel.setBackground(ModernTheme.BACKGROUND);
 
         // --- 1. Top Panel (Common Info) ---
         JPanel topPanel = new JPanel(new GridBagLayout());
-        topPanel.setBackground(Color.WHITE);
+        topPanel.setBackground(ModernTheme.BACKGROUND);
         topPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
 
-        gbc.gridx = 0; gbc.gridy = 0; topPanel.add(new JLabel("Profile Name:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel profileNameLabel = new JLabel("Profile Name:");
+        profileNameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        profileNameLabel.setFont(ModernTheme.FONT_BODY);
+        topPanel.add(profileNameLabel, gbc);
         profileNameField = new JTextField(20);
         ModernTheme.styleTextField(profileNameField);
         gbc.gridx = 1; gbc.gridwidth = 3; topPanel.add(profileNameField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; topPanel.add(new JLabel("Profile Type:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1;
+        JLabel profileTypeLabel = new JLabel("Profile Type:");
+        profileTypeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        profileTypeLabel.setFont(ModernTheme.FONT_BODY);
+        topPanel.add(profileTypeLabel, gbc);
         String[] types = {"Employee", "Company", "Other"};
         profileTypeComboBox = new JComboBox<>(types);
         ModernTheme.styleComboBox(profileTypeComboBox);
         gbc.gridx = 1; gbc.gridwidth = 1; topPanel.add(profileTypeComboBox, gbc);
 
-        gbc.gridx = 2; gbc.gridy = 1; topPanel.add(new JLabel("Financial Year:"), gbc);
+        gbc.gridx = 2; gbc.gridy = 1;
+        JLabel financialYearLabel = new JLabel("Financial Year:");
+        financialYearLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        financialYearLabel.setFont(ModernTheme.FONT_BODY);
+        topPanel.add(financialYearLabel, gbc);
         String[] years = {"2025-26", "2024-25", "2023-24", "2022-23"}; // Example years
         yearComboBox = new JComboBox<>(years);
         ModernTheme.styleComboBox(yearComboBox);
@@ -148,7 +160,7 @@ public class AddEditTaxProfileDialog extends JDialog {
         // --- 2. Center Panel (Dynamic Forms) ---
         cardLayout = new CardLayout();
         dynamicPanelContainer = new JPanel(cardLayout);
-        dynamicPanelContainer.setBackground(Color.WHITE);
+        dynamicPanelContainer.setBackground(ModernTheme.BACKGROUND);
 
         // Create the 3 dynamic panels
         employeePanel = createEmployeePanel();
@@ -161,16 +173,18 @@ public class AddEditTaxProfileDialog extends JDialog {
 
         // --- 3. Bottom Panel (Calculation & Save) ---
         JPanel bottomPanel = new JPanel(new BorderLayout(10, 10));
-        bottomPanel.setBackground(Color.WHITE);
+        bottomPanel.setBackground(ModernTheme.BACKGROUND);
         
         JPanel summaryPanel = new JPanel(new GridLayout(0, 1, 5, 5));
-        summaryPanel.setBackground(Color.WHITE);
+        summaryPanel.setBackground(ModernTheme.BACKGROUND);
         summaryPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         grossIncomeLabel = new JLabel("Gross Income: ₹0.00");
         grossIncomeLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 14f));
+        grossIncomeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
         totalDeductionsLabel = new JLabel("Total Deductions: ₹0.00");
         totalDeductionsLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 14f));
+        totalDeductionsLabel.setForeground(ModernTheme.TEXT_PRIMARY);
         taxableIncomeLabel = new JLabel("Total Taxable Income: ₹0.00");
         taxableIncomeLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 16f));
         taxableIncomeLabel.setForeground(new Color(34, 139, 34)); // Green
@@ -180,21 +194,26 @@ public class AddEditTaxProfileDialog extends JDialog {
         summaryPanel.add(taxableIncomeLabel);
         
         JPanel notesAndSavePanel = new JPanel(new BorderLayout(5, 10));
-        notesAndSavePanel.setBackground(Color.WHITE);
+        notesAndSavePanel.setBackground(ModernTheme.BACKGROUND);
         notesArea = new JTextArea(3, 20);
         notesArea.setLineWrap(true);
         notesArea.setWrapStyleWord(true);
         notesArea.setFont(ModernTheme.FONT_BODY);
         notesArea.setBackground(ModernTheme.SURFACE);
         notesArea.setForeground(ModernTheme.TEXT_PRIMARY);
+        notesArea.setCaretColor(ModernTheme.TEXT_PRIMARY);
         notesArea.setBorder(BorderFactory.createCompoundBorder(
             new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
             new EmptyBorder(8, 12, 8, 12)
         ));
-        notesAndSavePanel.add(new JScrollPane(notesArea), BorderLayout.NORTH);
+        JScrollPane notesScrollPane = new JScrollPane(notesArea);
+        notesScrollPane.setBorder(null);
+        notesScrollPane.setOpaque(false);
+        notesScrollPane.getViewport().setOpaque(false);
+        notesAndSavePanel.add(notesScrollPane, BorderLayout.NORTH);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBackground(ModernTheme.BACKGROUND);
         
         JButton calculateButton = ModernTheme.createSecondaryButton("Calculate");
         calculateButton.setIcon(ModernIcons.create(ModernIcons.IconType.MONEY, ModernTheme.TEXT_PRIMARY, 16));
@@ -278,11 +297,22 @@ public class AddEditTaxProfileDialog extends JDialog {
     // Helper to add fields to a panel and map them
     private void addCalcField(JPanel panel, GridBagConstraints gbc, String label, Map<String, JFormattedTextField> map, int y) {
         gbc.gridx = 0; gbc.gridy = y; gbc.anchor = GridBagConstraints.EAST;
-        panel.add(new JLabel(label), gbc);
+        JLabel fieldLabel = new JLabel(label);
+        fieldLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        fieldLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(fieldLabel, gbc);
         
         JFormattedTextField field = new JFormattedTextField(createNumberFormatter());
         field.setValue(0.0);
         field.setColumns(12);
+        field.setBackground(ModernTheme.SURFACE);
+        field.setForeground(ModernTheme.TEXT_PRIMARY);
+        field.setCaretColor(ModernTheme.TEXT_PRIMARY);
+        field.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
+            new EmptyBorder(6, 10, 6, 10)
+        ));
+        field.setFont(ModernTheme.FONT_BODY);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST;
         panel.add(field, gbc);
         map.put(label, field); // Store the field for calculation
@@ -290,7 +320,7 @@ public class AddEditTaxProfileDialog extends JDialog {
 
     private JPanel createEmployeePanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(ModernTheme.BACKGROUND);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL;
         
@@ -303,7 +333,11 @@ public class AddEditTaxProfileDialog extends JDialog {
         addCalcField(panel, gbc, "Other Income:", employeeIncomeFields, row++);
 
         // Spacer
-        gbc.gridy = row++; panel.add(new JSeparator(SwingConstants.HORIZONTAL), gbc);
+        JSeparator separator1 = new JSeparator(SwingConstants.HORIZONTAL);
+        separator1.setForeground(ModernTheme.BORDER);
+        separator1.setBackground(ModernTheme.BORDER);
+        gbc.gridy = row++; gbc.gridwidth = 2; panel.add(separator1, gbc);
+        gbc.gridwidth = 1; // Reset
 
         // Deductions
         addCalcField(panel, gbc, "HRA Exemption:", employeeDeductionFields, row++);
@@ -316,10 +350,21 @@ public class AddEditTaxProfileDialog extends JDialog {
 
         // Tax Paid
         gbc.gridx = 0; gbc.gridy = row; gbc.anchor = GridBagConstraints.EAST;
-        panel.add(new JLabel("Tax Paid (TDS):"), gbc);
+        JLabel taxPaidLabel = new JLabel("Tax Paid (TDS):");
+        taxPaidLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        taxPaidLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(taxPaidLabel, gbc);
         employeeTaxPaidField = new JFormattedTextField(createNumberFormatter());
         employeeTaxPaidField.setValue(0.0);
         employeeTaxPaidField.setColumns(12);
+        employeeTaxPaidField.setBackground(ModernTheme.SURFACE);
+        employeeTaxPaidField.setForeground(ModernTheme.TEXT_PRIMARY);
+        employeeTaxPaidField.setCaretColor(ModernTheme.TEXT_PRIMARY);
+        employeeTaxPaidField.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
+            new EmptyBorder(6, 10, 6, 10)
+        ));
+        employeeTaxPaidField.setFont(ModernTheme.FONT_BODY);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST;
         panel.add(employeeTaxPaidField, gbc);
 
@@ -328,14 +373,18 @@ public class AddEditTaxProfileDialog extends JDialog {
 
     private JPanel createCompanyPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(ModernTheme.BACKGROUND);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL;
         
         int row = 0;
         addCalcField(panel, gbc, "Gross Revenue/Turnover:", companyIncomeFields, row++);
         addCalcField(panel, gbc, "Other Income:", companyIncomeFields, row++);
-        gbc.gridy = row++; panel.add(new JSeparator(SwingConstants.HORIZONTAL), gbc);
+        JSeparator separator2 = new JSeparator(SwingConstants.HORIZONTAL);
+        separator2.setForeground(ModernTheme.BORDER);
+        separator2.setBackground(ModernTheme.BORDER);
+        gbc.gridy = row++; gbc.gridwidth = 2; panel.add(separator2, gbc);
+        gbc.gridwidth = 1; // Reset
         addCalcField(panel, gbc, "Cost of Goods Sold (COGS):", companyDeductionFields, row++);
         addCalcField(panel, gbc, "Employee Salaries:", companyDeductionFields, row++);
         addCalcField(panel, gbc, "Operating Expenses (Rent, Utilities):", companyDeductionFields, row++);
@@ -344,10 +393,21 @@ public class AddEditTaxProfileDialog extends JDialog {
         addCalcField(panel, gbc, "Other Expenses/Deductions:", companyDeductionFields, row++);
         
         gbc.gridx = 0; gbc.gridy = row; gbc.anchor = GridBagConstraints.EAST;
-        panel.add(new JLabel("Tax Paid (Advance, etc.):"), gbc);
+        JLabel companyTaxPaidLabel = new JLabel("Tax Paid (Advance, etc.):");
+        companyTaxPaidLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        companyTaxPaidLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(companyTaxPaidLabel, gbc);
         companyTaxPaidField = new JFormattedTextField(createNumberFormatter());
         companyTaxPaidField.setValue(0.0);
         companyTaxPaidField.setColumns(12);
+        companyTaxPaidField.setBackground(ModernTheme.SURFACE);
+        companyTaxPaidField.setForeground(ModernTheme.TEXT_PRIMARY);
+        companyTaxPaidField.setCaretColor(ModernTheme.TEXT_PRIMARY);
+        companyTaxPaidField.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
+            new EmptyBorder(6, 10, 6, 10)
+        ));
+        companyTaxPaidField.setFont(ModernTheme.FONT_BODY);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST;
         panel.add(companyTaxPaidField, gbc);
 
@@ -356,7 +416,7 @@ public class AddEditTaxProfileDialog extends JDialog {
     
     private JPanel createOtherPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(ModernTheme.BACKGROUND);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL;
 
@@ -365,16 +425,31 @@ public class AddEditTaxProfileDialog extends JDialog {
         addCalcField(panel, gbc, "Income from Property:", otherIncomeFields, row++);
         addCalcField(panel, gbc, "Interest/Dividends:", otherIncomeFields, row++);
         addCalcField(panel, gbc, "Other:", otherIncomeFields, row++);
-        gbc.gridy = row++; panel.add(new JSeparator(SwingConstants.HORIZONTAL), gbc);
+        JSeparator separator3 = new JSeparator(SwingConstants.HORIZONTAL);
+        separator3.setForeground(ModernTheme.BORDER);
+        separator3.setBackground(ModernTheme.BORDER);
+        gbc.gridy = row++; gbc.gridwidth = 2; panel.add(separator3, gbc);
+        gbc.gridwidth = 1; // Reset
         addCalcField(panel, gbc, "Capital Loss (if any):", otherDeductionFields, row++);
         addCalcField(panel, gbc, "Property Tax / Maintenance:", otherDeductionFields, row++);
         addCalcField(panel, gbc, "Other Deductions:", otherDeductionFields, row++);
         
         gbc.gridx = 0; gbc.gridy = row; gbc.anchor = GridBagConstraints.EAST;
-        panel.add(new JLabel("Tax Paid (Advance, etc.):"), gbc);
+        JLabel otherTaxPaidLabel = new JLabel("Tax Paid (Advance, etc.):");
+        otherTaxPaidLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        otherTaxPaidLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(otherTaxPaidLabel, gbc);
         otherTaxPaidField = new JFormattedTextField(createNumberFormatter());
         otherTaxPaidField.setValue(0.0);
         otherTaxPaidField.setColumns(12);
+        otherTaxPaidField.setBackground(ModernTheme.SURFACE);
+        otherTaxPaidField.setForeground(ModernTheme.TEXT_PRIMARY);
+        otherTaxPaidField.setCaretColor(ModernTheme.TEXT_PRIMARY);
+        otherTaxPaidField.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
+            new EmptyBorder(6, 10, 6, 10)
+        ));
+        otherTaxPaidField.setFont(ModernTheme.FONT_BODY);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST;
         panel.add(otherTaxPaidField, gbc);
 

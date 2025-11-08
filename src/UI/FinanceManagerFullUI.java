@@ -178,6 +178,8 @@ public class FinanceManagerFullUI extends JFrame {
     private JButton summaryExportCsvButton;
     private JButton summaryExportPdfButton;
     private JTextArea summaryOverviewArea;
+    // Scroll container for summary text (stored so we can re-style on theme changes)
+    private JScrollPane summaryOverviewScroll;
     private SummaryData currentSummarySnapshot;
     private boolean summaryTabInitialized = false;
     private static final DateTimeFormatter SUMMARY_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
@@ -2314,18 +2316,25 @@ cardLayout.show(mainContentPanel, "Transactions");
         summaryOverviewArea = new JTextArea(24, 80);
         summaryOverviewArea.setEditable(false);
         summaryOverviewArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
-        summaryOverviewArea.setBackground(ModernTheme.SURFACE);
+        summaryOverviewArea.setBackground(ModernTheme.BACKGROUND);
         summaryOverviewArea.setForeground(ModernTheme.TEXT_PRIMARY);
+        summaryOverviewArea.setCaretColor(ModernTheme.TEXT_PRIMARY);
         summaryOverviewArea.setLineWrap(true);
         summaryOverviewArea.setWrapStyleWord(true);
         summaryOverviewArea.setBorder(new EmptyBorder(10, 10, 10, 10));
+        summaryOverviewArea.setOpaque(true); // Ensure background is painted
         
-        JScrollPane summaryScroll = new JScrollPane(summaryOverviewArea);
-        summaryScroll.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
-        styleModernScrollBar(summaryScroll);
+    // Use field so we can reapply theme reliably
+    summaryOverviewScroll = new JScrollPane(summaryOverviewArea);
+    summaryOverviewScroll.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+    summaryOverviewScroll.setBackground(ModernTheme.BACKGROUND);
+    summaryOverviewScroll.setOpaque(true); // Force opaque to paint background
+    summaryOverviewScroll.getViewport().setBackground(ModernTheme.BACKGROUND);
+    summaryOverviewScroll.getViewport().setOpaque(true); // Force viewport opaque
+    styleModernScrollBar(summaryOverviewScroll);
 
-        summaryPanel.add(inputPanel, BorderLayout.NORTH);
-        summaryPanel.add(summaryScroll, BorderLayout.CENTER);
+    summaryPanel.add(inputPanel, BorderLayout.NORTH);
+    summaryPanel.add(summaryOverviewScroll, BorderLayout.CENTER);
 
         loadSummaryYearChoices();
 
@@ -4496,8 +4505,22 @@ cardLayout.show(mainContentPanel, "Transactions");
                 // Update scroll pane styling
                 if (component instanceof JScrollPane) {
                     JScrollPane scrollPane = (JScrollPane) component;
-                    scrollPane.setBackground(ModernTheme.BACKGROUND);
-                    scrollPane.getViewport().setBackground(ModernTheme.SURFACE);
+                    // Special-case the Summary area scroll so it stays dark and legible
+                    if (scrollPane == summaryOverviewScroll) {
+                        if (summaryOverviewArea != null) {
+                            summaryOverviewArea.setBackground(ModernTheme.BACKGROUND);
+                            summaryOverviewArea.setForeground(ModernTheme.TEXT_PRIMARY);
+                            summaryOverviewArea.setCaretColor(ModernTheme.TEXT_PRIMARY);
+                            summaryOverviewArea.setOpaque(true);
+                        }
+                        scrollPane.setBackground(ModernTheme.BACKGROUND);
+                        scrollPane.setOpaque(true);
+                        scrollPane.getViewport().setBackground(ModernTheme.BACKGROUND);
+                        scrollPane.getViewport().setOpaque(true);
+                    } else {
+                        scrollPane.setBackground(ModernTheme.SURFACE);
+                        scrollPane.getViewport().setBackground(ModernTheme.SURFACE);
+                    }
                     if (scrollPane.getViewport().getView() instanceof JTable) {
                         ModernTheme.styleTable((JTable) scrollPane.getViewport().getView());
                     } else if (scrollPane.getViewport().getView() instanceof JList) {

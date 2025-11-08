@@ -99,11 +99,11 @@ public class AddEditCardDialog extends JDialog {
 
         // Content wrapper
         JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
-        contentWrapper.setBackground(Color.WHITE);
+        contentWrapper.setBackground(ModernTheme.BACKGROUND);
         contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
         
         JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBackground(Color.WHITE);
+        formPanel.setBackground(ModernTheme.BACKGROUND);
         formPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(3, 5, 3, 5); // Padding
@@ -114,7 +114,10 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Card Type ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Card Type:"), gbc);
+        JLabel cardTypeLabel = new JLabel("Card Type:");
+        cardTypeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        cardTypeLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(cardTypeLabel, gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         String[] types = {"Credit Card", "Debit Card"};
         cardTypeComboBox = new JComboBox<>(types);
@@ -124,7 +127,10 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Card Name ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Card Name:"), gbc);
+        JLabel cardNameLabel = new JLabel("Card Name:");
+        cardNameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        cardNameLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(cardNameLabel, gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         cardNameField = new JTextField(25);
         ModernTheme.styleTextField(cardNameField);
@@ -133,7 +139,10 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Card Number ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Card Number (16 digits):"), gbc);
+        JLabel cardNumberLabel = new JLabel("Card Number (16 digits):");
+        cardNumberLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        cardNumberLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(cardNumberLabel, gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         cardNumberField = new JTextField(16);
         ModernTheme.styleTextField(cardNumberField);
@@ -142,14 +151,20 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Valid From / Through ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Valid From (MM/YY, Opt):"), gbc);
+        JLabel validFromLabel = new JLabel("Valid From (MM/YY, Opt):");
+        validFromLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        validFromLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(validFromLabel, gbc);
         gbc.gridx = 1; gbc.weightx = 0.5; // Share space
         validFromField = new JTextField(5);
         ModernTheme.styleTextField(validFromField);
         formPanel.add(validFromField, gbc);
 
         gbc.gridx = 2; gbc.weightx = 0; // Label doesn't need extra space
-        formPanel.add(new JLabel(" Valid Thru (MM/YY):"), gbc);
+        JLabel validThruLabel = new JLabel(" Valid Thru (MM/YY):");
+        validThruLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        validThruLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(validThruLabel, gbc);
         gbc.gridx = 3; gbc.weightx = 0.5;
         validThroughField = new JTextField(5);
         ModernTheme.styleTextField(validThroughField);
@@ -158,7 +173,10 @@ public class AddEditCardDialog extends JDialog {
 
         // --- CVV ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("CVV/CVC:"), gbc);
+        JLabel cvvLabel = new JLabel("CVV/CVC:");
+        cvvLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        cvvLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(cvvLabel, gbc);
         gbc.gridx = 1; gbc.gridwidth = 1; // Only span 1 column
         cvvField = new JPasswordField(4); // Use JPasswordField
         ModernTheme.styleTextField(cvvField);
@@ -167,7 +185,10 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Front Image ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Front Image Path:"), gbc);
+        JLabel frontImageLabel = new JLabel("Front Image Path:");
+        frontImageLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        frontImageLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(frontImageLabel, gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         frontImagePathField = new JTextField(25);
         frontImagePathField.setEditable(false); // Path set by button
@@ -180,7 +201,10 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Back Image ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Back Image Path:"), gbc);
+        JLabel backImageLabel = new JLabel("Back Image Path:");
+        backImageLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        backImageLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(backImageLabel, gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         backImagePathField = new JTextField(25);
         backImagePathField.setEditable(false);
@@ -200,7 +224,7 @@ public class AddEditCardDialog extends JDialog {
 
         // --- Button Panel ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBackground(ModernTheme.BACKGROUND);
         
         JButton saveButton = ModernTheme.createSuccessButton("Save");
         JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
@@ -228,32 +252,29 @@ public class AddEditCardDialog extends JDialog {
         }
     }
     
-    /**
-     * Creates the close button for the header (× symbol).
-     */
     private JButton createHeaderCloseButton() {
         JButton closeBtn = new JButton("×");
-        closeBtn.setFont(new Font("Arial", Font.BOLD, 20));
-        closeBtn.setForeground(Color.WHITE);
-        closeBtn.setBackground(new Color(34, 139, 34));
-        closeBtn.setBorder(new EmptyBorder(0, 10, 0, 10));
+        closeBtn.setFont(new Font("Arial", Font.PLAIN, 22));
+        closeBtn.setForeground(ModernTheme.TEXT_WHITE);
+        closeBtn.setBackground(new Color(0, 0, 0, 0));
+        closeBtn.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
         closeBtn.setFocusPainted(false);
         closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        closeBtn.addActionListener(e -> dispose());
         closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                closeBtn.setBackground(new Color(24, 119, 24));
+                closeBtn.setBackground(new Color(255, 255, 255, 30));
             }
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                closeBtn.setBackground(new Color(34, 139, 34));
+                closeBtn.setBackground(new Color(0, 0, 0, 0));
             }
         });
+        closeBtn.addActionListener(e -> dispose());
         return closeBtn;
     }
 
     private JPanel createCreditCardPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(ModernTheme.BACKGROUND);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(3, 5, 3, 5);
@@ -264,6 +285,8 @@ public class AddEditCardDialog extends JDialog {
         // Credit Limit
         gbc.gridx = 0; gbc.gridy = row;
         creditLimitLabel = new JLabel("Credit Limit:");
+        creditLimitLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        creditLimitLabel.setFont(ModernTheme.FONT_BODY);
         panel.add(creditLimitLabel, gbc);
         gbc.gridx = 1;
         creditLimitField = new JTextField("0.0", 10);
@@ -274,6 +297,8 @@ public class AddEditCardDialog extends JDialog {
         // Current Expenses
         gbc.gridx = 0; gbc.gridy = row;
         currentExpensesLabel = new JLabel("Current Expenses:");
+        currentExpensesLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        currentExpensesLabel.setFont(ModernTheme.FONT_BODY);
         panel.add(currentExpensesLabel, gbc);
         gbc.gridx = 1;
         currentExpensesField = new JTextField("0.0", 10);
@@ -284,6 +309,8 @@ public class AddEditCardDialog extends JDialog {
         // Amount To Pay
         gbc.gridx = 0; gbc.gridy = row;
         amountToPayLabel = new JLabel("Amount To Pay:");
+        amountToPayLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        amountToPayLabel.setFont(ModernTheme.FONT_BODY);
         panel.add(amountToPayLabel, gbc);
         gbc.gridx = 1;
         amountToPayField = new JTextField("0.0", 10);
@@ -294,6 +321,8 @@ public class AddEditCardDialog extends JDialog {
         // Days Left
         gbc.gridx = 0; gbc.gridy = row;
         daysLeftLabel = new JLabel("Days Left To Pay:");
+        daysLeftLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        daysLeftLabel.setFont(ModernTheme.FONT_BODY);
         panel.add(daysLeftLabel, gbc);
         gbc.gridx = 1;
         daysLeftField = new JTextField("0", 5);

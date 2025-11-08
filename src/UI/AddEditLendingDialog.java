@@ -83,11 +83,11 @@ public class AddEditLendingDialog extends JDialog {
 
         // Content wrapper
         JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
-        contentWrapper.setBackground(Color.WHITE);
+        contentWrapper.setBackground(ModernTheme.BACKGROUND);
         contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
         
         JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBackground(Color.WHITE);
+        formPanel.setBackground(ModernTheme.BACKGROUND);
         formPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 5, 4, 5);
@@ -98,7 +98,10 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Borrower Name ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Borrower Name:"), gbc);
+        JLabel borrowerNameLabel = new JLabel("Borrower Name:");
+        borrowerNameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        borrowerNameLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(borrowerNameLabel, gbc);
         gbc.gridx = 1;
         borrowerNameField = new JTextField(20);
         ModernTheme.styleTextField(borrowerNameField);
@@ -107,7 +110,10 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Loan Type ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Loan Type:"), gbc);
+        JLabel loanTypeLabel = new JLabel("Loan Type:");
+        loanTypeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        loanTypeLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(loanTypeLabel, gbc);
         gbc.gridx = 1;
         String[] types = {"Friend", "Family", "Business", "Other"};
         loanTypeComboBox = new JComboBox<>(types);
@@ -117,7 +123,10 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Principal Amount ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Principal Amount (₹):"), gbc);
+        JLabel principalLabel = new JLabel("Principal Amount (₹):");
+        principalLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        principalLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(principalLabel, gbc);
         gbc.gridx = 1;
         principalField = new JTextField("0.0", 15);
         ModernTheme.styleTextField(principalField);
@@ -126,7 +135,10 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Interest Rate ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Annual Interest Rate (%):"), gbc);
+        JLabel rateLabel = new JLabel("Annual Interest Rate (%):");
+        rateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        rateLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(rateLabel, gbc);
         gbc.gridx = 1;
         rateField = new JTextField("0.0", 15);
         ModernTheme.styleTextField(rateField);
@@ -135,7 +147,10 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Tenure ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Tenure (in Months):"), gbc);
+        JLabel tenureLabel = new JLabel("Tenure (in Months):");
+        tenureLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        tenureLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(tenureLabel, gbc);
         gbc.gridx = 1;
         tenureField = new JTextField("0", 15);
         ModernTheme.styleTextField(tenureField);
@@ -144,7 +159,10 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Date Lent ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Date Lent (dd-MM-yyyy):"), gbc);
+        JLabel dateLentLabel = new JLabel("Date Lent (dd-MM-yyyy):");
+        dateLentLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        dateLentLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(dateLentLabel, gbc);
         gbc.gridx = 1;
         dateLentField = new JTextField(10);
         dateLentField.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
@@ -154,6 +172,8 @@ public class AddEditLendingDialog extends JDialog {
         
         // --- Status (Only visible when editing) ---
         JLabel statusLabel = new JLabel("Status:");
+        statusLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        statusLabel.setFont(ModernTheme.FONT_BODY);
         String[] statuses = {"Active", "Repaid"};
         statusComboBox = new JComboBox<>(statuses);
         ModernTheme.styleComboBox(statusComboBox);
@@ -167,23 +187,32 @@ public class AddEditLendingDialog extends JDialog {
 
         // --- Notes ---
         gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Notes:"), gbc);
+        JLabel notesLabel = new JLabel("Notes:");
+        notesLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        notesLabel.setFont(ModernTheme.FONT_BODY);
+        formPanel.add(notesLabel, gbc);
         gbc.gridx = 1;
         notesArea = new JTextArea(3, 20);
         notesArea.setLineWrap(true);
         notesArea.setWrapStyleWord(true);
         notesArea.setFont(ModernTheme.FONT_BODY);
-        JScrollPane notesScrollPane = new JScrollPane(notesArea);
-        notesScrollPane.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(ModernTheme.TEXT_SECONDARY, 1, true),
-            new EmptyBorder(5, 5, 5, 5)
+        notesArea.setBackground(ModernTheme.SURFACE);
+        notesArea.setForeground(ModernTheme.TEXT_PRIMARY);
+        notesArea.setCaretColor(ModernTheme.TEXT_PRIMARY);
+        notesArea.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
+            new EmptyBorder(8, 12, 8, 12)
         ));
+        JScrollPane notesScrollPane = new JScrollPane(notesArea);
+        notesScrollPane.setBorder(null);
+        notesScrollPane.setOpaque(false);
+        notesScrollPane.getViewport().setOpaque(false);
         formPanel.add(notesScrollPane, gbc);
         row++;
 
         // --- Button Panel ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBackground(ModernTheme.BACKGROUND);
         
         JButton saveButton = ModernTheme.createSuccessButton(lendingToEdit == null ? "Add Lending" : "Update Lending");
         JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
@@ -213,26 +242,23 @@ public class AddEditLendingDialog extends JDialog {
         add(mainWrapper);
     }
     
-    /**
-     * Creates the close button for the header (× symbol).
-     */
     private JButton createHeaderCloseButton() {
         JButton closeBtn = new JButton("×");
-        closeBtn.setFont(new Font("Arial", Font.BOLD, 20));
-        closeBtn.setForeground(Color.WHITE);
-        closeBtn.setBackground(new Color(34, 139, 34));
-        closeBtn.setBorder(new EmptyBorder(0, 10, 0, 10));
+        closeBtn.setFont(new Font("Arial", Font.PLAIN, 22));
+        closeBtn.setForeground(ModernTheme.TEXT_WHITE);
+        closeBtn.setBackground(new Color(0, 0, 0, 0));
+        closeBtn.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
         closeBtn.setFocusPainted(false);
         closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        closeBtn.addActionListener(e -> dispose());
         closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                closeBtn.setBackground(new Color(24, 119, 24));
+                closeBtn.setBackground(new Color(255, 255, 255, 30));
             }
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                closeBtn.setBackground(new Color(34, 139, 34));
+                closeBtn.setBackground(new Color(0, 0, 0, 0));
             }
         });
+        closeBtn.addActionListener(e -> dispose());
         return closeBtn;
     }
 

@@ -62,9 +62,11 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 
 import src.auth.Account;
+import src.auth.AuthManager;
 import src.auth.PasswordHasher;
 import src.auth.SessionContext;
 import src.db.DBHelper;
+import src.FinanceManager;
 
 /**
  * Modern dialog for editing user profile information with PAN card, password change, and profile picture
@@ -1089,9 +1091,23 @@ public class EditProfileDialog extends JDialog {
     add(scrollPane, BorderLayout.CENTER);
         
         // Footer Panel
-        JPanel footerPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 16));
+        JPanel footerPanel = new JPanel(new BorderLayout());
         footerPanel.setBackground(ModernTheme.SURFACE);
         footerPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, ModernTheme.BORDER));
+        
+        // Left side - Delete Account button
+        JPanel leftFooterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 16));
+        leftFooterPanel.setBackground(ModernTheme.SURFACE);
+        
+        JButton deleteAccountButton = ModernTheme.createDangerButton("Delete Account");
+        deleteAccountButton.setPreferredSize(new Dimension(140, 38));
+        deleteAccountButton.setIcon(ModernIcons.create(ModernIcons.IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
+        deleteAccountButton.addActionListener(e -> confirmDeleteAccount());
+        leftFooterPanel.add(deleteAccountButton);
+        
+        // Right side - Cancel and Save buttons
+        JPanel rightFooterPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 16));
+        rightFooterPanel.setBackground(ModernTheme.SURFACE);
         
         JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
         cancelButton.setPreferredSize(new Dimension(100, 38));
@@ -1101,8 +1117,11 @@ public class EditProfileDialog extends JDialog {
         saveButton.setPreferredSize(new Dimension(140, 38));
         saveButton.addActionListener(e -> saveProfile());
         
-        footerPanel.add(cancelButton);
-        footerPanel.add(saveButton);
+        rightFooterPanel.add(cancelButton);
+        rightFooterPanel.add(saveButton);
+        
+        footerPanel.add(leftFooterPanel, BorderLayout.WEST);
+        footerPanel.add(rightFooterPanel, BorderLayout.EAST);
         
         add(footerPanel, BorderLayout.SOUTH);
         
@@ -1440,6 +1459,210 @@ public class EditProfileDialog extends JDialog {
             JOptionPane.showMessageDialog(this, 
                 "Error updating profile: " + ex.getMessage(), 
                 "Database Error", 
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Confirms and executes account deletion with password verification
+     */
+    private void confirmDeleteAccount() {
+        // First confirmation
+        int confirm = JOptionPane.showConfirmDialog(
+            this,
+            "⚠️ WARNING: This will permanently delete your account and ALL associated data!\n\n" +
+            "This includes:\n" +
+            "• All transactions\n" +
+            "• Bank accounts\n" +
+            "• Deposits and investments\n" +
+            "• Loans and lendings\n" +
+            "• Credit cards\n" +
+            "• Tax profiles\n\n" +
+            "This action CANNOT be undone!\n\n" +
+            "Are you sure you want to continue?",
+            "Confirm Account Deletion",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+        
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        
+        // Password verification dialog
+        JDialog passwordDialog = new JDialog(this, "Verify Password", true);
+        passwordDialog.setSize(450, 250);
+        passwordDialog.setLocationRelativeTo(this);
+        passwordDialog.setUndecorated(true);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(16, ModernTheme.BORDER),
+            BorderFactory.createEmptyBorder(20, 20, 20, 20)
+        ));
+        
+        // Header
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+        
+        JLabel titleLabel = new JLabel("Verify Your Password");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 18f));
+        titleLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        
+        JLabel warningLabel = new JLabel("⚠️");
+        warningLabel.setFont(new Font("Arial", Font.PLAIN, 32));
+        
+        headerPanel.add(warningLabel, BorderLayout.WEST);
+        headerPanel.add(Box.createHorizontalStrut(12), BorderLayout.CENTER);
+        headerPanel.add(titleLabel, BorderLayout.EAST);
+        
+        // Content
+        JPanel contentPanel = new JPanel(new GridBagLayout());
+        contentPanel.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        
+        JLabel instructionLabel = new JLabel("<html><center>Enter your password to confirm<br>account deletion</center></html>");
+        instructionLabel.setFont(ModernTheme.FONT_BODY);
+        instructionLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        instructionLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        JPasswordField passwordField = new JPasswordField(20);
+        ModernTheme.styleTextField(passwordField);
+        passwordField.setPreferredSize(new Dimension(300, 38));
+        
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        contentPanel.add(instructionLabel, gbc);
+        
+        gbc.gridy = 1;
+        contentPanel.add(passwordField, gbc);
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setOpaque(false);
+        
+        JButton cancelBtn = ModernTheme.createSecondaryButton("Cancel");
+        cancelBtn.setPreferredSize(new Dimension(100, 38));
+        cancelBtn.addActionListener(e -> passwordDialog.dispose());
+        
+        JButton deleteBtn = ModernTheme.createDangerButton("Delete Account");
+        deleteBtn.setPreferredSize(new Dimension(150, 38));
+        deleteBtn.addActionListener(e -> {
+            String password = new String(passwordField.getPassword());
+            
+            if (password.isEmpty()) {
+                JOptionPane.showMessageDialog(passwordDialog,
+                    "Please enter your password",
+                    "Password Required",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // Verify password
+            try {
+                char[] passwordChars = password.toCharArray();
+                if (!PasswordHasher.verifyPassword(passwordChars, 
+                        currentAccount.getPasswordSalt(), 
+                        currentAccount.getPasswordHash())) {
+                    JOptionPane.showMessageDialog(passwordDialog,
+                        "Incorrect password. Account deletion cancelled.",
+                        "Authentication Failed",
+                        JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                // Password verified - proceed with deletion
+                passwordDialog.dispose();
+                
+                // Final confirmation
+                int finalConfirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "This is your LAST CHANCE to cancel!\n\n" +
+                    "Delete account for: " + currentAccount.getAccountName() + "?",
+                    "Final Confirmation",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.ERROR_MESSAGE
+                );
+                
+                if (finalConfirm == JOptionPane.YES_OPTION) {
+                    performAccountDeletion();
+                }
+                
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(passwordDialog,
+                    "Error verifying password: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        // Enter key to submit
+        passwordField.addActionListener(e -> deleteBtn.doClick());
+        
+        buttonPanel.add(cancelBtn);
+        buttonPanel.add(deleteBtn);
+        
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        passwordDialog.add(mainPanel);
+        passwordDialog.setVisible(true);
+    }
+    
+    /**
+     * Performs the actual account deletion
+     */
+    private void performAccountDeletion() {
+        try {
+            int accountId = currentAccount.getId();
+            String accountName = currentAccount.getAccountName();
+            
+            // Create FinanceManager instance to call deleteAccount
+            FinanceManager manager = new FinanceManager();
+            manager.deleteAccount(accountId);
+            
+            // Clear session
+            SessionContext.clear();
+            
+            // Show success message
+            JOptionPane.showMessageDialog(this,
+                "Account '" + accountName + "' has been permanently deleted.\n" +
+                "The application will now close.",
+                "Account Deleted",
+                JOptionPane.INFORMATION_MESSAGE);
+            
+            // Close this dialog
+            dispose();
+            
+            // Close the parent window and exit to login
+            Window[] windows = Window.getWindows();
+            for (Window window : windows) {
+                if (window.isVisible() && window != this) {
+                    window.dispose();
+                }
+            }
+            
+            // Relaunch login screen
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    DBHelper dbHelper = new DBHelper();
+                    AuthManager authManager = new AuthManager(dbHelper.getConnection());
+                    new LoginDialog(null, authManager).setVisible(true);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    System.exit(0);
+                }
+            });
+            
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                "Error deleting account: " + ex.getMessage(),
+                "Deletion Error",
                 JOptionPane.ERROR_MESSAGE);
         }
     }

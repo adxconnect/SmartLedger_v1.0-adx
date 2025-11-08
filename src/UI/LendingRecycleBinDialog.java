@@ -40,9 +40,9 @@ public class LendingRecycleBinDialog extends JDialog {
         JPanel mainWrapper = new JPanel(new BorderLayout());
         mainWrapper.setBackground(new Color(0, 0, 0, 0));
         
-        // Main panel with white background
+        // Main panel with dark background
         JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBackground(Color.WHITE);
+        mainPanel.setBackground(ModernTheme.BACKGROUND);
         mainPanel.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 2));
 
         // Header panel with green background
@@ -69,9 +69,9 @@ public class LendingRecycleBinDialog extends JDialog {
 
         mainPanel.add(headerPanel, BorderLayout.NORTH);
         
-        // Content wrapper
+        // Content wrapper with dark background
         JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
-        contentWrapper.setBackground(Color.WHITE);
+        contentWrapper.setBackground(ModernTheme.BACKGROUND);
         contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
 
         // --- Table Setup ---
@@ -79,22 +79,27 @@ public class LendingRecycleBinDialog extends JDialog {
         recycleBinModel = new DefaultTableModel(columns, 0);
         recycleBinTable = new JTable(recycleBinModel);
         
-        // Style the table
+        // Style the table for dark mode
         recycleBinTable.setFont(ModernTheme.FONT_BODY);
         recycleBinTable.setRowHeight(32);
+        recycleBinTable.setBackground(ModernTheme.BACKGROUND);
+        recycleBinTable.setForeground(ModernTheme.TEXT_PRIMARY);
         recycleBinTable.setSelectionBackground(new Color(34, 139, 34, 40));
-        recycleBinTable.setSelectionForeground(ModernTheme.TEXT_PRIMARY);
+        recycleBinTable.setSelectionForeground(ModernTheme.TEXT_WHITE);
+        recycleBinTable.setGridColor(ModernTheme.BORDER);
         recycleBinTable.getTableHeader().setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD));
         recycleBinTable.getTableHeader().setBackground(ModernTheme.SURFACE);
         recycleBinTable.getTableHeader().setForeground(ModernTheme.TEXT_PRIMARY);
 
         JScrollPane scrollPane = new JScrollPane(recycleBinTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+        scrollPane.setBackground(ModernTheme.BACKGROUND);
+        scrollPane.getViewport().setBackground(ModernTheme.BACKGROUND);
         contentWrapper.add(scrollPane, BorderLayout.CENTER);
 
         // --- Button Panel ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBackground(ModernTheme.BACKGROUND);
         
         JButton restoreButton = ModernTheme.createSuccessButton("Restore Selected");
         JButton deletePermButton = ModernTheme.createDangerButton("Delete Permanently");
@@ -119,26 +124,23 @@ public class LendingRecycleBinDialog extends JDialog {
         loadRecycledLendings();
     }
     
-    /**
-     * Creates the close button for the header (× symbol).
-     */
     private JButton createHeaderCloseButton() {
         JButton closeBtn = new JButton("×");
-        closeBtn.setFont(new Font("Arial", Font.BOLD, 20));
+        closeBtn.setFont(new Font("Arial", Font.PLAIN, 22));
         closeBtn.setForeground(Color.WHITE);
-        closeBtn.setBackground(new Color(34, 139, 34));
-        closeBtn.setBorder(new EmptyBorder(0, 10, 0, 10));
+        closeBtn.setBackground(new Color(0, 0, 0, 0));
+        closeBtn.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
         closeBtn.setFocusPainted(false);
         closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        closeBtn.addActionListener(e -> dispose());
         closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                closeBtn.setBackground(new Color(24, 119, 24));
+                closeBtn.setBackground(new Color(255, 255, 255, 30));
             }
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                closeBtn.setBackground(new Color(34, 139, 34));
+                closeBtn.setBackground(new Color(0, 0, 0, 0));
             }
         });
+        closeBtn.addActionListener(e -> dispose());
         return closeBtn;
     }
 

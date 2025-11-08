@@ -108,76 +108,130 @@ public class AddEditInvestmentDialog extends JDialog {
 
         // Content wrapper
         JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
-        contentWrapper.setOpaque(false);
+        contentWrapper.setBackground(ModernTheme.BACKGROUND);
         contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
         
         // --- Main Form Panel ---
         JPanel formPanel = new JPanel();
         formPanel.setLayout(new BoxLayout(formPanel, BoxLayout.Y_AXIS)); // Stack panels vertically
         formPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        formPanel.setBackground(Color.WHITE);
+        formPanel.setBackground(ModernTheme.BACKGROUND);
 
         // --- Profile Panel ---
         JPanel profilePanel = new JPanel(new GridBagLayout());
-        profilePanel.setBackground(Color.WHITE);
-        profilePanel.setBorder(BorderFactory.createTitledBorder("Holder Profile"));
+        profilePanel.setBackground(ModernTheme.BACKGROUND);
+        profilePanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+            "Holder Profile",
+            javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            ModernTheme.FONT_BODY,
+            ModernTheme.TEXT_PRIMARY
+        ));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
         
-        gbc.gridx = 0; gbc.gridy = 0; profilePanel.add(new JLabel("Name:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel nameLabel = new JLabel("Name:");
+        nameLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        nameLabel.setFont(ModernTheme.FONT_BODY);
+        profilePanel.add(nameLabel, gbc);
         holderNameField = new JTextField(20);
         ModernTheme.styleTextField(holderNameField);
         gbc.gridx = 1; gbc.gridwidth=3; profilePanel.add(holderNameField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth=1; profilePanel.add(new JLabel("PAN:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth=1;
+        JLabel panLabel = new JLabel("PAN:");
+        panLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        panLabel.setFont(ModernTheme.FONT_BODY);
+        profilePanel.add(panLabel, gbc);
         panField = new JTextField(10);
         ModernTheme.styleTextField(panField);
         gbc.gridx = 1; profilePanel.add(panField, gbc);
         
-        gbc.gridx = 2; gbc.gridy = 1; profilePanel.add(new JLabel("Age:"), gbc);
+        gbc.gridx = 2; gbc.gridy = 1;
+        JLabel ageLabel = new JLabel("Age:");
+        ageLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        ageLabel.setFont(ModernTheme.FONT_BODY);
+        profilePanel.add(ageLabel, gbc);
         ageField = new JTextField(3);
         ModernTheme.styleTextField(ageField);
         gbc.gridx = 3; profilePanel.add(ageField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 2; profilePanel.add(new JLabel("Email:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel emailLabel = new JLabel("Email:");
+        emailLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        emailLabel.setFont(ModernTheme.FONT_BODY);
+        profilePanel.add(emailLabel, gbc);
         emailField = new JTextField(20);
         ModernTheme.styleTextField(emailField);
         gbc.gridx = 1; gbc.gridwidth=3; profilePanel.add(emailField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth=1; profilePanel.add(new JLabel("Phone:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth=1;
+        JLabel phoneLabel = new JLabel("Phone:");
+        phoneLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        phoneLabel.setFont(ModernTheme.FONT_BODY);
+        profilePanel.add(phoneLabel, gbc);
         phoneField = new JTextField(10);
         ModernTheme.styleTextField(phoneField);
         gbc.gridx = 1; profilePanel.add(phoneField, gbc);
 
-        gbc.gridx = 2; gbc.gridy = 3; profilePanel.add(new JLabel("Gender:"), gbc);
+        gbc.gridx = 2; gbc.gridy = 3;
+        JLabel genderLabel = new JLabel("Gender:");
+        genderLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        genderLabel.setFont(ModernTheme.FONT_BODY);
+        profilePanel.add(genderLabel, gbc);
         genderComboBox = new JComboBox<>(new String[]{"Male", "Female", "Other"});
         ModernTheme.styleComboBox(genderComboBox);
         gbc.gridx = 3; profilePanel.add(genderComboBox, gbc);
 
         // --- Asset Details Panel ---
         JPanel assetPanel = new JPanel(new GridBagLayout());
-        assetPanel.setBackground(Color.WHITE);
-        assetPanel.setBorder(BorderFactory.createTitledBorder("Investment Details"));
+        assetPanel.setBackground(ModernTheme.BACKGROUND);
+        assetPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+            "Investment Details",
+            javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            ModernTheme.FONT_BODY,
+            ModernTheme.TEXT_PRIMARY
+        ));
         gbc = new GridBagConstraints(); // Reset gbc
         gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
 
-        gbc.gridx = 0; gbc.gridy = 0; assetPanel.add(new JLabel("Asset Type:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel assetTypeLabel = new JLabel("Asset Type:");
+        assetTypeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        assetTypeLabel.setFont(ModernTheme.FONT_BODY);
+        assetPanel.add(assetTypeLabel, gbc);
         String[] types = {"Indian Stocks", "Mutual Fund", "SIP", "US Stocks", "IPO", "Digital Assets", "Real Estate", "Structured Bond", "Gold", "Silver", "Private Equity", "ESOPs/RSUs", "Others"};
         assetTypeComboBox = new JComboBox<>(types);
         ModernTheme.styleComboBox(assetTypeComboBox);
         gbc.gridx = 1; gbc.gridwidth=3; assetPanel.add(assetTypeComboBox, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth=1; assetPanel.add(new JLabel("Description:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth=1;
+        JLabel descriptionLabel = new JLabel("Description:");
+        descriptionLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        descriptionLabel.setFont(ModernTheme.FONT_BODY);
+        assetPanel.add(descriptionLabel, gbc);
         descriptionField = new JTextField(20);
         ModernTheme.styleTextField(descriptionField);
         gbc.gridx = 1; gbc.gridwidth=3; assetPanel.add(descriptionField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth=1; assetPanel.add(new JLabel("Goal:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth=1;
+        JLabel goalLabel = new JLabel("Goal:");
+        goalLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        goalLabel.setFont(ModernTheme.FONT_BODY);
+        assetPanel.add(goalLabel, gbc);
         goalField = new JTextField(20);
         ModernTheme.styleTextField(goalField);
         gbc.gridx = 1; gbc.gridwidth=3; assetPanel.add(goalField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth=1; assetPanel.add(new JLabel("Start Date (dd-MM-yyyy):"), gbc);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth=1;
+        JLabel startDateLabel = new JLabel("Start Date (dd-MM-yyyy):");
+        startDateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        startDateLabel.setFont(ModernTheme.FONT_BODY);
+        assetPanel.add(startDateLabel, gbc);
         startDateField = new JTextField(10);
         ModernTheme.styleTextField(startDateField);
         gbc.gridx = 1; gbc.gridwidth=1; assetPanel.add(startDateField, gbc);
@@ -199,7 +253,7 @@ public class AddEditInvestmentDialog extends JDialog {
 
         // --- Bottom Button Panel ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBackground(ModernTheme.BACKGROUND);
         buttonPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
         
         JButton saveButton = ModernTheme.createPrimaryButton("Save");
@@ -256,31 +310,58 @@ public class AddEditInvestmentDialog extends JDialog {
     // --- Panel Creation Methods ---
     private JPanel createUnitAssetPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createTitledBorder("Asset Details"));
+        panel.setBackground(ModernTheme.BACKGROUND);
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+            "Asset Details",
+            javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            ModernTheme.FONT_BODY,
+            ModernTheme.TEXT_PRIMARY
+        ));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
         
-        gbc.gridx = 0; gbc.gridy = 0; panel.add(new JLabel("Ticker/Symbol:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel tickerLabel = new JLabel("Ticker/Symbol:");
+        tickerLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        tickerLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(tickerLabel, gbc);
         tickerField = new JTextField(10);
         ModernTheme.styleTextField(tickerField);
         gbc.gridx = 1; panel.add(tickerField, gbc);
         
-        gbc.gridx = 2; gbc.gridy = 0; panel.add(new JLabel("Exchange:"), gbc);
+        gbc.gridx = 2; gbc.gridy = 0;
+        JLabel exchangeLabel = new JLabel("Exchange:");
+        exchangeLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        exchangeLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(exchangeLabel, gbc);
         exchangeField = new JTextField(10);
         ModernTheme.styleTextField(exchangeField);
         gbc.gridx = 3; panel.add(exchangeField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 1; panel.add(new JLabel("Quantity:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel quantityLabel = new JLabel("Quantity:");
+        quantityLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        quantityLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(quantityLabel, gbc);
         quantityField = new JTextField("0.0", 10);
         ModernTheme.styleTextField(quantityField);
         gbc.gridx = 1; panel.add(quantityField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 2; panel.add(new JLabel("Initial Price /unit:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel initialPriceLabel = new JLabel("Initial Price /unit:");
+        initialPriceLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        initialPriceLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(initialPriceLabel, gbc);
         initialUnitCostField = new JTextField("0.0", 10);
         ModernTheme.styleTextField(initialUnitCostField);
         gbc.gridx = 1; panel.add(initialUnitCostField, gbc);
         
-        gbc.gridx = 2; gbc.gridy = 2; panel.add(new JLabel("Current Price /unit:"), gbc);
+        gbc.gridx = 2; gbc.gridy = 2;
+        JLabel currentPriceLabel = new JLabel("Current Price /unit:");
+        currentPriceLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        currentPriceLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(currentPriceLabel, gbc);
         currentUnitPriceField = new JTextField("0.0", 10);
         ModernTheme.styleTextField(currentUnitPriceField);
         gbc.gridx = 3; panel.add(currentUnitPriceField, gbc);
@@ -290,27 +371,51 @@ public class AddEditInvestmentDialog extends JDialog {
     
     private JPanel createRealEstatePanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createTitledBorder("Real Estate Details"));
+        panel.setBackground(ModernTheme.BACKGROUND);
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+            "Real Estate Details",
+            javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            ModernTheme.FONT_BODY,
+            ModernTheme.TEXT_PRIMARY
+        ));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
 
-        gbc.gridx = 0; gbc.gridy = 0; panel.add(new JLabel("Property Address:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel propertyAddressLabel = new JLabel("Property Address:");
+        propertyAddressLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        propertyAddressLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(propertyAddressLabel, gbc);
         propertyAddressArea = new JTextArea(3, 30);
         propertyAddressArea.setFont(ModernTheme.FONT_BODY);
         propertyAddressArea.setBackground(ModernTheme.SURFACE);
         propertyAddressArea.setForeground(ModernTheme.TEXT_PRIMARY);
+        propertyAddressArea.setCaretColor(ModernTheme.TEXT_PRIMARY);
         propertyAddressArea.setBorder(BorderFactory.createCompoundBorder(
             new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER),
             new EmptyBorder(8, 12, 8, 12)
         ));
-        gbc.gridx = 1; gbc.gridheight=2; panel.add(new JScrollPane(propertyAddressArea), gbc);
+        JScrollPane addressScrollPane = new JScrollPane(propertyAddressArea);
+        addressScrollPane.setBorder(null);
+        addressScrollPane.setOpaque(false);
+        addressScrollPane.getViewport().setOpaque(false);
+        gbc.gridx = 1; gbc.gridheight=2; panel.add(addressScrollPane, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridheight=1; panel.add(new JLabel("Initial Total Cost:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridheight=1;
+        JLabel initialCostLabel = new JLabel("Initial Total Cost:");
+        initialCostLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        initialCostLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(initialCostLabel, gbc);
         initialTotalCostField = new JTextField("0.0", 15);
         ModernTheme.styleTextField(initialTotalCostField);
         gbc.gridx = 1; panel.add(initialTotalCostField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 3; panel.add(new JLabel("Current Total Value:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 3;
+        JLabel currentValueLabel = new JLabel("Current Total Value:");
+        currentValueLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        currentValueLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(currentValueLabel, gbc);
         currentTotalValueField = new JTextField("0.0", 15);
         ModernTheme.styleTextField(currentTotalValueField);
         gbc.gridx = 1; panel.add(currentTotalValueField, gbc);
@@ -320,21 +425,40 @@ public class AddEditInvestmentDialog extends JDialog {
 
     private JPanel createBondPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createTitledBorder("Bond/Tenure Details"));
+        panel.setBackground(ModernTheme.BACKGROUND);
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+            "Bond/Tenure Details",
+            javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            ModernTheme.FONT_BODY,
+            ModernTheme.TEXT_PRIMARY
+        ));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
         
-        gbc.gridx = 0; gbc.gridy = 0; panel.add(new JLabel("Initial Cost:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel initialCostLabel = new JLabel("Initial Cost:");
+        initialCostLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        initialCostLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(initialCostLabel, gbc);
         initialUnitCostField = new JTextField("0.0", 10);
         ModernTheme.styleTextField(initialUnitCostField);
         gbc.gridx = 1; panel.add(initialUnitCostField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 1; panel.add(new JLabel("Tenure (Years):"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel tenureLabel = new JLabel("Tenure (Years):");
+        tenureLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        tenureLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(tenureLabel, gbc);
         tenureYearsField = new JTextField("0", 5);
         ModernTheme.styleTextField(tenureYearsField);
         gbc.gridx = 1; panel.add(tenureYearsField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 2; panel.add(new JLabel("Interest Rate (%):"), gbc);
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel interestRateLabel = new JLabel("Interest Rate (%):");
+        interestRateLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        interestRateLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(interestRateLabel, gbc);
         interestRateField = new JTextField("0.0", 5);
         ModernTheme.styleTextField(interestRateField);
         gbc.gridx = 1; panel.add(interestRateField, gbc);
@@ -344,16 +468,31 @@ public class AddEditInvestmentDialog extends JDialog {
 
     private JPanel createOtherPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createTitledBorder("Asset Details"));
+        panel.setBackground(ModernTheme.BACKGROUND);
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ModernTheme.BORDER, 1),
+            "Asset Details",
+            javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            ModernTheme.FONT_BODY,
+            ModernTheme.TEXT_PRIMARY
+        ));
         GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 5, 2, 5); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.WEST;
         
-        gbc.gridx = 0; gbc.gridy = 0; panel.add(new JLabel("Initial Cost:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel initialCostLabel = new JLabel("Initial Cost:");
+        initialCostLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        initialCostLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(initialCostLabel, gbc);
         initialTotalCostField = new JTextField("0.0", 10);
         ModernTheme.styleTextField(initialTotalCostField);
         gbc.gridx = 1; panel.add(initialTotalCostField, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 1; panel.add(new JLabel("Current Value:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel currentValueLabel = new JLabel("Current Value:");
+        currentValueLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        currentValueLabel.setFont(ModernTheme.FONT_BODY);
+        panel.add(currentValueLabel, gbc);
         currentTotalValueField = new JTextField("0.0", 10);
         ModernTheme.styleTextField(currentTotalValueField);
         gbc.gridx = 1; panel.add(currentTotalValueField, gbc);

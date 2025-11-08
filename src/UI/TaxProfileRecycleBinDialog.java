@@ -67,7 +67,7 @@ public class TaxProfileRecycleBinDialog extends JDialog {
 
         // Content Panel
         JPanel contentPanel = new JPanel(new BorderLayout(10, 10));
-        contentPanel.setBackground(Color.WHITE);
+        contentPanel.setBackground(ModernTheme.BACKGROUND);
         contentPanel.setBorder(new EmptyBorder(16, 16, 16, 16));
 
         // Table
@@ -82,9 +82,11 @@ public class TaxProfileRecycleBinDialog extends JDialog {
         table = new JTable(tableModel);
         table.setFont(ModernTheme.FONT_BODY);
         table.setRowHeight(35);
+        table.setBackground(ModernTheme.BACKGROUND);
+        table.setForeground(ModernTheme.TEXT_PRIMARY);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setSelectionBackground(new Color(34, 139, 34, 40)); // Light green
-        table.setSelectionForeground(ModernTheme.TEXT_PRIMARY);
+        table.setSelectionForeground(ModernTheme.TEXT_WHITE);
         table.setGridColor(ModernTheme.BORDER);
         table.getTableHeader().setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD));
         table.getTableHeader().setBackground(ModernTheme.SURFACE);
@@ -92,13 +94,15 @@ public class TaxProfileRecycleBinDialog extends JDialog {
 
         JScrollPane scrollPane = new JScrollPane(table);
         scrollPane.setBorder(new ModernTheme.RoundedBorder(ModernTheme.BUTTON_RADIUS, ModernTheme.BORDER));
+        scrollPane.setBackground(ModernTheme.BACKGROUND);
+        scrollPane.getViewport().setBackground(ModernTheme.BACKGROUND);
         ModernTheme.styleScrollPane(scrollPane);
 
         contentPanel.add(scrollPane, BorderLayout.CENTER);
 
         // Button Panel
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBackground(ModernTheme.BACKGROUND);
 
         JButton restoreButton = ModernTheme.createSuccessButton("Restore");
         restoreButton.setIcon(ModernIcons.create(ModernIcons.IconType.EDIT, ModernTheme.TEXT_WHITE, 16));

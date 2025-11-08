@@ -3143,4 +3143,50 @@ public class FinanceManager {
         e.printStackTrace();
     }
 }
+
+    /**
+     * Permanently deletes an account and all associated data
+     * @param accountId The account ID to delete
+     * @throws SQLException if database operation fails
+     */
+    public void deleteAccount(int accountId) throws SQLException {
+        Connection conn = null;
+        try {
+            conn = dbHelper.getConnection();
+            conn.setAutoCommit(false); // Start transaction
+            
+            // Delete all account-scoped data first (foreign key constraints)
+            for (String tableName : ACCOUNT_SCOPED_TABLES) {
+                String deleteSql = "DELETE FROM " + tableName + " WHERE account_id = ?";
+                try (PreparedStatement pstmt = conn.prepareStatement(deleteSql)) {
+                    pstmt.setInt(1, accountId);
+                    pstmt.executeUpdate();
+                }
+            }
+            
+            // Finally delete the account itself
+            String deleteAccountSql = "DELETE FROM accounts WHERE id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(deleteAccountSql)) {
+                pstmt.setInt(1, accountId);
+                pstmt.executeUpdate();
+            }
+            
+            conn.commit(); // Commit transaction
+            System.out.println("Account " + accountId + " and all associated data deleted successfully.");
+            
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback(); // Rollback on error
+                } catch (SQLException rollbackEx) {
+                    System.err.println("Error during rollback: " + rollbackEx.getMessage());
+                }
+            }
+            throw e;
+        } finally {
+            if (conn != null) {
+                conn.setAutoCommit(true); // Reset auto-commit
+            }
+        }
+    }
 }
