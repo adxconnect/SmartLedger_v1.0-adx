@@ -113,18 +113,18 @@ public class Account {
     }
 
     public String getPanCard() {
-        return panCard;
+    return panCard != null ? panCard : "";
     }
 
     public void setPanCard(String panCard) {
-        this.panCard = panCard;
+    this.panCard = panCard != null ? panCard : "";
     }
 
     public String getProfilePicturePath() {
-        return profilePicturePath;
+    return profilePicturePath != null ? profilePicturePath : "";
     }
 
     public void setProfilePicturePath(String profilePicturePath) {
-        this.profilePicturePath = profilePicturePath;
+    this.profilePicturePath = profilePicturePath != null ? profilePicturePath : "";
     }
 }

@@ -926,7 +926,7 @@ public class EditProfileDialog extends JDialog {
         contentPanel.add(pictureCard);
         contentPanel.add(Box.createVerticalStrut(16));
         
-        // Profile Information Card
+    // Profile Information Card with PAN Card
         JPanel profileCard = createModernCard();
         profileCard.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -1235,7 +1235,7 @@ public class EditProfileDialog extends JDialog {
     }
     
     private void validatePAN() {
-        String pan = panCardField.getText().trim().toUpperCase();
+    String pan = panCardField.getText().trim();
         if (pan.isEmpty()) {
             panValidLabel.setText("");
             return;
@@ -1380,7 +1380,7 @@ public class EditProfileDialog extends JDialog {
         String name = nameField.getText().trim();
         String email = emailField.getText().trim();
         String phone = phoneField.getText().trim();
-        String pan = panCardField.getText().trim().toUpperCase();
+    String pan = panCardField.getText().trim();
         
         if (name.isEmpty()) {
             JOptionPane.showMessageDialog(this, 
