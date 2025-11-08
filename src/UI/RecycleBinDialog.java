@@ -1,15 +1,12 @@
 package src.UI;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
 
-import src.UI.FinanceManagerFullUI;
-
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -24,28 +21,45 @@ public class RecycleBinDialog extends JDialog {
     private FinanceManagerFullUI parentUI;
 
     public RecycleBinDialog(Frame owner, FinanceManager manager, FinanceManagerFullUI parentUI) {
-        super(owner, "Recycle Bin - Deleted Transactions", true);
+        super(owner, "", true);
         this.manager = manager;
         this.parentUI = parentUI;
 
-        setSize(900, 600);
-        setLocationRelativeTo(owner);
-        setLayout(new BorderLayout(16, 16));
-        setBackground(ModernTheme.BACKGROUND);
+        setUndecorated(true);
+        setBackground(new Color(0, 0, 0, 0));
 
-        // Main panel with modern styling
-        JPanel mainPanel = new JPanel(new BorderLayout(12, 12));
-        mainPanel.setBackground(ModernTheme.BACKGROUND);
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(20, ModernTheme.BORDER),
+            new EmptyBorder(0, 0, 0, 0)
+        ));
 
-        // Title panel
-        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        titlePanel.setBackground(ModernTheme.BACKGROUND);
-        JLabel titleLabel = new JLabel("Recycle Bin - Deleted Transactions");
-        titleLabel.setFont(ModernTheme.FONT_HEADER);
-        titleLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        JPanel headerPanel = new JPanel(new BorderLayout(12, 0));
+        headerPanel.setBackground(ModernTheme.PRIMARY_DARK);
+        headerPanel.setBorder(new EmptyBorder(14, 18, 14, 12));
+
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titlePanel.setOpaque(false);
+        JLabel iconLabel = new JLabel(ModernIcons.create(ModernIcons.IconType.RECYCLE, ModernTheme.TEXT_WHITE, 20));
+        JLabel titleLabel = new JLabel("Transaction Recycle Bin");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 16f));
+        titleLabel.setForeground(ModernTheme.TEXT_WHITE);
+        titlePanel.add(iconLabel);
         titlePanel.add(titleLabel);
-        mainPanel.add(titlePanel, BorderLayout.NORTH);
+
+        headerPanel.add(titlePanel, BorderLayout.WEST);
+        headerPanel.add(createCloseButton(), BorderLayout.EAST);
+
+        JPanel contentPanel = new JPanel(new BorderLayout(0, 16));
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        contentPanel.setBorder(new EmptyBorder(20, 22, 22, 22));
+
+        JLabel helperLabel = new JLabel("Restore a transaction or permanently remove it.");
+        helperLabel.setFont(ModernTheme.FONT_SMALL.deriveFont(11.5f));
+        helperLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        helperLabel.setBorder(new EmptyBorder(0, 2, 0, 0));
+        contentPanel.add(helperLabel, BorderLayout.NORTH);
 
         // Table Setup with modern styling
         String[] columns = {"ID", "Date", "Timestamp", "Category", "Type", "Amount", "Description"};
@@ -86,34 +100,27 @@ public class RecycleBinDialog extends JDialog {
         }
 
         JScrollPane scrollPane = new JScrollPane(recycleBinTable);
-        scrollPane.setBackground(ModernTheme.SURFACE);
-        scrollPane.getViewport().setBackground(ModernTheme.SURFACE);
-        scrollPane.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200, 100), 1));
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        ModernTheme.styleScrollPane(scrollPane);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        contentPanel.add(scrollPane, BorderLayout.CENTER);
 
-        // Modern Button Panel
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
-        buttonPanel.setBackground(ModernTheme.BACKGROUND);
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setOpaque(false);
 
         JButton restoreButton = ModernTheme.createSuccessButton("Restore Selected");
         restoreButton.setIcon(ModernIcons.create(ModernIcons.IconType.ADD, ModernTheme.TEXT_WHITE, 16));
-        restoreButton.setPreferredSize(new Dimension(180, 38));
 
         JButton deletePermButton = ModernTheme.createDangerButton("Permanently Delete");
         deletePermButton.setIcon(ModernIcons.create(ModernIcons.IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
-        deletePermButton.setPreferredSize(new Dimension(180, 38));
 
         JButton selectAllButton = ModernTheme.createSecondaryButton("Select All");
-        selectAllButton.setPreferredSize(new Dimension(120, 38));
 
         JButton closeButton = ModernTheme.createSecondaryButton("Close");
-        closeButton.setPreferredSize(new Dimension(100, 38));
-
+        buttonPanel.add(closeButton);
+        buttonPanel.add(selectAllButton);
         buttonPanel.add(restoreButton);
         buttonPanel.add(deletePermButton);
-        buttonPanel.add(selectAllButton);
-        buttonPanel.add(closeButton);
-        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        contentPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         // Action Listeners
         restoreButton.addActionListener(e -> restoreSelected());
@@ -126,8 +133,41 @@ public class RecycleBinDialog extends JDialog {
         });
         closeButton.addActionListener(e -> dispose());
 
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+
         add(mainPanel);
+        pack();
+        if (getWidth() < 760) {
+            setSize(760, Math.max(getHeight(), 480));
+        }
+        setShape(new java.awt.geom.RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 24, 24));
+        setLocationRelativeTo(owner);
         loadRecycledTransactions();
+    }
+
+    private JButton createCloseButton() {
+        JButton closeBtn = new JButton("×");
+        closeBtn.setFont(new Font("Segoe UI", Font.PLAIN, 22));
+        closeBtn.setForeground(ModernTheme.TEXT_WHITE);
+        closeBtn.setOpaque(false);
+        closeBtn.setContentAreaFilled(false);
+        closeBtn.setBorderPainted(false);
+        closeBtn.setFocusPainted(false);
+        closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeBtn.setPreferredSize(new Dimension(32, 32));
+        closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                closeBtn.setForeground(new Color(255, 255, 255, 200));
+            }
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                closeBtn.setForeground(ModernTheme.TEXT_WHITE);
+            }
+        });
+        closeBtn.addActionListener(e -> dispose());
+        return closeBtn;
     }
 
     private void loadRecycledTransactions() {

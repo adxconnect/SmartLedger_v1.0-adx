@@ -1,6 +1,8 @@
 package src.UI;
 
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.sql.SQLException;
 import java.util.Arrays;
 
@@ -30,6 +32,12 @@ public class LoginDialog extends JDialog {
     private JLabel welcomeTitleLabel;
     private JLabel welcomeSubtitleLabel;
 
+    private JPanel rootWrapper;
+    private JPanel titleBar;
+    private JLabel titleLabel;
+    private JButton titleCloseButton;
+    private Point dragOffset;
+
     private AutoCompleteTextField loginEmailField;
     private JPasswordField loginPasswordField;
 
@@ -43,18 +51,27 @@ public class LoginDialog extends JDialog {
     public LoginDialog(Frame owner, AuthManager authManager) {
         super(owner, "SmartLedger - Welcome", true);
         this.authManager = authManager;
+        setUndecorated(true);
         buildModernUi();
         setResizable(false);
         // NEW: Adjusted window size for the two-column layout
         setSize(960, 640);
         setMinimumSize(new Dimension(900, 600));
         setLocationRelativeTo(owner);
-        getContentPane().setBackground(ModernTheme.BACKGROUND);
+    getContentPane().setBackground(ModernTheme.SURFACE);
     }
 
     private void buildModernUi() {
         // --- NEW: Main container with a two-column layout ---
-        JPanel mainPanel = new JPanel(new GridLayout(1, 2));
+    rootWrapper = new JPanel(new BorderLayout());
+    rootWrapper.setBackground(ModernTheme.SURFACE);
+    rootWrapper.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+
+    titleBar = createTitleBar();
+    rootWrapper.add(titleBar, BorderLayout.NORTH);
+
+    JPanel mainPanel = new JPanel(new GridLayout(1, 2));
+    mainPanel.setOpaque(false);
         
         // --- Column 1: Branding and Welcome Message ---
         JPanel leftPanel = createBrandingPanel();
@@ -65,7 +82,9 @@ public class LoginDialog extends JDialog {
         mainPanel.add(leftPanel);
         mainPanel.add(rightPanel);
 
-        add(mainPanel);
+        rootWrapper.add(mainPanel, BorderLayout.CENTER);
+        setContentPane(rootWrapper);
+        updateTitleBarTheme();
     }
 
     /**
@@ -164,6 +183,134 @@ public class LoginDialog extends JDialog {
         cardLayout.show(mainCardPanel, "Sign In");
         
         return mainCardPanel;
+    }
+
+    private JPanel createTitleBar() {
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(ModernTheme.SURFACE);
+        bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, ModernTheme.BORDER));
+
+        JPanel leftSection = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        leftSection.setOpaque(false);
+        titleLabel = new JLabel("SmartLedger");
+        titleLabel.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 14));
+        titleLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        leftSection.add(titleLabel);
+
+        JPanel controlSection = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        controlSection.setOpaque(false);
+        titleCloseButton = createTitleBarButton("X", true);
+        titleCloseButton.addActionListener(e -> {
+            succeeded = false;
+            dispose();
+        });
+        controlSection.add(titleCloseButton);
+
+        bar.add(leftSection, BorderLayout.WEST);
+        bar.add(controlSection, BorderLayout.EAST);
+
+        enableWindowDrag(bar);
+        enableWindowDrag(leftSection);
+        enableWindowDrag(titleLabel);
+
+        return bar;
+    }
+
+    private JButton createTitleBarButton(String text, boolean closeButton) {
+        JButton btn = new JButton(text);
+        btn.putClientProperty("titleBarClose", closeButton);
+        btn.putClientProperty("titleBarButton", Boolean.TRUE);
+        btn.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 12));
+        btn.setFocusable(false);
+        btn.setOpaque(true);
+        btn.setContentAreaFilled(true);
+        btn.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
+    btn.setPreferredSize(new Dimension(44, 26));
+        btn.setBackground(ModernTheme.SURFACE);
+        btn.setForeground(ModernTheme.TEXT_PRIMARY);
+
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (closeButton) {
+                    btn.setBackground(ModernTheme.DANGER);
+                    btn.setForeground(ModernTheme.TEXT_WHITE);
+                } else {
+                    btn.setBackground(ModernTheme.BACKGROUND);
+                    btn.setForeground(ModernTheme.TEXT_PRIMARY);
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                updateTitleButtonTheme(btn);
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (closeButton) {
+                    btn.setBackground(ModernTheme.DANGER.darker());
+                    btn.setForeground(ModernTheme.TEXT_WHITE);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (closeButton && btn.contains(e.getPoint())) {
+                    btn.setBackground(ModernTheme.DANGER);
+                    btn.setForeground(ModernTheme.TEXT_WHITE);
+                }
+            }
+        });
+
+        updateTitleButtonTheme(btn);
+        return btn;
+    }
+
+    private void updateTitleButtonTheme(JButton btn) {
+        if (btn == null) {
+            return;
+        }
+        boolean closeButton = Boolean.TRUE.equals(btn.getClientProperty("titleBarClose"));
+        btn.setBackground(ModernTheme.SURFACE);
+        btn.setForeground(closeButton ? ModernTheme.TEXT_PRIMARY : ModernTheme.TEXT_PRIMARY);
+    }
+
+    private void enableWindowDrag(Component component) {
+        MouseAdapter adapter = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                Point click = e.getLocationOnScreen();
+                Point window = getLocation();
+                dragOffset = new Point(click.x - window.x, click.y - window.y);
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (dragOffset == null) {
+                    return;
+                }
+                Point drag = e.getLocationOnScreen();
+                setLocation(drag.x - dragOffset.x, drag.y - dragOffset.y);
+            }
+        };
+        component.addMouseListener(adapter);
+        component.addMouseMotionListener(adapter);
+    }
+
+    private void updateTitleBarTheme() {
+        if (rootWrapper != null) {
+            rootWrapper.setBackground(ModernTheme.SURFACE);
+            rootWrapper.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+        }
+        if (titleBar != null) {
+            titleBar.setBackground(ModernTheme.SURFACE);
+            titleBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, ModernTheme.BORDER));
+        }
+        if (titleLabel != null) {
+            titleLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        }
+        updateTitleButtonTheme(titleCloseButton);
     }
 
     private JPanel buildModernSignInPanel() {
@@ -710,6 +857,8 @@ public class LoginDialog extends JDialog {
         
         // Recursively update all components
         updateComponentTheme(getContentPane());
+
+        updateTitleBarTheme();
         
         // Repaint and revalidate to apply changes
         revalidate();

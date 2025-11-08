@@ -35,10 +35,20 @@ public class AuthManager {
 				+ "password_salt VARCHAR(256) NOT NULL,"
 				+ "security_question VARCHAR(255),"
 				+ "security_answer VARCHAR(255),"
+				+ "pan_card VARCHAR(10),"
+				+ "profile_picture_path VARCHAR(500),"
 				+ "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
 				+ "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"
 				+ "last_login_at TIMESTAMP NULL"
 				+ ")");
+			
+			// Add new columns if they don't exist (for existing databases)
+			try {
+				stmt.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS pan_card VARCHAR(10)");
+				stmt.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_picture_path VARCHAR(500)");
+			} catch (SQLException e) {
+				// Columns may already exist, ignore error
+			}
 
 			stmt.execute("CREATE TABLE IF NOT EXISTS login_audit ("
 				+ "id INT AUTO_INCREMENT PRIMARY KEY,"
@@ -203,6 +213,14 @@ public class AuthManager {
 		account.setPasswordSalt(rs.getString("password_salt"));
 		account.setSecurityQuestion(rs.getString("security_question"));
 		account.setSecurityAnswer(rs.getString("security_answer"));
+		
+		// New fields
+		try {
+			account.setPanCard(rs.getString("pan_card"));
+			account.setProfilePicturePath(rs.getString("profile_picture_path"));
+		} catch (SQLException e) {
+			// Columns may not exist in older databases, ignore
+		}
 
 		Timestamp createdTs = rs.getTimestamp("created_at");
 		Timestamp updatedTs = rs.getTimestamp("updated_at");

@@ -547,6 +547,7 @@ public static final Font FONT_LOGO = new Font("Poppins", Font.BOLD, 28);
         combo.setFont(new Font("Poppins", Font.PLAIN, 14));
         combo.setForeground(TEXT_PRIMARY);
         combo.setBackground(SURFACE);
+        combo.setOpaque(true);
         // Only set height if width is not already set
         if (combo.getPreferredSize().width == 0) {
             combo.setPreferredSize(new Dimension(combo.getPreferredSize().width, 42));
@@ -582,8 +583,18 @@ public static final Font FONT_LOGO = new Font("Poppins", Font.BOLD, 28);
             }
             
             @Override
+            protected void installDefaults() {
+                super.installDefaults();
+                comboBox.setOpaque(false);
+            }
+            
+            @Override
             public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
-                // Don't paint background - let the combo box background show through
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(SURFACE);
+                g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, BUTTON_RADIUS, BUTTON_RADIUS);
+                g2.dispose();
             }
             
             @Override
@@ -698,10 +709,16 @@ public static final Font FONT_LOGO = new Font("Poppins", Font.BOLD, 28);
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            
             g2.setColor(color);
-            // Use thicker stroke and adjust coordinates for complete rounded borders
-            g2.setStroke(new BasicStroke(1.5f));
-            g2.drawRoundRect(x + 1, y + 1, width - 2, height - 2, radius, radius);
+            // Use 1.5f stroke for better visibility and completeness
+            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            
+            // Draw with half-pixel offset to center the stroke
+            int offset = 1;
+            g2.drawRoundRect(x + offset, y + offset, width - 2 * offset, height - 2 * offset, radius, radius);
             g2.dispose();
         }
         

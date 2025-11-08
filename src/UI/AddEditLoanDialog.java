@@ -2,16 +2,15 @@ package src.UI;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.CompoundBorder;
+import javax.swing.border.LineBorder;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
 import javax.swing.text.NumberFormatter;
 
-import src.UI.FinanceManagerFullUI;
 import src.FinanceManager;
 import src.Loan;
 
@@ -37,10 +36,23 @@ public class AddEditLoanDialog extends JDialog {
         this.loanToEdit = loanToEdit;
         this.parentUI = parentUI;
 
+        setUndecorated(true);
+        setBackground(new Color(0, 0, 0, 0));
+
         initComponents();
         if (loanToEdit != null) {
             populateFieldsForEdit();
         }
+
+        pack();
+        if (getWidth() < 700) {
+            setSize(700, Math.max(getHeight(), 550));
+        }
+        if (getHeight() > 700) {
+            setSize(getWidth(), 700);
+        }
+        setShape(new java.awt.geom.RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 24, 24));
+        setLocationRelativeTo(owner);
     }
 
     // In src/UI/AddEditLoanDialog.java
@@ -88,8 +100,43 @@ public class AddEditLoanDialog extends JDialog {
     }
 
     private void initComponents() {
-        setLayout(new BorderLayout(10, 10));
+        JPanel mainWrapper = new JPanel(new BorderLayout());
+        mainWrapper.setOpaque(false);
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(22, ModernTheme.BORDER),
+            new EmptyBorder(0, 0, 0, 0)
+        ));
+
+        // Modern Header
+        JPanel headerPanel = new JPanel(new BorderLayout(12, 0));
+        headerPanel.setBackground(new Color(34, 139, 34)); // Green theme for loans
+        headerPanel.setBorder(new EmptyBorder(16, 20, 16, 16));
+
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titlePanel.setOpaque(false);
+        JLabel iconLabel = new JLabel(ModernIcons.create(ModernIcons.IconType.LOAN, ModernTheme.TEXT_WHITE, 22));
+        JLabel titleLabel = new JLabel(loanToEdit == null ? "Add New Loan" : "Edit Loan");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 18f));
+        titleLabel.setForeground(ModernTheme.TEXT_WHITE);
+        titlePanel.add(iconLabel);
+        titlePanel.add(titleLabel);
+
+        headerPanel.add(titlePanel, BorderLayout.WEST);
+        headerPanel.add(createHeaderCloseButton(), BorderLayout.EAST);
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+
+        // Content wrapper
+        JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
+        contentWrapper.setBackground(Color.WHITE);
+        contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
+        
+        // Form Panel
         JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBackground(Color.WHITE);
         formPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 5, 4, 5);
@@ -103,6 +150,7 @@ public class AddEditLoanDialog extends JDialog {
         formPanel.add(new JLabel("Lender Name:"), gbc);
         gbc.gridx = 1;
         lenderNameField = new JTextField(20);
+        ModernTheme.styleTextField(lenderNameField);
         formPanel.add(lenderNameField, gbc);
         row++;
 
@@ -112,6 +160,7 @@ public class AddEditLoanDialog extends JDialog {
         gbc.gridx = 1;
         String[] types = {"Personal", "Home", "Car", "Education", "Other"};
         loanTypeComboBox = new JComboBox<>(types);
+        ModernTheme.styleComboBox(loanTypeComboBox);
         formPanel.add(loanTypeComboBox, gbc);
         row++;
 
@@ -122,6 +171,7 @@ public class AddEditLoanDialog extends JDialog {
     principalField = new JFormattedTextField(createNumberFormatter(true));
     principalField.setValue(0.0);
     principalField.setFocusLostBehavior(JFormattedTextField.PERSIST);
+        ModernTheme.styleTextField(principalField);
         formPanel.add(principalField, gbc);
         row++;
 
@@ -132,6 +182,7 @@ public class AddEditLoanDialog extends JDialog {
     rateField = new JFormattedTextField(createNumberFormatter(true));
     rateField.setValue(0.0);
     rateField.setFocusLostBehavior(JFormattedTextField.PERSIST);
+        ModernTheme.styleTextField(rateField);
         formPanel.add(rateField, gbc);
         row++;
 
@@ -142,6 +193,7 @@ public class AddEditLoanDialog extends JDialog {
     tenureField = new JFormattedTextField(createNumberFormatter(false));
     tenureField.setValue(0);
     tenureField.setFocusLostBehavior(JFormattedTextField.PERSIST);
+        ModernTheme.styleTextField(tenureField);
         formPanel.add(tenureField, gbc);
         row++;
 
@@ -151,6 +203,7 @@ public class AddEditLoanDialog extends JDialog {
         gbc.gridx = 1;
         startDateField = new JTextField(10);
         startDateField.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
+        ModernTheme.styleTextField(startDateField);
         formPanel.add(startDateField, gbc);
         row++;
         
@@ -158,6 +211,7 @@ public class AddEditLoanDialog extends JDialog {
         JLabel statusLabel = new JLabel("Status:");
         String[] statuses = {"Active", "Paid Off"};
         statusComboBox = new JComboBox<>(statuses);
+        ModernTheme.styleComboBox(statusComboBox);
         gbc.gridx = 0; gbc.gridy = row;
         formPanel.add(statusLabel, gbc);
         gbc.gridx = 1;
@@ -173,13 +227,22 @@ public class AddEditLoanDialog extends JDialog {
         notesArea = new JTextArea(3, 20);
         notesArea.setLineWrap(true);
         notesArea.setWrapStyleWord(true);
-        formPanel.add(new JScrollPane(notesArea), gbc);
+        notesArea.setFont(ModernTheme.FONT_BODY);
+        JScrollPane notesScrollPane = new JScrollPane(notesArea);
+        notesScrollPane.setBorder(new CompoundBorder(
+            new LineBorder(ModernTheme.TEXT_SECONDARY, 1, true),
+            new EmptyBorder(5, 5, 5, 5)
+        ));
+        formPanel.add(notesScrollPane, gbc);
         row++;
 
         // --- Button Panel ---
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton saveButton = new JButton("Save");
-        JButton cancelButton = new JButton("Cancel");
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        buttonPanel.setBackground(Color.WHITE);
+        
+        JButton saveButton = ModernTheme.createSuccessButton(loanToEdit == null ? "Add Loan" : "Update Loan");
+        JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
+        
         buttonPanel.add(saveButton);
         buttonPanel.add(cancelButton);
 
@@ -197,11 +260,40 @@ public class AddEditLoanDialog extends JDialog {
             startDateField.setEditable(false);
         }
 
-        add(formPanel, BorderLayout.CENTER);
-        add(buttonPanel, BorderLayout.SOUTH);
-    pack();
-    // Center relative to the dialog's owner window
-    setLocationRelativeTo(getOwner());
+        contentWrapper.add(formPanel, BorderLayout.CENTER);
+        contentWrapper.add(buttonPanel, BorderLayout.SOUTH);
+        
+        mainPanel.add(contentWrapper, BorderLayout.CENTER);
+        mainWrapper.add(mainPanel, BorderLayout.CENTER);
+        add(mainWrapper);
+        
+        // Populate if editing
+        if (loanToEdit != null) {
+            populateFieldsForEdit();
+        }
+    }
+    
+    /**
+     * Creates the close button for the header (× symbol).
+     */
+    private JButton createHeaderCloseButton() {
+        JButton closeBtn = new JButton("×");
+        closeBtn.setFont(new Font("Arial", Font.BOLD, 20));
+        closeBtn.setForeground(Color.WHITE);
+        closeBtn.setBackground(new Color(34, 139, 34));
+        closeBtn.setBorder(new EmptyBorder(0, 10, 0, 10));
+        closeBtn.setFocusPainted(false);
+        closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeBtn.addActionListener(e -> dispose());
+        closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                closeBtn.setBackground(new Color(24, 119, 24));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                closeBtn.setBackground(new Color(34, 139, 34));
+            }
+        });
+        return closeBtn;
     }
 
     /**

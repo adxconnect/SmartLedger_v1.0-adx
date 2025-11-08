@@ -2,6 +2,7 @@ package src.UI;
 // We'll also add a placeholder for the dialog we will create
 // import src.UI.AddEditTaxProfileDialog;
 import javax.swing.*;
+import javax.imageio.ImageIO;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -12,9 +13,13 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.Ellipse2D;
 // Removed duplicate RecycleBinDialog import
 import src.UI.DepositRecycleBinDialog; // Import for Deposit Recycle Bin
 import src.UI.AddEditInvestmentDialog;
@@ -27,6 +32,7 @@ import src.Transaction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.StringJoiner;
@@ -39,6 +45,7 @@ import src.UI.AddEditTaxProfileDialog;
 import src.UI.AddEditDepositDialog;
 import src.UI.GullakDialog;
 import src.UI.RecycleBinDialog; // Transaction Recycle Bin Dialog
+import src.UI.BankAccountRecycleBinDialog;
 import src.UI.ShowOtpDialog;
 import src.UI.EnterOtpDialog;
 import src.UI.SensitiveCardDetailsDialog;
@@ -54,6 +61,7 @@ import src.UI.ModernIcons.IconType;
 // We'll also add placeholders for the dialogs
 import src.UI.AddEditLoanDialog;
 import src.UI.LoanRecycleBinDialog;
+import src.auth.Account;
 import src.auth.SessionContext;
 import src.auth.UserPreferencesCache;
 
@@ -100,6 +108,16 @@ public class FinanceManagerFullUI extends JFrame {
     private JLabel typeLabel;
     private JLabel dropdownIcon;
     private JPanel leftPanel;
+    private Image avatarImage;
+    private String avatarImagePath;
+    private JPanel windowTitleBar;
+    private JLabel windowTitleLabel;
+    private JButton windowCloseButton;
+    private JButton windowMinimizeButton;
+    private JButton windowMaximizeButton;
+    private Point windowDragOffset;
+    private Rectangle restoreBounds;
+    private boolean isMaximized;
 
     // --- Transaction Tab Variables ---
     private JComboBox<String> yearComboBox;
@@ -163,18 +181,198 @@ public class FinanceManagerFullUI extends JFrame {
     private SummaryData currentSummarySnapshot;
     private boolean summaryTabInitialized = false;
     private static final DateTimeFormatter SUMMARY_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
+    private static final DateTimeFormatter PROFILE_DATE_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     // --- Lending Tab Variables ---
     private JList<Lending> lendingList;
     private DefaultListModel<Lending> lendingListModel;
     private JPanel lendingDetailPanel;
 
+    private JPanel createWindowTitleBar() {
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(ModernTheme.SURFACE);
+        bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, ModernTheme.BORDER));
+
+        JPanel brandingPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        brandingPanel.setOpaque(false);
+        headerLogo = LogoPanel.createIconOnlyLogo(28);
+        brandingPanel.add(headerLogo);
+
+        windowTitleLabel = new JLabel("SmartLedger Finance");
+        windowTitleLabel.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 13));
+        windowTitleLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        brandingPanel.add(windowTitleLabel);
+
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        controlPanel.setOpaque(false);
+
+        windowMinimizeButton = createTitleBarButton("-", false);
+        windowMinimizeButton.setToolTipText("Minimize");
+        windowMinimizeButton.addActionListener(e -> setState(Frame.ICONIFIED));
+
+        windowMaximizeButton = createTitleBarButton("[ ]", false);
+        windowMaximizeButton.setToolTipText("Maximize");
+        windowMaximizeButton.addActionListener(e -> toggleMaximizeRestore());
+
+        windowCloseButton = createTitleBarButton("X", true);
+        windowCloseButton.setToolTipText("Close");
+        windowCloseButton.addActionListener(e -> dispatchEvent(new java.awt.event.WindowEvent(this, java.awt.event.WindowEvent.WINDOW_CLOSING)));
+
+        controlPanel.add(windowMinimizeButton);
+        controlPanel.add(windowMaximizeButton);
+        controlPanel.add(windowCloseButton);
+
+        bar.add(brandingPanel, BorderLayout.WEST);
+        bar.add(controlPanel, BorderLayout.EAST);
+
+        MouseAdapter dragListener = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                Point click = e.getLocationOnScreen();
+                Point window = getLocation();
+                windowDragOffset = new Point(click.x - window.x, click.y - window.y);
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (windowDragOffset == null || isMaximized) {
+                    return;
+                }
+                Point drag = e.getLocationOnScreen();
+                setLocation(drag.x - windowDragOffset.x, drag.y - windowDragOffset.y);
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                    toggleMaximizeRestore();
+                }
+            }
+        };
+
+        bar.addMouseListener(dragListener);
+        bar.addMouseMotionListener(dragListener);
+        brandingPanel.addMouseListener(dragListener);
+        brandingPanel.addMouseMotionListener(dragListener);
+        windowTitleLabel.addMouseListener(dragListener);
+        windowTitleLabel.addMouseMotionListener(dragListener);
+
+        return bar;
+    }
+
+    private JButton createTitleBarButton(String text, boolean closeButton) {
+        JButton button = new JButton(text);
+        button.putClientProperty("titleBarClose", closeButton);
+        button.putClientProperty("titleBarButton", Boolean.TRUE);
+        button.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 12));
+        button.setFocusable(false);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
+    button.setPreferredSize(new Dimension(44, 26));
+        button.setBackground(ModernTheme.SURFACE);
+        button.setForeground(ModernTheme.TEXT_PRIMARY);
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (closeButton) {
+                    button.setBackground(ModernTheme.DANGER);
+                    button.setForeground(ModernTheme.TEXT_WHITE);
+                } else {
+                    button.setBackground(ModernTheme.BACKGROUND);
+                    button.setForeground(ModernTheme.TEXT_PRIMARY);
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                updateTitleBarButtonTheme(button);
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (closeButton) {
+                    button.setBackground(ModernTheme.DANGER.darker());
+                    button.setForeground(ModernTheme.TEXT_WHITE);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (closeButton && button.contains(e.getPoint())) {
+                    button.setBackground(ModernTheme.DANGER);
+                    button.setForeground(ModernTheme.TEXT_WHITE);
+                }
+            }
+        });
+
+        updateTitleBarButtonTheme(button);
+        return button;
+    }
+
+    private void updateTitleBarButtonTheme(JButton button) {
+        if (button == null) {
+            return;
+        }
+        boolean closeButton = Boolean.TRUE.equals(button.getClientProperty("titleBarClose"));
+        button.setBackground(ModernTheme.SURFACE);
+        button.setForeground(ModernTheme.TEXT_PRIMARY);
+        if (closeButton) {
+            button.setForeground(ModernTheme.TEXT_PRIMARY);
+        }
+    }
+
+    private void toggleMaximizeRestore() {
+        GraphicsEnvironment env = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        Rectangle bounds = env.getMaximumWindowBounds();
+        if (!isMaximized) {
+            restoreBounds = getBounds();
+            setBounds(bounds);
+            isMaximized = true;
+            if (windowMaximizeButton != null) {
+                windowMaximizeButton.setText("[R]");
+            }
+            windowMaximizeButton.setToolTipText("Restore");
+        } else {
+            if (restoreBounds != null) {
+                setBounds(restoreBounds);
+            } else {
+                setSize(900, 600);
+                setLocationRelativeTo(null);
+            }
+            isMaximized = false;
+            if (windowMaximizeButton != null) {
+                windowMaximizeButton.setText("[ ]");
+            }
+            windowMaximizeButton.setToolTipText("Maximize");
+        }
+        revalidate();
+        repaint();
+    }
+
+    private void updateWindowChromeTheme() {
+        if (windowTitleBar != null) {
+            windowTitleBar.setBackground(ModernTheme.SURFACE);
+            windowTitleBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, ModernTheme.BORDER));
+        }
+        if (windowTitleLabel != null) {
+            windowTitleLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        }
+        updateTitleBarButtonTheme(windowCloseButton);
+        updateTitleBarButtonTheme(windowMinimizeButton);
+        updateTitleBarButtonTheme(windowMaximizeButton);
+        getRootPane().setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+    }
+
     public FinanceManagerFullUI() {
         setTitle("SmartLedger - Personal Finance Manager");
+        setUndecorated(true);
         setSize(900, 600);
     setDefaultCloseOperation(DO_NOTHING_ON_CLOSE); // Prevent auto-logout on close
     // Apply modern background to the frame
     getContentPane().setBackground(ModernTheme.BACKGROUND);
+        getRootPane().setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
 
         // Handle window closing - just hide, don't logout
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -212,6 +410,9 @@ public class FinanceManagerFullUI extends JFrame {
     JPanel topPanel = new JPanel(new BorderLayout());
     topPanel.setBorder(new EmptyBorder(8, 16, 8, 16));
     topPanel.setBackground(ModernTheme.SURFACE);
+
+        windowTitleBar = createWindowTitleBar();
+        updateWindowChromeTheme();
     
         // Get current account details
         src.auth.Account currentAccount = SessionContext.getCurrentAccount();
@@ -251,26 +452,43 @@ public class FinanceManagerFullUI extends JFrame {
             userProfileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
             userProfileBtn.setOpaque(false);
             
+            refreshAvatarImage();
+
             // Create circular avatar with custom painting
             avatarPanel = new JPanel() {
                 @Override
                 protected void paintComponent(Graphics g) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    
-                    // Draw circular background
-                    g2.setColor(ModernTheme.PRIMARY);
-                    g2.fillOval(0, 0, getWidth(), getHeight());
-                    
-                    // Draw text
-                    g2.setColor(Color.WHITE);
-                    g2.setFont(new Font(ModernTheme.FONT_HEADER.getFamily(), Font.BOLD, 16));
-                    FontMetrics fm = g2.getFontMetrics();
-                    String initial = currentAccount.getAccountName().substring(0, 1).toUpperCase();
-                    int textWidth = fm.stringWidth(initial);
-                    int textHeight = fm.getAscent();
-                    g2.drawString(initial, (getWidth() - textWidth) / 2, (getHeight() + textHeight) / 2 - 2);
-                    
+
+                    refreshAvatarImage();
+                    Ellipse2D circle = new Ellipse2D.Double(0, 0, getWidth(), getHeight());
+                    if (avatarImage != null) {
+                        g2.setClip(circle);
+                        g2.drawImage(avatarImage, 0, 0, getWidth(), getHeight(), null);
+                        g2.setClip(null);
+                        g2.setColor(new Color(255, 255, 255, 80));
+                        g2.setStroke(new BasicStroke(1.5f));
+                        g2.draw(circle);
+                    } else {
+                        g2.setColor(ModernTheme.PRIMARY);
+                        g2.fillOval(0, 0, getWidth(), getHeight());
+
+                        g2.setColor(Color.WHITE);
+                        g2.setFont(new Font(ModernTheme.FONT_HEADER.getFamily(), Font.BOLD, 16));
+                        FontMetrics fm = g2.getFontMetrics();
+                        src.auth.Account account = SessionContext.getCurrentAccount();
+                        String initial = (account != null && account.getAccountName() != null && !account.getAccountName().isEmpty())
+                            ? account.getAccountName().substring(0, 1).toUpperCase()
+                            : "?";
+                        int textWidth = fm.stringWidth(initial);
+                        int textHeight = fm.getAscent();
+                        g2.drawString(initial, (getWidth() - textWidth) / 2, (getHeight() + textHeight) / 2 - 2);
+                        g2.setColor(new Color(255, 255, 255, 110));
+                        g2.setStroke(new BasicStroke(1.5f));
+                        g2.draw(circle);
+                    }
+
                     g2.dispose();
                 }
             };
@@ -291,8 +509,7 @@ public class FinanceManagerFullUI extends JFrame {
             nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
             
             // Account type badge with smaller font and rounded corners
-            String accountTypeText = currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
-                ? "Business" : "Personal";
+            String accountTypeText = currentAccount.getAccountType().name();
             typeLabel = new JLabel(accountTypeText) {
                 @Override
                 protected void paintComponent(Graphics g) {
@@ -342,43 +559,82 @@ public class FinanceManagerFullUI extends JFrame {
                 BorderFactory.createEmptyBorder(5, 5, 5, 5)
             ));
             
-            // Profile info in popup (smaller fonts)
-            JMenuItem profileHeader = new JMenuItem("Profile Information");
-            profileHeader.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 12));
-            profileHeader.setEnabled(false);
-            profileHeader.setBackground(ModernTheme.SURFACE);
-            userMenu.add(profileHeader);
-            userMenu.addSeparator();
-            
-            // Email info with smaller font
+            userMenu.setLayout(new BorderLayout());
+
+            JPanel menuPanel = new JPanel() {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    Color surface = ModernTheme.SURFACE;
+                    if (ModernTheme.isDarkMode()) {
+                        g2.setColor(new Color(Math.min(surface.getRed() + 12, 255), Math.min(surface.getGreen() + 12, 255), Math.min(surface.getBlue() + 12, 255), 235));
+                    } else {
+                        g2.setColor(new Color(surface.getRed(), surface.getGreen(), surface.getBlue(), 245));
+                    }
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            menuPanel.setOpaque(false);
+            menuPanel.setBackground(ModernTheme.SURFACE);
+            menuPanel.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
+            menuPanel.setLayout(new BoxLayout(menuPanel, BoxLayout.Y_AXIS));
+
+            JLabel headerLabel = new JLabel("Profile Information");
+            headerLabel.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.BOLD, 14));
+            headerLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+            headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            menuPanel.add(headerLabel);
+
+            JLabel subLabel = new JLabel(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS
+                ? "Business Account"
+                : "Personal Account");
+            subLabel.setFont(new Font(ModernTheme.FONT_SMALL.getFamily(), Font.PLAIN, 12));
+            subLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+            subLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            menuPanel.add(Box.createVerticalStrut(2));
+            menuPanel.add(subLabel);
+
+            menuPanel.add(Box.createVerticalStrut(12));
+            JSeparator separator = new JSeparator();
+            separator.setForeground(new Color(ModernTheme.BORDER.getRed(), ModernTheme.BORDER.getGreen(), ModernTheme.BORDER.getBlue(), 120));
+            separator.setAlignmentX(Component.LEFT_ALIGNMENT);
+            menuPanel.add(separator);
+            menuPanel.add(Box.createVerticalStrut(12));
+
+            JPanel infoGroup = new JPanel();
+            infoGroup.setOpaque(false);
+            infoGroup.setLayout(new BoxLayout(infoGroup, BoxLayout.Y_AXIS));
+            infoGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
+
             if (currentAccount.getEmail() != null && !currentAccount.getEmail().trim().isEmpty()) {
-                JMenuItem emailItem = new JMenuItem("📧 " + currentAccount.getEmail());
-                emailItem.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 11));
-                emailItem.setEnabled(false);
-                emailItem.setBackground(ModernTheme.SURFACE);
-                userMenu.add(emailItem);
+                infoGroup.add(createProfileInfoRow("📧", currentAccount.getEmail()));
             }
-            
-            // Phone info with smaller font
+
             if (currentAccount.getPhone() != null && !currentAccount.getPhone().trim().isEmpty()) {
-                JMenuItem phoneItem = new JMenuItem("📱 " + currentAccount.getPhone());
-                phoneItem.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 11));
-                phoneItem.setEnabled(false);
-                phoneItem.setBackground(ModernTheme.SURFACE);
-                userMenu.add(phoneItem);
+                if (infoGroup.getComponentCount() > 0) {
+                    infoGroup.add(Box.createVerticalStrut(8));
+                }
+                infoGroup.add(createProfileInfoRow("📱", currentAccount.getPhone()));
             }
-            
-            userMenu.addSeparator();
-            
-            // Edit Profile option with smaller font
-            JMenuItem editProfileItem = new JMenuItem("✏️ Edit Profile");
-            editProfileItem.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 11));
-            editProfileItem.setBackground(ModernTheme.SURFACE);
-            editProfileItem.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            editProfileItem.addActionListener(e -> {
-                openEditProfileDialog();
-            });
-            userMenu.add(editProfileItem);
+
+            if (infoGroup.getComponentCount() > 0) {
+                menuPanel.add(infoGroup);
+                menuPanel.add(Box.createVerticalStrut(16));
+            }
+
+            JButton editProfileButton = ModernTheme.createSecondaryButton("Edit Profile");
+            editProfileButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+            editProfileButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+            editProfileButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            editProfileButton.addActionListener(e -> openEditProfileDialog());
+            menuPanel.add(editProfileButton);
+
+            userMenu.add(menuPanel, BorderLayout.CENTER);
             
             // Show popup on click
             userProfileBtn.addActionListener(e -> {
@@ -412,10 +668,18 @@ public class FinanceManagerFullUI extends JFrame {
         rightPanel.add(logoutBtn);
         topPanel.add(rightPanel, BorderLayout.EAST);
         
+        // Stack window title bar above profile header content
+        JPanel headerStack = new JPanel(new BorderLayout());
+        headerStack.setOpaque(false);
+        if (windowTitleBar != null) {
+            headerStack.add(windowTitleBar, BorderLayout.NORTH);
+        }
+        headerStack.add(topPanel, BorderLayout.CENTER);
+
         // Create a wrapper panel for header + separator line
         JPanel headerWrapper = new JPanel(new BorderLayout());
         headerWrapper.setBackground(ModernTheme.SURFACE);
-        headerWrapper.add(topPanel, BorderLayout.CENTER);
+        headerWrapper.add(headerStack, BorderLayout.CENTER);
         
         // Add horizontal separator line below the header
         JSeparator separator = new JSeparator(SwingConstants.HORIZONTAL);
@@ -898,8 +1162,13 @@ public class FinanceManagerFullUI extends JFrame {
     deleteBankBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
     deleteBankBtn.setIconTextGap(8);
     deleteBankBtn.addActionListener(e -> deleteSelectedAccount());
+    JButton bankRecycleBtn = ModernTheme.createSecondaryButton("Bank Recycle Bin");
+    bankRecycleBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+    bankRecycleBtn.setIconTextGap(8);
+    bankRecycleBtn.addActionListener(e -> openBankAccountRecycleBin());
     bankButtonPanel.add(addBankBtn);
     bankButtonPanel.add(deleteBankBtn);
+    bankButtonPanel.add(bankRecycleBtn);
     bPanel.add(bankButtonPanel, BorderLayout.SOUTH);
         mainContentPanel.add(bPanel, "Bank Accounts");
         bankAccountList.addListSelectionListener(e -> {
@@ -1065,9 +1334,13 @@ addTaxProfileBtn.setIconTextGap(8);
 JButton deleteTaxProfileBtn = ModernTheme.createDangerButton("Delete Selected Profile");
 deleteTaxProfileBtn.setIcon(ModernIcons.create(IconType.DELETE, ModernTheme.TEXT_WHITE, 16));
 deleteTaxProfileBtn.setIconTextGap(8);
+JButton recycleBinTaxBtn = ModernTheme.createSecondaryButton("Recycle Bin");
+recycleBinTaxBtn.setIcon(ModernIcons.create(IconType.RECYCLE, ModernTheme.TEXT_PRIMARY, 16));
+recycleBinTaxBtn.setIconTextGap(8);
 
 taxButtonPanel.add(addTaxProfileBtn);
 taxButtonPanel.add(deleteTaxProfileBtn);
+taxButtonPanel.add(recycleBinTaxBtn);
 taxPanel.add(taxButtonPanel, BorderLayout.SOUTH);
 
 mainContentPanel.add(taxPanel, "Taxation");// Add the new tab
@@ -1082,6 +1355,7 @@ taxProfileList.addListSelectionListener(e -> {
 
 addTaxProfileBtn.addActionListener(e -> openAddEditTaxProfileDialog(null)); // New method
 deleteTaxProfileBtn.addActionListener(e -> deleteSelectedTaxProfile()); // New method
+recycleBinTaxBtn.addActionListener(e -> openTaxProfileRecycleBin()); // New method
 
 // Load initial data
 refreshTaxProfiles(); // New method
@@ -1541,46 +1815,59 @@ cardLayout.show(mainContentPanel, "Transactions");
         JPanel mainPanel = new JPanel(new BorderLayout(0, 0));
         mainPanel.setBackground(ModernTheme.SURFACE);
         mainPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(ModernTheme.DANGER, 3),
+            new ModernTheme.RoundedBorder(18, ModernTheme.DANGER.darker()),
             BorderFactory.createEmptyBorder(0, 0, 0, 0)
         ));
         
         // Header with close button
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(ModernTheme.DANGER);
-        headerPanel.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 12));
         
         JLabel titleLabel = new JLabel("Confirm Logout");
-        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 16f));
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 14f));
         titleLabel.setForeground(Color.WHITE);
         
-        JButton closeBtn = new JButton("✕");
-        closeBtn.setFont(new Font("Arial", Font.BOLD, 18));
+        JButton closeBtn = new JButton("\u2715") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(255, 255, 255, 45));
+                g2.fillOval(0, 0, getWidth(), getHeight());
+                g2.setColor(Color.WHITE);
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        closeBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
         closeBtn.setForeground(Color.WHITE);
-        closeBtn.setBackground(ModernTheme.DANGER);
-        closeBtn.setBorder(null);
-        closeBtn.setFocusPainted(false);
+        closeBtn.setOpaque(false);
         closeBtn.setContentAreaFilled(false);
+        closeBtn.setBorderPainted(false);
+        closeBtn.setFocusPainted(false);
         closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        closeBtn.setPreferredSize(new Dimension(30, 30));
+        closeBtn.setPreferredSize(new Dimension(26, 26));
         closeBtn.addActionListener(e -> logoutDialog.dispose());
         
         headerPanel.add(titleLabel, BorderLayout.WEST);
         headerPanel.add(closeBtn, BorderLayout.EAST);
         
         // Content panel
-        JPanel contentPanel = new JPanel();
-        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
-        contentPanel.setBackground(ModernTheme.SURFACE);
-        contentPanel.setBorder(BorderFactory.createEmptyBorder(24, 20, 24, 20));
+    JPanel contentPanel = new JPanel();
+    contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+    contentPanel.setBackground(ModernTheme.SURFACE);
+    contentPanel.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
         
         // Icon and message
-        JPanel messagePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
+    JPanel messagePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
         messagePanel.setBackground(ModernTheme.SURFACE);
         
         // Icon
-        JLabel iconLabel = new JLabel("⚠");
-        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 48));
+    JLabel iconLabel = new JLabel("⚠");
+    iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 38));
         iconLabel.setForeground(ModernTheme.WARNING);
         messagePanel.add(iconLabel);
         
@@ -1589,13 +1876,13 @@ cardLayout.show(mainContentPanel, "Transactions");
         textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
         textPanel.setBackground(ModernTheme.SURFACE);
         
-        JLabel questionLabel = new JLabel("Are you sure you want to logout?");
-        questionLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 15f));
+    JLabel questionLabel = new JLabel("Are you sure you want to logout?");
+    questionLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 14f));
         questionLabel.setForeground(ModernTheme.TEXT_PRIMARY);
         questionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        JLabel infoLabel = new JLabel("You will need to login again to access your account.");
-        infoLabel.setFont(ModernTheme.FONT_SMALL);
+    JLabel infoLabel = new JLabel("You will need to login again to access your account.");
+    infoLabel.setFont(ModernTheme.FONT_SMALL.deriveFont(11f));
         infoLabel.setForeground(ModernTheme.TEXT_SECONDARY);
         infoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
@@ -1605,20 +1892,20 @@ cardLayout.show(mainContentPanel, "Transactions");
         
         messagePanel.add(textPanel);
         contentPanel.add(messagePanel);
-        contentPanel.add(Box.createVerticalStrut(20));
+    contentPanel.add(Box.createVerticalStrut(14));
         
         // Button panel
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
+    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
         buttonPanel.setBackground(ModernTheme.SURFACE);
         
         JButton noBtn = ModernTheme.createSecondaryButton("No, Stay");
-        noBtn.setPreferredSize(new Dimension(120, 40));
-        noBtn.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 13f));
+    noBtn.setPreferredSize(new Dimension(110, 36));
+    noBtn.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 12.5f));
         noBtn.addActionListener(e -> logoutDialog.dispose());
         
         JButton yesBtn = ModernTheme.createDangerButton("Yes, Logout");
-        yesBtn.setPreferredSize(new Dimension(120, 40));
-        yesBtn.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 13f));
+    yesBtn.setPreferredSize(new Dimension(110, 36));
+    yesBtn.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 12.5f));
         yesBtn.addActionListener(e -> {
             logoutDialog.dispose();
             performLogout();
@@ -1631,10 +1918,12 @@ cardLayout.show(mainContentPanel, "Transactions");
         mainPanel.add(headerPanel, BorderLayout.NORTH);
         mainPanel.add(contentPanel, BorderLayout.CENTER);
         
-        logoutDialog.add(mainPanel);
-        logoutDialog.setSize(480, 230);
-        logoutDialog.setLocationRelativeTo(this);
-        logoutDialog.setVisible(true);
+    logoutDialog.add(mainPanel);
+    logoutDialog.pack();
+    logoutDialog.setSize(360, 210);
+    logoutDialog.setShape(new RoundRectangle2D.Double(0, 0, logoutDialog.getWidth(), logoutDialog.getHeight(), 28, 28));
+    logoutDialog.setLocationRelativeTo(this);
+    logoutDialog.setVisible(true);
     }
 
     // Applies a RowFilter to the transactions table based on the text and target column
@@ -1968,24 +2257,49 @@ cardLayout.show(mainContentPanel, "Transactions");
         summaryExportPdfButton.setEnabled(false);
 
         int row = 0;
-        JLabel companyLabel = new JLabel("Company:");
+        
+        // Add icon for Company field
+        JPanel companyPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        companyPanel.setOpaque(false);
+        JLabel companyIcon = new JLabel(ModernIcons.create(IconType.SETTINGS, ModernTheme.TEXT_SECONDARY, 14));
+        JLabel companyLabel = new JLabel("Company (Optional):");
         companyLabel.setFont(ModernTheme.FONT_BODY);
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(companyLabel, gbc);
+        companyPanel.add(companyIcon);
+        companyPanel.add(companyLabel);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(companyPanel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryCompanyField, gbc);
 
+        // Add icon for Designation field
+        JPanel designationPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        designationPanel.setOpaque(false);
+        JLabel designationIcon = new JLabel(ModernIcons.create(IconType.USER, ModernTheme.TEXT_SECONDARY, 14));
         JLabel designationLabel = new JLabel("Designation:");
         designationLabel.setFont(ModernTheme.FONT_BODY);
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(designationLabel, gbc);
+        designationPanel.add(designationIcon);
+        designationPanel.add(designationLabel);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(designationPanel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryDesignationField, gbc);
 
+        // Add icon for Report Holder field
+        JPanel holderPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        holderPanel.setOpaque(false);
+        JLabel holderIcon = new JLabel(ModernIcons.create(IconType.USER, ModernTheme.TEXT_SECONDARY, 14));
         JLabel holderLabel = new JLabel("Report Holder:");
         holderLabel.setFont(ModernTheme.FONT_BODY);
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(holderLabel, gbc);
+        holderPanel.add(holderIcon);
+        holderPanel.add(holderLabel);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(holderPanel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryHolderField, gbc);
 
+        // Add icon for Transaction Year field
+        JPanel yearPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        yearPanel.setOpaque(false);
+        JLabel yearIcon = new JLabel(ModernIcons.create(IconType.TRANSACTIONS, ModernTheme.TEXT_SECONDARY, 14));
         JLabel yearLabel = new JLabel("Transaction Year:");
         yearLabel.setFont(ModernTheme.FONT_BODY);
-        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(yearLabel, gbc);
+        yearPanel.add(yearIcon);
+        yearPanel.add(yearLabel);
+        gbc.gridx = 0; gbc.gridy = row; inputPanel.add(yearPanel, gbc);
         gbc.gridx = 1; gbc.gridy = row++; inputPanel.add(summaryYearCombo, gbc);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -2024,6 +2338,8 @@ cardLayout.show(mainContentPanel, "Transactions");
 
         summaryTabInitialized = true;
         regenerateSummary();
+
+        setLocationRelativeTo(null);
     }
 
     private void loadSummaryYearChoices() {
@@ -2416,43 +2732,137 @@ cardLayout.show(mainContentPanel, "Transactions");
             PdfWriter.getInstance(document, fos);
             document.open();
 
-            com.itextpdf.text.Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, BaseColor.BLACK);
-            com.itextpdf.text.Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, BaseColor.BLACK);
-            com.itextpdf.text.Font textFont = FontFactory.getFont(FontFactory.HELVETICA, 10, BaseColor.DARK_GRAY);
+            BaseColor primaryBlue = new BaseColor(67, 97, 238);
+            BaseColor primaryDarkBlue = new BaseColor(48, 73, 191);
+            BaseColor labelBackground = new BaseColor(232, 239, 255);
+            BaseColor valueBackground = new BaseColor(250, 252, 255);
+            BaseColor borderBlue = new BaseColor(204, 214, 252);
+            BaseColor textPrimary = new BaseColor(36, 38, 45);
+            BaseColor textSecondary = new BaseColor(105, 112, 131);
 
-            document.add(new Paragraph("Finance Summary Report", titleFont));
-            document.add(new Paragraph(" "));
+            com.itextpdf.text.Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, primaryBlue);
+            com.itextpdf.text.Font subtitleFont = FontFactory.getFont(FontFactory.HELVETICA, 11, textSecondary);
+            com.itextpdf.text.Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, primaryBlue);
+            com.itextpdf.text.Font labelFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, primaryDarkBlue);
+            com.itextpdf.text.Font textFont = FontFactory.getFont(FontFactory.HELVETICA, 10, textPrimary);
+            com.itextpdf.text.Font footerFont = FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 8, textSecondary);
 
-            document.add(new Paragraph("Prepared For: " + defaultIfEmpty(data.getHolderName(), "N/A"), textFont));
+            src.auth.Account currentAccount = SessionContext.getCurrentAccount();
+
+            PdfPTable brandTable = new PdfPTable(2);
+            brandTable.setWidthPercentage(100);
+            brandTable.setWidths(new float[]{1f, 3f});
+            brandTable.setSpacingAfter(12f);
+
+            PdfPCell logoCell = new PdfPCell();
+            logoCell.setBorder(PdfPCell.NO_BORDER);
+            logoCell.setPadding(2f);
+            com.itextpdf.text.Image logoImage = loadReportLogo();
+            if (logoImage != null) {
+                logoImage.scaleToFit(64f, 64f);
+                logoImage.setAlignment(Element.ALIGN_LEFT);
+                logoCell.addElement(logoImage);
+            } else {
+                Paragraph logoFallback = new Paragraph("SmartLedger", sectionFont);
+                logoFallback.setSpacingAfter(0f);
+                logoCell.addElement(logoFallback);
+            }
+            brandTable.addCell(logoCell);
+
+            PdfPCell titleCell = new PdfPCell();
+            titleCell.setBorder(PdfPCell.NO_BORDER);
+            titleCell.setPaddingLeft(6f);
+            titleCell.setPaddingTop(4f);
+            Paragraph heading = new Paragraph("SMARTLEDGER FINANCIAL SUMMARY", titleFont);
+            heading.setSpacingAfter(4f);
+            Paragraph subheading = new Paragraph("Personal finance performance snapshot", subtitleFont);
+            titleCell.addElement(heading);
+            titleCell.addElement(subheading);
+            brandTable.addCell(titleCell);
+            document.add(brandTable);
+
+            PdfPTable dividerTable = new PdfPTable(1);
+            dividerTable.setWidthPercentage(100);
+            dividerTable.setSpacingAfter(12f);
+            PdfPCell dividerCell = new PdfPCell();
+            dividerCell.setBorder(PdfPCell.NO_BORDER);
+            dividerCell.setBorderWidthBottom(2.5f);
+            dividerCell.setBorderColorBottom(primaryBlue);
+            dividerTable.addCell(dividerCell);
+            document.add(dividerTable);
+
+            Paragraph profileHeading = new Paragraph("LOGIN PROFILE", sectionFont);
+            profileHeading.setSpacingAfter(6f);
+            document.add(profileHeading);
+
+            PdfPTable headerTable = new PdfPTable(2);
+            headerTable.setWidthPercentage(100);
+            headerTable.setSpacingAfter(18f);
+            headerTable.setWidths(new float[]{1.6f, 3.4f});
+
+            if (currentAccount != null) {
+                addHeaderRow(headerTable, "Account Name", defaultIfEmpty(currentAccount.getAccountName(), "—"),
+                        labelFont, textFont, labelBackground, valueBackground, borderBlue);
+                if (currentAccount.getAccountType() != null) {
+                    addHeaderRow(headerTable, "Account Type", formatAccountType(currentAccount.getAccountType()),
+                            labelFont, textFont, labelBackground, valueBackground, borderBlue);
+                }
+                if (!isBlank(currentAccount.getEmail())) {
+                    addHeaderRow(headerTable, "Email", currentAccount.getEmail(),
+                            labelFont, textFont, labelBackground, valueBackground, borderBlue);
+                }
+                if (!isBlank(currentAccount.getPhone())) {
+                    addHeaderRow(headerTable, "Phone", currentAccount.getPhone(),
+                            labelFont, textFont, labelBackground, valueBackground, borderBlue);
+                }
+                if (!isBlank(currentAccount.getPanCard())) {
+                    addHeaderRow(headerTable, "PAN", currentAccount.getPanCard(),
+                            labelFont, textFont, labelBackground, valueBackground, borderBlue);
+                }
+                if (currentAccount.getCreatedAt() != null) {
+                    addHeaderRow(headerTable, "Member Since", currentAccount.getCreatedAt().format(PROFILE_DATE_FORMAT),
+                            labelFont, textFont, labelBackground, valueBackground, borderBlue);
+                }
+            }
+
+            addHeaderRow(headerTable, "Report Holder", defaultIfEmpty(data.getHolderName(), "N/A"),
+                    labelFont, textFont, labelBackground, valueBackground, borderBlue);
+
             if (!isBlank(data.getDesignation())) {
-                document.add(new Paragraph("Designation: " + defaultIfEmpty(data.getDesignation(), ""), textFont));
+                addHeaderRow(headerTable, "Designation", data.getDesignation(),
+                        labelFont, textFont, labelBackground, valueBackground, borderBlue);
             }
             if (!isBlank(data.getCompanyName())) {
-                document.add(new Paragraph("Company: " + defaultIfEmpty(data.getCompanyName(), ""), textFont));
+                addHeaderRow(headerTable, "Company", data.getCompanyName(),
+                        labelFont, textFont, labelBackground, valueBackground, borderBlue);
             }
             if (data.getGeneratedAt() != null) {
-                document.add(new Paragraph("Generated On: " + data.getGeneratedAt().format(SUMMARY_TIMESTAMP_FORMAT), textFont));
+                addHeaderRow(headerTable, "Generated On", 
+                        data.getGeneratedAt().format(SUMMARY_TIMESTAMP_FORMAT), labelFont, textFont, labelBackground, valueBackground, borderBlue);
             }
-            document.add(new Paragraph(" "));
+            document.add(headerTable);
 
-            addSummarySection(document, "Transactions Overview", new String[][]{
+            // Transactions Section
+            addProfessionalSection(document, "💰 TRANSACTIONS OVERVIEW", new String[][]{
                     {"Total Entries", String.valueOf(data.getTransactions().getTotalCount())},
                     {"Total Income", formatCurrency(data.getTransactions().getTotalIncome())},
                     {"Total Expense", formatCurrency(data.getTransactions().getTotalExpense())},
                     {"Net Balance", formatCurrency(data.getTransactions().getNetBalance())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
 
+            // Bank Accounts Section
             SummaryData.BankSummary bank = data.getBank();
-            addSummarySection(document, "Bank Accounts", new String[][]{
+            addProfessionalSection(document, "🏦 BANK ACCOUNTS", new String[][]{
                     {"Accounts", String.valueOf(bank.getAccountCount())},
                     {"Unique Holders", String.valueOf(bank.getUniqueHolderCount())},
                     {"Total Balance", formatCurrency(bank.getTotalBalance())},
                     {"Top Account", defaultIfEmpty(bank.getTopAccountLabel(), "")},
                     {"Top Balance", formatCurrency(bank.getTopAccountBalance())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
 
+            // Deposits Section
             SummaryData.DepositSummary deposits = data.getDeposits();
-            addSummarySection(document, "Deposits", new String[][]{
+            addProfessionalSection(document, "💎 DEPOSITS", new String[][]{
                     {"Total Deposits", String.valueOf(deposits.getTotalCount())},
                     {"FD Principal", formatCurrency(deposits.getTotalFdPrincipal())},
                     {"FD Maturity", formatCurrency(deposits.getTotalFdMaturityEstimate())},
@@ -2460,50 +2870,58 @@ cardLayout.show(mainContentPanel, "Transactions");
                     {"RD Maturity", formatCurrency(deposits.getTotalRdMaturityEstimate())},
                     {"Gullak Balance", formatCurrency(deposits.getTotalGullakBalance())},
                     {"Gullak Due", formatCurrency(deposits.getTotalGullakDue())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
             if (!deposits.getMaturityHighlights().isEmpty()) {
-                document.add(new Paragraph("Upcoming Maturities", sectionFont));
+                Paragraph maturitySubtitle = new Paragraph("Upcoming Maturities", labelFont);
+                maturitySubtitle.setSpacingBefore(5f);
+                maturitySubtitle.setSpacingAfter(5f);
+                document.add(maturitySubtitle);
                 PdfPTable table = new PdfPTable(4);
                 table.setWidthPercentage(100);
                 table.setSpacingBefore(5f);
-                table.setSpacingAfter(10f);
+                table.setSpacingAfter(15f);
                 table.setWidths(new float[]{3f, 2f, 2f, 2f});
-                addTableHeader(table, new String[]{"Label", "Due Date", "Principal", "Maturity"});
+                addProfessionalTableHeader(table, new String[]{"Label", "Due Date", "Principal", "Maturity"});
                 for (SummaryData.DepositSummary.MaturityInfo info : deposits.getMaturityHighlights()) {
-                    table.addCell(new Phrase(defaultIfEmpty(info.getLabel(), ""), textFont));
-                    table.addCell(new Phrase(defaultIfEmpty(info.getMaturityDateLabel(), ""), textFont));
-                    table.addCell(new Phrase(formatCurrency(info.getPrincipalValue()), textFont));
-                    table.addCell(new Phrase(formatCurrency(info.getMaturityValue()), textFont));
+                    addStyledTableCell(table, defaultIfEmpty(info.getLabel(), ""), textFont);
+                    addStyledTableCell(table, defaultIfEmpty(info.getMaturityDateLabel(), ""), textFont);
+                    addStyledTableCell(table, formatCurrency(info.getPrincipalValue()), textFont);
+                    addStyledTableCell(table, formatCurrency(info.getMaturityValue()), textFont);
                 }
                 document.add(table);
             }
 
+            // Investments Section
             SummaryData.InvestmentSummary investments = data.getInvestments();
-            addSummarySection(document, "Investments", new String[][]{
+            addProfessionalSection(document, "📈 INVESTMENTS", new String[][]{
                     {"Total Assets", String.valueOf(investments.getTotalCount())},
                     {"Initial Value", formatCurrency(investments.getTotalInitialValue())},
                     {"Current Value", formatCurrency(investments.getTotalCurrentValue())},
                     {"Net Profit/Loss", formatCurrency(investments.getTotalProfitOrLoss())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
             if (!investments.getTopPerformers().isEmpty()) {
-                document.add(new Paragraph("Top Performers", sectionFont));
+                Paragraph performersSubtitle = new Paragraph("Top Performers", labelFont);
+                performersSubtitle.setSpacingBefore(5f);
+                performersSubtitle.setSpacingAfter(5f);
+                document.add(performersSubtitle);
                 PdfPTable table = new PdfPTable(4);
                 table.setWidthPercentage(100);
                 table.setSpacingBefore(5f);
-                table.setSpacingAfter(10f);
+                table.setSpacingAfter(15f);
                 table.setWidths(new float[]{3f, 2f, 2f, 2f});
-                addTableHeader(table, new String[]{"Asset", "Type", "Current Value", "Profit %"});
+                addProfessionalTableHeader(table, new String[]{"Asset", "Type", "Current Value", "Profit %"});
                 for (SummaryData.InvestmentSummary.InvestmentHighlight hi : investments.getTopPerformers()) {
-                    table.addCell(new Phrase(defaultIfEmpty(hi.getLabel(), ""), textFont));
-                    table.addCell(new Phrase(defaultIfEmpty(hi.getAssetType(), ""), textFont));
-                    table.addCell(new Phrase(formatCurrency(hi.getCurrentValue()), textFont));
-                    table.addCell(new Phrase(String.format("%.2f%%", hi.getProfitOrLossPercentage()), textFont));
+                    addStyledTableCell(table, defaultIfEmpty(hi.getLabel(), ""), textFont);
+                    addStyledTableCell(table, defaultIfEmpty(hi.getAssetType(), ""), textFont);
+                    addStyledTableCell(table, formatCurrency(hi.getCurrentValue()), textFont);
+                    addStyledTableCell(table, String.format("%.2f%%", hi.getProfitOrLossPercentage()), textFont);
                 }
                 document.add(table);
             }
 
+            // Loans Section
             SummaryData.LoanSummary loans = data.getLoans();
-            addSummarySection(document, "Loans", new String[][]{
+            addProfessionalSection(document, "💳 LOANS", new String[][]{
                     {"Total Loans", String.valueOf(loans.getTotalCount())},
                     {"Active Loans", String.valueOf(loans.getActiveCount())},
                     {"Closed Loans", String.valueOf(loans.getPaidOffCount())},
@@ -2512,27 +2930,31 @@ cardLayout.show(mainContentPanel, "Transactions");
                     {"Principal Paid", formatCurrency(loans.getTotalPrincipalPaidOff())},
                     {"Monthly EMI", formatCurrency(loans.getTotalMonthlyEmi())},
                     {"Outstanding Repayable", formatCurrency(loans.getTotalRepayableOutstanding())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
             if (!loans.getKeyLoans().isEmpty()) {
-                document.add(new Paragraph("Key Loans", sectionFont));
+                Paragraph loansSubtitle = new Paragraph("Key Loans", labelFont);
+                loansSubtitle.setSpacingBefore(5f);
+                loansSubtitle.setSpacingAfter(5f);
+                document.add(loansSubtitle);
                 PdfPTable table = new PdfPTable(5);
                 table.setWidthPercentage(100);
                 table.setSpacingBefore(5f);
-                table.setSpacingAfter(10f);
+                table.setSpacingAfter(15f);
                 table.setWidths(new float[]{3f, 1.5f, 1.5f, 1.5f, 1.5f});
-                addTableHeader(table, new String[]{"Loan", "Status", "EMI", "Principal", "Total"});
+                addProfessionalTableHeader(table, new String[]{"Loan", "Status", "EMI", "Principal", "Total"});
                 for (SummaryData.LoanSummary.LoanHighlight hl : loans.getKeyLoans()) {
-                    table.addCell(new Phrase(defaultIfEmpty(hl.getLabel(), ""), textFont));
-                    table.addCell(new Phrase(defaultIfEmpty(hl.getStatus(), ""), textFont));
-                    table.addCell(new Phrase(formatCurrency(hl.getEmiAmount()), textFont));
-                    table.addCell(new Phrase(formatCurrency(hl.getPrincipalAmount()), textFont));
-                    table.addCell(new Phrase(formatCurrency(hl.getTotalRepayable()), textFont));
+                    addStyledTableCell(table, defaultIfEmpty(hl.getLabel(), ""), textFont);
+                    addStyledTableCell(table, defaultIfEmpty(hl.getStatus(), ""), textFont);
+                    addStyledTableCell(table, formatCurrency(hl.getEmiAmount()), textFont);
+                    addStyledTableCell(table, formatCurrency(hl.getPrincipalAmount()), textFont);
+                    addStyledTableCell(table, formatCurrency(hl.getTotalRepayable()), textFont);
                 }
                 document.add(table);
             }
 
+            // Cards Section
             SummaryData.CardSummary cards = data.getCards();
-            addSummarySection(document, "Cards", new String[][]{
+            addProfessionalSection(document, "💳 CARDS", new String[][]{
                     {"Total Cards", String.valueOf(cards.getTotalCount())},
                     {"Credit Cards", String.valueOf(cards.getCreditCardCount())},
                     {"Debit Cards", String.valueOf(cards.getDebitCardCount())},
@@ -2540,26 +2962,30 @@ cardLayout.show(mainContentPanel, "Transactions");
                     {"Credit Used", formatCurrency(cards.getTotalCreditUsed())},
                     {"Available Credit", formatCurrency(cards.getTotalCreditAvailable())},
                     {"Amount Due", formatCurrency(cards.getTotalCreditDue())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
             if (!cards.getKeyCards().isEmpty()) {
-                document.add(new Paragraph("High Due Cards", sectionFont));
+                Paragraph cardsSubtitle = new Paragraph("High Due Cards", labelFont);
+                cardsSubtitle.setSpacingBefore(5f);
+                cardsSubtitle.setSpacingAfter(5f);
+                document.add(cardsSubtitle);
                 PdfPTable table = new PdfPTable(4);
                 table.setWidthPercentage(100);
                 table.setSpacingBefore(5f);
-                table.setSpacingAfter(10f);
+                table.setSpacingAfter(15f);
                 table.setWidths(new float[]{3f, 1.5f, 1.5f, 1.5f});
-                addTableHeader(table, new String[]{"Card", "Type", "Available", "Amount Due"});
+                addProfessionalTableHeader(table, new String[]{"Card", "Type", "Available", "Amount Due"});
                 for (SummaryData.CardSummary.CardHighlight ch : cards.getKeyCards()) {
-                    table.addCell(new Phrase(defaultIfEmpty(ch.getCardName(), ""), textFont));
-                    table.addCell(new Phrase(defaultIfEmpty(ch.getCardType(), ""), textFont));
-                    table.addCell(new Phrase(formatCurrency(ch.getAvailableCredit()), textFont));
-                    table.addCell(new Phrase(formatCurrency(ch.getAmountDue()), textFont));
+                    addStyledTableCell(table, defaultIfEmpty(ch.getCardName(), ""), textFont);
+                    addStyledTableCell(table, defaultIfEmpty(ch.getCardType(), ""), textFont);
+                    addStyledTableCell(table, formatCurrency(ch.getAvailableCredit()), textFont);
+                    addStyledTableCell(table, formatCurrency(ch.getAmountDue()), textFont);
                 }
                 document.add(table);
             }
 
+            // Tax Profiles Section
             SummaryData.TaxSummary tax = data.getTax();
-            addSummarySection(document, "Tax Profiles", new String[][]{
+            addProfessionalSection(document, "📊 TAX PROFILES", new String[][]{
                     {"Total Profiles", String.valueOf(tax.getProfileCount())},
                     {"Gross Income", formatCurrency(tax.getTotalGrossIncome())},
                     {"Deductions", formatCurrency(tax.getTotalDeductions())},
@@ -2568,26 +2994,172 @@ cardLayout.show(mainContentPanel, "Transactions");
                     {"Latest Year", defaultIfEmpty(tax.getLatestFinancialYear(), "")},
                     {"Latest Taxable", formatCurrency(tax.getLatestYearTaxable())},
                     {"Latest Tax Paid", formatCurrency(tax.getLatestYearTaxPaid())}
-            }, sectionFont, textFont);
+            }, sectionFont, labelFont, textFont);
             if (!tax.getKeyProfiles().isEmpty()) {
-                document.add(new Paragraph("Key Profiles", sectionFont));
+                Paragraph taxSubtitle = new Paragraph("Key Profiles", labelFont);
+                taxSubtitle.setSpacingBefore(5f);
+                taxSubtitle.setSpacingAfter(5f);
+                document.add(taxSubtitle);
                 PdfPTable table = new PdfPTable(4);
                 table.setWidthPercentage(100);
                 table.setSpacingBefore(5f);
-                table.setSpacingAfter(10f);
+                table.setSpacingAfter(15f);
                 table.setWidths(new float[]{3f, 2f, 2f, 2f});
-                addTableHeader(table, new String[]{"Profile", "Financial Year", "Taxable", "Tax Paid"});
+                addProfessionalTableHeader(table, new String[]{"Profile", "Financial Year", "Taxable", "Tax Paid"});
                 for (SummaryData.TaxSummary.TaxProfileHighlight th : tax.getKeyProfiles()) {
-                    table.addCell(new Phrase(defaultIfEmpty(th.getProfileName(), ""), textFont));
-                    table.addCell(new Phrase(defaultIfEmpty(th.getFinancialYear(), ""), textFont));
-                    table.addCell(new Phrase(formatCurrency(th.getTaxableIncome()), textFont));
-                    table.addCell(new Phrase(formatCurrency(th.getTaxPaid()), textFont));
+                    addStyledTableCell(table, defaultIfEmpty(th.getProfileName(), ""), textFont);
+                    addStyledTableCell(table, defaultIfEmpty(th.getFinancialYear(), ""), textFont);
+                    addStyledTableCell(table, formatCurrency(th.getTaxableIncome()), textFont);
+                    addStyledTableCell(table, formatCurrency(th.getTaxPaid()), textFont);
                 }
                 document.add(table);
             }
 
+            // Footer
+            document.add(new Paragraph(" "));
+            Paragraph footer = new Paragraph("Generated by Finance Manager - Professional Financial Analysis System", footerFont);
+            footer.setAlignment(Element.ALIGN_CENTER);
+            footer.setSpacingBefore(20f);
+            document.add(footer);
+
             document.close();
         }
+    }
+
+    // Helper method for professional header rows
+    private void addHeaderRow(PdfPTable table, String label, String value,
+                              com.itextpdf.text.Font labelFont, com.itextpdf.text.Font textFont,
+                              BaseColor labelBackground, BaseColor valueBackground, BaseColor borderColor) {
+        boolean firstRow = table.getRows().isEmpty();
+
+        PdfPCell labelCell = new PdfPCell(new Phrase(label, labelFont));
+        labelCell.setBorder(PdfPCell.NO_BORDER);
+        labelCell.setPadding(8f);
+        labelCell.setBackgroundColor(labelBackground);
+        labelCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        labelCell.setBorderColor(borderColor);
+        labelCell.setBorderWidthBottom(0.6f);
+        if (firstRow) {
+            labelCell.setBorderWidthTop(0.6f);
+        }
+        table.addCell(labelCell);
+
+        String safeValue = defaultIfEmpty(value, "—");
+        PdfPCell valueCell = new PdfPCell(new Phrase(safeValue, textFont));
+        valueCell.setBorder(PdfPCell.NO_BORDER);
+        valueCell.setPadding(8f);
+        valueCell.setBackgroundColor(valueBackground);
+        valueCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        valueCell.setBorderColor(borderColor);
+        valueCell.setBorderWidthBottom(0.6f);
+        if (firstRow) {
+            valueCell.setBorderWidthTop(0.6f);
+        }
+        table.addCell(valueCell);
+    }
+
+    // Helper method for professional sections
+    private void addProfessionalSection(Document document, String title, String[][] rows,
+                                        com.itextpdf.text.Font headerFont,
+                                        com.itextpdf.text.Font labelFont,
+                                        com.itextpdf.text.Font cellFont) throws DocumentException {
+        Paragraph sectionTitle = new Paragraph(title, headerFont);
+        sectionTitle.setSpacingBefore(12f);
+        sectionTitle.setSpacingAfter(8f);
+        document.add(sectionTitle);
+
+        BaseColor labelBackground = new BaseColor(232, 239, 255);
+        BaseColor valueBackground = new BaseColor(250, 252, 255);
+        BaseColor borderColor = new BaseColor(210, 219, 255);
+
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        table.setSpacingAfter(18f);
+        table.setSpacingBefore(4f);
+        table.setWidths(new float[]{2f, 3f});
+
+        boolean firstRow = true;
+        for (String[] row : rows) {
+            if (row == null || row.length < 2) {
+                continue;
+            }
+
+            PdfPCell labelCell = new PdfPCell(new Phrase(defaultIfEmpty(row[0], ""), labelFont));
+            labelCell.setBorder(PdfPCell.NO_BORDER);
+            labelCell.setPadding(6f);
+            labelCell.setBackgroundColor(labelBackground);
+            labelCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+            labelCell.setBorderColor(borderColor);
+            labelCell.setBorderWidthBottom(0.5f);
+            if (firstRow) {
+                labelCell.setBorderWidthTop(0.5f);
+            }
+            table.addCell(labelCell);
+
+            PdfPCell valueCell = new PdfPCell(new Phrase(defaultIfEmpty(row[1], "—"), cellFont));
+            valueCell.setBorder(PdfPCell.NO_BORDER);
+            valueCell.setPadding(6f);
+            valueCell.setBackgroundColor(valueBackground);
+            valueCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+            valueCell.setBorderColor(borderColor);
+            valueCell.setBorderWidthBottom(0.5f);
+            if (firstRow) {
+                valueCell.setBorderWidthTop(0.5f);
+            }
+            table.addCell(valueCell);
+
+            firstRow = false;
+        }
+        document.add(table);
+    }
+
+    // Helper method for professional table headers
+    private void addProfessionalTableHeader(PdfPTable table, String[] headers) {
+        com.itextpdf.text.Font headFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, BaseColor.WHITE);
+        for (String header : headers) {
+            PdfPCell cell = new PdfPCell(new Phrase(header, headFont));
+            cell.setBackgroundColor(new BaseColor(67, 97, 238));
+            cell.setHorizontalAlignment(Element.ALIGN_LEFT);
+            cell.setPadding(8f);
+            cell.setBorderColor(BaseColor.WHITE);
+            table.addCell(cell);
+        }
+    }
+
+    // Helper method for styled table cells
+    private void addStyledTableCell(PdfPTable table, String text, com.itextpdf.text.Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        cell.setPadding(6f);
+        cell.setBorderColor(new BaseColor(218, 224, 249));
+        table.addCell(cell);
+    }
+
+    private com.itextpdf.text.Image loadReportLogo() {
+        String[] candidates = {
+            "logo/Logo1.png",
+            "logo/Logo2.png",
+            "src/resources/Logo1.png",
+            "src/resources/Logo2.png"
+        };
+        for (String path : candidates) {
+            File file = new File(path);
+            if (file.exists()) {
+                try {
+                    return com.itextpdf.text.Image.getInstance(file.getAbsolutePath());
+                } catch (Exception ex) {
+                    System.err.println("Unable to load PDF logo from " + path + ": " + ex.getMessage());
+                }
+            }
+        }
+        return null;
+    }
+
+    private String formatAccountType(Account.AccountType accountType) {
+        if (accountType == null) {
+            return "—";
+        }
+        String lower = accountType.name().toLowerCase(Locale.ENGLISH);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
     private void addSummarySection(Document document, String title, String[][] rows,
@@ -2764,11 +3336,13 @@ cardLayout.show(mainContentPanel, "Transactions");
                         break;
                     }
                 }
-                String monthYear = selectedYear + "-" + String.format("%02d", monthNum);
-                manager.deleteTransactionsByMonth(monthYear);
+                int yearValue = Integer.parseInt(selectedYear);
+                manager.deleteTransactionsByMonth(yearValue, monthNum);
                 refreshTransactions();
             } catch (SQLException e) {
                 JOptionPane.showMessageDialog(this, "Error deleting month: " + e.getMessage());
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, "Invalid year selected.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -2803,49 +3377,331 @@ cardLayout.show(mainContentPanel, "Transactions");
         }
     }
 
-    private void openTransactionDialog() {
-        JDialog dlg = new JDialog(this, "New Transaction", true);
-        dlg.setLayout(new GridLayout(8, 2, 5, 5));
-        JTextField dateF = new JTextField(new java.text.SimpleDateFormat("dd-MM-yyyy").format(new java.util.Date()));
-        JTextField catF = new JTextField();
-        String[] types = {"Expense", "Income"};
-        JComboBox<String> typeF = new JComboBox<>(types);
-        String[] paymentMethods = {"UPI", "CASH", "CARD"};
-        JComboBox<String> paymentMethodF = new JComboBox<>(paymentMethods);
-        JTextField payeeF = new JTextField();
-        JTextField amtF = new JTextField();
-        JTextField descF = new JTextField();
-        dlg.add(new JLabel("Date (DD-MM-YYYY)")); dlg.add(dateF);
-        dlg.add(new JLabel("Category")); dlg.add(catF);
-        dlg.add(new JLabel("Type (Income/Expense)")); dlg.add(typeF);
-        dlg.add(new JLabel("Payment Method")); dlg.add(paymentMethodF);
-        dlg.add(new JLabel("Payee")); dlg.add(payeeF);
-        dlg.add(new JLabel("Amount")); dlg.add(amtF);
-        dlg.add(new JLabel("Description")); dlg.add(descF);
-        JButton ok = new JButton("Save"), cancel = new JButton("Cancel");
-        dlg.add(ok); dlg.add(cancel);
-        ok.addActionListener(ev -> {
-            try {
-                String paymentMethod = (String) paymentMethodF.getSelectedItem();
-                String type = (String) typeF.getSelectedItem();
-                String payee = payeeF.getText();
-                Transaction t = new Transaction(
-                    dateF.getText(), catF.getText(), type,
-                    Double.parseDouble(amtF.getText()), descF.getText(),
-                    paymentMethod, payee
-                );
-                manager.saveTransaction(t);
-                dlg.dispose();
-                loadYearFilter();
-                refreshTransactions();
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dlg, "Invalid input: " + ex.getMessage());
+    private JLabel createDialogLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 12.5f));
+        label.setForeground(ModernTheme.TEXT_PRIMARY);
+        return label;
+    }
+
+    private JButton createDialogCloseButton(JDialog dialog, Color iconColor) {
+        JButton closeBtn = new JButton("×");
+        closeBtn.setFont(new Font("Segoe UI", Font.PLAIN, 22));
+        closeBtn.setForeground(iconColor);
+        closeBtn.setOpaque(false);
+        closeBtn.setContentAreaFilled(false);
+        closeBtn.setBorderPainted(false);
+        closeBtn.setFocusPainted(false);
+        closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeBtn.setPreferredSize(new Dimension(32, 32));
+        closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                closeBtn.setForeground(new Color(iconColor.getRed(), iconColor.getGreen(), iconColor.getBlue(), 200));
+            }
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                closeBtn.setForeground(iconColor);
             }
         });
-        cancel.addActionListener(_ -> dlg.dispose());
-        dlg.pack();
-        dlg.setLocationRelativeTo(this);
-        dlg.setVisible(true);
+        closeBtn.addActionListener(e -> dialog.dispose());
+        return closeBtn;
+    }
+
+    private void styleRadioButton(JRadioButton radio) {
+        radio.setFont(ModernTheme.FONT_BODY);
+        radio.setForeground(ModernTheme.TEXT_PRIMARY);
+        radio.setOpaque(false);
+        radio.setFocusPainted(false);
+        radio.setBorder(new EmptyBorder(2, 4, 2, 4));
+        radio.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        radio.setAlignmentX(Component.LEFT_ALIGNMENT);
+    }
+
+    private JPanel createFormRow(String labelText, JComponent component) {
+        JPanel row = new JPanel(new BorderLayout(14, 0));
+        row.setOpaque(false);
+        JLabel label = createDialogLabel(labelText);
+        label.setPreferredSize(new Dimension(160, 24));
+        row.add(label, BorderLayout.WEST);
+        row.add(component, BorderLayout.CENTER);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+        return row;
+    }
+
+    private JPanel createProfileInfoRow(String glyph, String value) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6)) {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                Color accent = ModernTheme.PRIMARY;
+                int alpha = ModernTheme.isDarkMode() ? 90 : 32;
+                int red = ModernTheme.isDarkMode() ? Math.min(accent.getRed() + 40, 255) : accent.getRed();
+                int green = ModernTheme.isDarkMode() ? Math.min(accent.getGreen() + 40, 255) : accent.getGreen();
+                int blue = ModernTheme.isDarkMode() ? Math.min(accent.getBlue() + 40, 255) : accent.getBlue();
+                g2.setColor(new Color(red, green, blue, alpha));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+
+        JLabel iconLabel = new JLabel(glyph);
+        iconLabel.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 17));
+        Color iconColor = ModernTheme.isDarkMode() ? ModernTheme.PRIMARY_LIGHT : ModernTheme.PRIMARY;
+        iconLabel.setForeground(iconColor);
+        row.add(iconLabel);
+
+        JLabel valueLabel = new JLabel(value);
+        valueLabel.setFont(new Font(ModernTheme.FONT_BODY.getFamily(), Font.PLAIN, 12));
+        valueLabel.setForeground(ModernTheme.TEXT_PRIMARY);
+        row.add(valueLabel);
+
+        return row;
+    }
+
+    private JPanel createDetailsCard(String title, JPanel... rows) {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setOpaque(true);
+        card.setBackground(ModernTheme.CARD_BG);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(18, ModernTheme.BORDER),
+            new EmptyBorder(16, 18, 16, 18)
+        ));
+
+        JLabel header = createDialogLabel(title);
+        header.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 12.5f));
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(header);
+        card.add(Box.createVerticalStrut(10));
+
+        for (int i = 0; i < rows.length; i++) {
+            JPanel row = rows[i];
+            row.setOpaque(false);
+            row.setAlignmentX(Component.LEFT_ALIGNMENT);
+            card.add(row);
+            if (i < rows.length - 1) {
+                card.add(Box.createVerticalStrut(10));
+            }
+        }
+
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return card;
+    }
+
+    private double parseDoubleOrZero(String value) throws NumberFormatException {
+        if (value == null) {
+            return 0.0;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return 0.0;
+        }
+        return Double.parseDouble(trimmed);
+    }
+
+    private void openTransactionDialog() {
+        final JDialog dialog = new JDialog(this, "New Transaction", true);
+        dialog.setUndecorated(true);
+        dialog.setBackground(new Color(0, 0, 0, 0));
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(22, ModernTheme.BORDER),
+            BorderFactory.createEmptyBorder(0, 0, 0, 0)
+        ));
+
+        JPanel headerPanel = new JPanel(new BorderLayout(12, 0));
+        headerPanel.setBackground(ModernTheme.PRIMARY);
+        headerPanel.setBorder(new EmptyBorder(14, 18, 14, 12));
+
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titlePanel.setOpaque(false);
+        JLabel iconLabel = new JLabel(ModernIcons.create(IconType.TRANSACTIONS, ModernTheme.TEXT_WHITE, 20));
+        JLabel titleLabel = new JLabel("New Transaction");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 16f));
+        titleLabel.setForeground(ModernTheme.TEXT_WHITE);
+        titlePanel.add(iconLabel);
+        titlePanel.add(titleLabel);
+
+        headerPanel.add(titlePanel, BorderLayout.WEST);
+        headerPanel.add(createDialogCloseButton(dialog, ModernTheme.TEXT_WHITE), BorderLayout.EAST);
+
+        JPanel contentPanel = new JPanel();
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        contentPanel.setBorder(new EmptyBorder(20, 22, 24, 22));
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+
+        JLabel helperLabel = new JLabel("Capture an income or expense with all the details.");
+        helperLabel.setFont(ModernTheme.FONT_SMALL.deriveFont(12f));
+        helperLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        helperLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        contentPanel.add(helperLabel);
+        contentPanel.add(Box.createVerticalStrut(12));
+
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setOpaque(false);
+        formPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JTextField dateField = new JTextField(new java.text.SimpleDateFormat("dd-MM-yyyy").format(new java.util.Date()));
+        JTextField categoryField = new JTextField();
+        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Expense", "Income"});
+        JComboBox<String> paymentCombo = new JComboBox<>(new String[]{"UPI", "CASH", "CARD"});
+        JTextField payeeField = new JTextField();
+        JTextField amountField = new JTextField();
+        JTextField descriptionField = new JTextField();
+
+        ModernTheme.styleTextField(dateField);
+        ModernTheme.styleTextField(categoryField);
+        ModernTheme.styleTextField(payeeField);
+        ModernTheme.styleTextField(amountField);
+        ModernTheme.styleTextField(descriptionField);
+    amountField.setHorizontalAlignment(JTextField.RIGHT);
+        ModernTheme.styleComboBox(typeCombo);
+        ModernTheme.styleComboBox(paymentCombo);
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.gridy = 0;
+
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Date (DD-MM-YYYY)"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(dateField, gbc);
+
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Category"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(categoryField, gbc);
+
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Type"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(typeCombo, gbc);
+
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Payment Method"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(paymentCombo, gbc);
+
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Payee"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(payeeField, gbc);
+
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Amount"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(amountField, gbc);
+
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.insets = new Insets(6, 0, 6, 12);
+        formPanel.add(createDialogLabel("Description"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.insets = new Insets(6, 0, 6, 0);
+        formPanel.add(descriptionField, gbc);
+
+        contentPanel.add(formPanel);
+        contentPanel.add(Box.createVerticalStrut(18));
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setOpaque(false);
+        JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
+        JButton saveButton = ModernTheme.createPrimaryButton("Save Transaction");
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(saveButton);
+        contentPanel.add(buttonPanel);
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+        saveButton.addActionListener(ev -> {
+            try {
+                String date = dateField.getText().trim();
+                String category = categoryField.getText().trim();
+                String payee = payeeField.getText().trim();
+                String description = descriptionField.getText().trim();
+                if (date.isEmpty() || category.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "Date and Category are required.", "Validation", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                double amount = Double.parseDouble(amountField.getText().trim());
+                String paymentMethod = (String) paymentCombo.getSelectedItem();
+                String type = (String) typeCombo.getSelectedItem();
+
+                Transaction t = new Transaction(
+                    date,
+                    category,
+                    type,
+                    amount,
+                    description,
+                    paymentMethod,
+                    payee
+                );
+                manager.saveTransaction(t);
+                dialog.dispose();
+                loadYearFilter();
+                refreshTransactions();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Amount must be a valid number.", "Invalid Amount", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid input: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        dialog.getRootPane().setDefaultButton(saveButton);
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+
+        dialog.add(mainPanel);
+        dialog.pack();
+        if (dialog.getWidth() < 420) {
+            dialog.setSize(420, dialog.getHeight());
+        }
+        dialog.setShape(new RoundRectangle2D.Double(0, 0, dialog.getWidth(), dialog.getHeight(), 26, 26));
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
     // --- Transaction Recycle Bin Methods ---
@@ -2968,131 +3824,253 @@ cardLayout.show(mainContentPanel, "Transactions");
     }
 
     private void openBankAccountDialog() {
-    JDialog dlg = new JDialog(this, "Add New Bank Account", true);
-    dlg.setLayout(new BorderLayout(10, 10));
+        final JDialog dialog = new JDialog(this, "Add New Bank Account", true);
+        dialog.setUndecorated(true);
+        dialog.setBackground(new Color(0, 0, 0, 0));
 
-    // --- Panel for all fields ---
-    JPanel fieldsPanel = new JPanel();
-    fieldsPanel.setLayout(new GridLayout(0, 2, 5, 5)); // Use GridLayout
-    fieldsPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(22, ModernTheme.BORDER),
+            BorderFactory.createEmptyBorder(0, 0, 0, 0)
+        ));
 
-    // --- Common Fields ---
-    JTextField accNumF = new JTextField();
-    JTextField holderF = new JTextField();
-    JTextField bankF = new JTextField();
-    JTextField ifscF = new JTextField();
-    JTextField balanceF = new JTextField("0.0");
+        JPanel headerPanel = new JPanel(new BorderLayout(12, 0));
+        headerPanel.setBackground(ModernTheme.PRIMARY);
+        headerPanel.setBorder(new EmptyBorder(14, 18, 14, 12));
 
-    // --- Type Selection ---
-    String[] accTypes = {"Savings", "Current"};
-    JComboBox<String> typeCombo = new JComboBox<>(accTypes);
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titlePanel.setOpaque(false);
+        JLabel iconLabel = new JLabel(ModernIcons.create(IconType.BANK, ModernTheme.TEXT_WHITE, 20));
+        JLabel titleLabel = new JLabel("Add New Bank Account");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 16f));
+        titleLabel.setForeground(ModernTheme.TEXT_WHITE);
+        titlePanel.add(iconLabel);
+        titlePanel.add(titleLabel);
 
-    // --- Savings-Only Fields ---
-    JLabel rateLabel = new JLabel("Interest Rate (%)");
-    JTextField rateF = new JTextField("0.0");
-    JLabel expenseLabel = new JLabel("Annual Expense (for interest calc)");
-    JTextField expenseF = new JTextField("0.0");
+        headerPanel.add(titlePanel, BorderLayout.WEST);
+        headerPanel.add(createDialogCloseButton(dialog, ModernTheme.TEXT_WHITE), BorderLayout.EAST);
 
-    // --- Current-Only Fields ---
-    JLabel subtypeLabel = new JLabel("Current Account Type");
-    String[] subTypes = {"Salary", "Business"};
-    JComboBox<String> subtypeCombo = new JComboBox<>(subTypes);
-    JLabel companyLabel = new JLabel("Company Name");
-    JTextField companyF = new JTextField();
-    JLabel businessLabel = new JLabel("Business Name");
-    JTextField businessF = new JTextField();
+        JPanel contentPanel = new JPanel();
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        contentPanel.setBorder(new EmptyBorder(20, 22, 24, 22));
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
 
-    // --- Add Common Fields First ---
-    fieldsPanel.add(new JLabel("Account Type:")); fieldsPanel.add(typeCombo);
-    fieldsPanel.add(new JLabel("Bank Name:")); fieldsPanel.add(bankF);
-    fieldsPanel.add(new JLabel("Account Number:")); fieldsPanel.add(accNumF);
-    fieldsPanel.add(new JLabel("Holder Name:")); fieldsPanel.add(holderF);
-    fieldsPanel.add(new JLabel("IFSC Code:")); fieldsPanel.add(ifscF);
-    fieldsPanel.add(new JLabel("Current Balance:")); fieldsPanel.add(balanceF);
+        JLabel helperLabel = new JLabel("Capture complete details for a new savings or current account.");
+        helperLabel.setFont(ModernTheme.FONT_SMALL.deriveFont(12f));
+        helperLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        helperLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        contentPanel.add(helperLabel);
+        contentPanel.add(Box.createVerticalStrut(14));
 
-    // --- Add Specific Fields ---
-    fieldsPanel.add(rateLabel); fieldsPanel.add(rateF);
-    fieldsPanel.add(expenseLabel); fieldsPanel.add(expenseF);
-    fieldsPanel.add(subtypeLabel); fieldsPanel.add(subtypeCombo);
-    fieldsPanel.add(companyLabel); fieldsPanel.add(companyF);
-    fieldsPanel.add(businessLabel); fieldsPanel.add(businessF);
+        JTextField bankNameField = new JTextField();
+        JTextField accountNumberField = new JTextField();
+        JTextField holderField = new JTextField();
+        JTextField ifscField = new JTextField();
+        JTextField balanceField = new JTextField("0.00");
+        JTextField interestRateField = new JTextField("0.0");
+        JTextField annualExpenseField = new JTextField("0.0");
+        JTextField companyField = new JTextField();
+        JTextField businessField = new JTextField();
 
-    // --- Logic to Show/Hide Fields ---
-    ActionListener typeListener = e -> { // Create listener separately
-        String selected = (String) typeCombo.getSelectedItem();
-        boolean isSavings = "Savings".equals(selected);
-        rateLabel.setVisible(isSavings); rateF.setVisible(isSavings);
-        expenseLabel.setVisible(isSavings); expenseF.setVisible(isSavings);
-        subtypeLabel.setVisible(!isSavings); subtypeCombo.setVisible(!isSavings);
-        // Trigger sub-type logic only if type changed and listener exists
-         if (subtypeCombo.getActionListeners().length > 0) {
-             subtypeCombo.getActionListeners()[0].actionPerformed(null); // Trigger dependent visibility
-         }
-         dlg.pack(); // Repack dialog when visibility changes
-    };
-    typeCombo.addActionListener(typeListener); // Add listener
+        JTextField[] allFields = {bankNameField, accountNumberField, holderField, ifscField, balanceField,
+            interestRateField, annualExpenseField, companyField, businessField};
+        for (JTextField field : allFields) {
+            ModernTheme.styleTextField(field);
+            field.setAlignmentX(Component.LEFT_ALIGNMENT);
+            field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        }
+        balanceField.setHorizontalAlignment(JTextField.RIGHT);
+        interestRateField.setHorizontalAlignment(JTextField.RIGHT);
+        annualExpenseField.setHorizontalAlignment(JTextField.RIGHT);
 
-    ActionListener subtypeListener = e -> { // Create listener separately
-        boolean isSavings = "Savings".equals(typeCombo.getSelectedItem());
-        boolean makeVisible = !isSavings; // Only make these visible if it's Current
-        String subSelected = (String) subtypeCombo.getSelectedItem();
-        boolean isSalary = "Salary".equals(subSelected);
+        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Savings", "Current"});
+        JComboBox<String> subtypeCombo = new JComboBox<>(new String[]{"Salary", "Business"});
+        ModernTheme.styleComboBox(typeCombo);
+        ModernTheme.styleComboBox(subtypeCombo);
+        typeCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        subtypeCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
 
-        companyLabel.setVisible(makeVisible && isSalary);
-        companyF.setVisible(makeVisible && isSalary);
-        businessLabel.setVisible(makeVisible && !isSalary);
-        businessF.setVisible(makeVisible && !isSalary);
-         dlg.pack(); // Repack dialog when visibility changes
-    };
-     subtypeCombo.addActionListener(subtypeListener); // Add listener
+        contentPanel.add(createFormRow("Account Type", typeCombo));
+        contentPanel.add(Box.createVerticalStrut(10));
+        contentPanel.add(createFormRow("Bank Name", bankNameField));
+        contentPanel.add(Box.createVerticalStrut(10));
+        contentPanel.add(createFormRow("Account Number", accountNumberField));
+        contentPanel.add(Box.createVerticalStrut(10));
+        contentPanel.add(createFormRow("Holder Name", holderField));
+        contentPanel.add(Box.createVerticalStrut(10));
+        contentPanel.add(createFormRow("IFSC Code", ifscField));
+        contentPanel.add(Box.createVerticalStrut(10));
+        contentPanel.add(createFormRow("Current Balance", balanceField));
+        contentPanel.add(Box.createVerticalStrut(16));
 
-    // --- Buttons Panel ---
-    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-    JButton ok = new JButton("Save"), cancel = new JButton("Cancel");
-    buttonPanel.add(ok); buttonPanel.add(cancel);
+        JPanel savingsCard = createDetailsCard(
+            "Savings Details",
+            createFormRow("Interest Rate (%)", interestRateField),
+            createFormRow("Annual Expense", annualExpenseField)
+        );
 
-    dlg.add(fieldsPanel, BorderLayout.CENTER);
-    dlg.add(buttonPanel, BorderLayout.SOUTH);
+        JPanel subtypeRow = createFormRow("Current Account Type", subtypeCombo);
+        JPanel companyRow = createFormRow("Company Name", companyField);
+        JPanel businessRow = createFormRow("Business Name", businessField);
 
-    // --- Save Logic ---
-    ok.addActionListener(_ -> {
-        try {
-            String accountType = (String) typeCombo.getSelectedItem();
-            double balance = Double.parseDouble(balanceF.getText());
-            double interestRate = 0.0, annualExpense = 0.0;
-            String accountSubtype = "", companyName = "", businessName = "";
+        JPanel currentCard = createDetailsCard(
+            "Current Account Details",
+            subtypeRow,
+            companyRow,
+            businessRow
+        );
 
-            if ("Savings".equals(accountType)) {
-                interestRate = Double.parseDouble(rateF.getText());
-                annualExpense = Double.parseDouble(expenseF.getText());
-            } else { // Current
-                accountSubtype = (String) subtypeCombo.getSelectedItem();
-                if ("Salary".equals(accountSubtype)) companyName = companyF.getText();
-                else businessName = businessF.getText();
+        CardLayout typeSpecificLayout = new CardLayout();
+        JPanel typeSpecificPanel = new JPanel(typeSpecificLayout);
+        typeSpecificPanel.setOpaque(false);
+        typeSpecificPanel.add(savingsCard, "Savings");
+        typeSpecificPanel.add(currentCard, "Current");
+        typeSpecificPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        contentPanel.add(typeSpecificPanel);
+        contentPanel.add(Box.createVerticalStrut(20));
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setOpaque(false);
+        JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
+        JButton saveButton = ModernTheme.createPrimaryButton("Save Account");
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(saveButton);
+        contentPanel.add(buttonPanel);
+
+        Runnable updateSubtype = () -> {
+            String subtype = (String) subtypeCombo.getSelectedItem();
+            boolean isSalary = "Salary".equals(subtype);
+            companyRow.setVisible(isSalary);
+            companyField.setVisible(isSalary);
+            businessRow.setVisible(!isSalary);
+            businessField.setVisible(!isSalary);
+            currentCard.revalidate();
+            currentCard.repaint();
+        };
+
+        Runnable updateType = () -> {
+            String selected = (String) typeCombo.getSelectedItem();
+            typeSpecificLayout.show(typeSpecificPanel, selected);
+            if ("Savings".equals(selected)) {
+                interestRateField.requestFocusInWindow();
+            } else {
+                subtypeCombo.requestFocusInWindow();
+            }
+            dialog.pack();
+        };
+
+        subtypeCombo.addActionListener(e -> {
+            updateSubtype.run();
+            dialog.pack();
+        });
+        typeCombo.addActionListener(e -> updateType.run());
+
+        updateSubtype.run();
+        updateType.run();
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+        saveButton.addActionListener(e -> {
+            String bankName = bankNameField.getText().trim();
+            String accountNumber = accountNumberField.getText().trim();
+            String holderName = holderField.getText().trim();
+            if (bankName.isEmpty() || accountNumber.isEmpty() || holderName.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Bank name, account number, and holder name are required.", "Validation", JOptionPane.WARNING_MESSAGE);
+                return;
             }
 
-            BankAccount ba = new BankAccount(
-                accNumF.getText(), holderF.getText(), bankF.getText(), ifscF.getText(), balance,
-                accountType, interestRate, annualExpense,
-                accountSubtype, companyName, businessName
+            double balance;
+            try {
+                balance = parseDoubleOrZero(balanceField.getText());
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Balance must be a valid number.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            String accountType = (String) typeCombo.getSelectedItem();
+            double interestRate = 0.0;
+            double annualExpense = 0.0;
+            String accountSubtype = "";
+            String companyName = "";
+            String businessName = "";
+
+            if ("Savings".equals(accountType)) {
+                try {
+                    interestRate = parseDoubleOrZero(interestRateField.getText());
+                    annualExpense = parseDoubleOrZero(annualExpenseField.getText());
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(dialog, "Savings details must be numeric values.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            } else {
+                accountSubtype = (String) subtypeCombo.getSelectedItem();
+                boolean isSalary = "Salary".equals(accountSubtype);
+                if (isSalary) {
+                    companyName = companyField.getText().trim();
+                    if (companyName.isEmpty()) {
+                        JOptionPane.showMessageDialog(dialog, "Company name is required for salary accounts.", "Validation", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                } else {
+                    businessName = businessField.getText().trim();
+                    if (businessName.isEmpty()) {
+                        JOptionPane.showMessageDialog(dialog, "Business name is required for business accounts.", "Validation", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                }
+            }
+
+            BankAccount account = new BankAccount(
+                accountNumber,
+                holderName,
+                bankName,
+                ifscField.getText().trim(),
+                balance,
+                accountType,
+                interestRate,
+                annualExpense,
+                accountSubtype,
+                companyName,
+                businessName
             );
-            manager.saveBankAccount(ba);
-            dlg.dispose();
-            refreshBankAccounts(); // Refresh the main list
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(dlg, "Invalid input: " + ex.getMessage());
-            ex.printStackTrace(); // Print detailed error to console
+
+            try {
+                manager.saveBankAccount(account);
+                dialog.dispose();
+                refreshBankAccounts();
+                bankAccountList.clearSelection();
+                showAccountDetails(null);
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(dialog, "Error saving account: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        dialog.getRootPane().setDefaultButton(saveButton);
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        dialog.add(mainPanel);
+        dialog.pack();
+        if (dialog.getWidth() < 460) {
+            dialog.setSize(460, dialog.getHeight());
         }
-    });
-    cancel.addActionListener(ev -> dlg.dispose());
+        dialog.setShape(new RoundRectangle2D.Double(0, 0, dialog.getWidth(), dialog.getHeight(), 24, 24));
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
 
-    // --- Initialize View ---
-     typeListener.actionPerformed(null); // Call listener once to set initial visibility
+    private void openBankAccountRecycleBin() {
+        BankAccountRecycleBinDialog dialog = new BankAccountRecycleBinDialog(this, manager, this);
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
 
-    dlg.pack(); // Pack initially
-    dlg.setLocationRelativeTo(this);
-    dlg.setVisible(true);
-}
+    public void refreshAfterBankAccountRestore() {
+        refreshBankAccounts();
+        bankAccountList.clearSelection();
+        showAccountDetails(null);
+    }
 
     private void deleteSelectedAccount() {
         BankAccount selected = bankAccountList.getSelectedValue();
@@ -3103,8 +4081,8 @@ cardLayout.show(mainContentPanel, "Transactions");
         if (choice == JOptionPane.YES_OPTION) {
             try {
                 manager.deleteBankAccount(selected.getId());
-                refreshBankAccounts();
-                showAccountDetails(null); // Clear details panel
+                JOptionPane.showMessageDialog(this, "Account moved to recycle bin.", "Account Deleted", JOptionPane.INFORMATION_MESSAGE);
+                refreshAfterBankAccountRestore();
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error deleting account: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -3319,23 +4297,26 @@ cardLayout.show(mainContentPanel, "Transactions");
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                
-                // Modern gradient background with subtle shadow effect
+
                 GradientPaint gradient = new GradientPaint(0, 0, bgColor, getWidth(), getHeight(), darkColor);
                 g2.setPaint(gradient);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
-                
-                // Add subtle inner shadow for depth
-                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.1f));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
+
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.12f));
                 g2.setColor(Color.BLACK);
-                g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 18, 18);
-                
+                g2.fillRoundRect(3, 3, getWidth() - 6, getHeight() - 6, 14, 14);
+
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f));
+                g2.setPaint(Color.WHITE);
+                int accentSize = Math.min(getWidth(), getHeight()) / 3;
+                g2.fillOval(getWidth() - accentSize - 12, 12, accentSize, accentSize);
+
                 g2.dispose();
             }
         };
         card.setLayout(new GridBagLayout());
-        card.setPreferredSize(new Dimension(280, 120));
-        card.setBorder(new EmptyBorder(20, 25, 20, 25));
+        card.setPreferredSize(new Dimension(230, 110));
+        card.setBorder(new EmptyBorder(16, 22, 16, 22));
         card.setOpaque(false);
         
         GridBagConstraints gbc = new GridBagConstraints();
@@ -3352,34 +4333,40 @@ cardLayout.show(mainContentPanel, "Transactions");
             iconText = "📊"; // Chart for balance
         }
         
-        JLabel iconLabel = new JLabel(iconText);
-        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 42));
-        iconLabel.setForeground(Color.WHITE);
-        iconLabel.setHorizontalAlignment(SwingConstants.LEFT);
+    JLabel iconLabel = new JLabel(iconText);
+    iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 34));
+    iconLabel.setForeground(new Color(255, 255, 255, 220));
+    iconLabel.setHorizontalAlignment(SwingConstants.LEFT);
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.gridwidth = 1;
         gbc.anchor = GridBagConstraints.WEST;
-        gbc.insets = new Insets(0, 0, 10, 15);
+    gbc.insets = new Insets(0, 0, 8, 12);
         card.add(iconLabel, gbc);
         
         // Right panel with title and value
-        JPanel rightPanel = new JPanel(new BorderLayout(0, 8));
+    JPanel rightPanel = new JPanel(new BorderLayout(0, 6));
         rightPanel.setOpaque(false);
         
         // Title Label
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 13f));
+    titleLabel.setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD, 12f));
         titleLabel.setForeground(new Color(255, 255, 255, 200)); // Slightly transparent white
         titleLabel.setHorizontalAlignment(SwingConstants.LEFT);
         rightPanel.add(titleLabel, BorderLayout.NORTH);
         
         // Value Label (passed as parameter) - will use Indian formatting
-        valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+    valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
         valueLabel.setForeground(Color.WHITE);
         valueLabel.setHorizontalAlignment(SwingConstants.LEFT);
         rightPanel.add(valueLabel, BorderLayout.CENTER);
         
+    JLabel badge = new JLabel("Live Metrics");
+    badge.setFont(ModernTheme.FONT_SMALL.deriveFont(Font.BOLD, 10f));
+    badge.setForeground(new Color(255, 255, 255, 180));
+    badge.setHorizontalAlignment(SwingConstants.LEFT);
+    rightPanel.add(badge, BorderLayout.SOUTH);
+
         gbc.gridx = 1;
         gbc.gridy = 0;
         gbc.weightx = 1.0;
@@ -3422,6 +4409,8 @@ cardLayout.show(mainContentPanel, "Transactions");
             if (headerLogo != null) {
                 headerLogo.refreshLogo();
             }
+
+            updateWindowChromeTheme();
             
                 // Update sidebar styling
                 if (sidebarPanel != null) {
@@ -3678,14 +4667,52 @@ cardLayout.show(mainContentPanel, "Transactions");
      */
     private void updateProfileWidget() {
         src.auth.Account currentAccount = SessionContext.getCurrentAccount();
-        if (currentAccount != null && nameLabel != null) {
-            nameLabel.setText(currentAccount.getAccountName());
-            
+        if (currentAccount != null) {
+            if (nameLabel != null) {
+                nameLabel.setText(currentAccount.getAccountName());
+            }
             if (typeLabel != null) {
-                typeLabel.setText(currentAccount.getAccountType().toString());
-                typeLabel.setBackground(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS 
+                typeLabel.setText(currentAccount.getAccountType().name());
+                typeLabel.setBackground(currentAccount.getAccountType() == src.auth.Account.AccountType.BUSINESS
                     ? ModernTheme.PRIMARY : ModernTheme.SUCCESS);
             }
+        }
+        refreshAvatarImage();
+        if (avatarPanel != null) {
+            avatarPanel.repaint();
+        }
+    }
+
+    private void refreshAvatarImage() {
+        src.auth.Account account = SessionContext.getCurrentAccount();
+        String path = (account != null) ? account.getProfilePicturePath() : null;
+
+        if (path != null && !path.trim().isEmpty()) {
+            File file = new File(path);
+            if (!file.exists()) {
+                avatarImage = null;
+                avatarImagePath = null;
+                return;
+            }
+            if (!path.equals(avatarImagePath) || avatarImage == null) {
+                try {
+                    Image img = ImageIO.read(file);
+                    if (img != null) {
+                        Image scaled = img.getScaledInstance(36, 36, Image.SCALE_SMOOTH);
+                        avatarImage = new ImageIcon(scaled).getImage();
+                        avatarImagePath = path;
+                    } else {
+                        avatarImage = null;
+                        avatarImagePath = null;
+                    }
+                } catch (IOException e) {
+                    avatarImage = null;
+                    avatarImagePath = null;
+                }
+            }
+        } else {
+            avatarImage = null;
+            avatarImagePath = null;
         }
     }
     
@@ -4320,53 +5347,169 @@ private void deleteSelectedTaxProfile() {
         }
     }
 }
+
+/**
+ * Opens the Tax Profile Recycle Bin dialog.
+ */
+private void openTaxProfileRecycleBin() {
+    TaxProfileRecycleBinDialog dialog = new TaxProfileRecycleBinDialog(this, manager, this);
+    dialog.setVisible(true);
+}
 /**
      * 1. Shows a dialog to choose export options (Month/Year, Format).
      */
     private void openExportDialog() {
-        // --- Create the options panel ---
-        JPanel panel = new JPanel(new GridLayout(0, 1, 10, 10));
-        
-        // Option 1: Scope (Month vs. Year)
-        JRadioButton monthRadio = new JRadioButton("Export Current Month Only");
-        JRadioButton yearRadio = new JRadioButton("Export Entire Selected Year");
+        final boolean[] confirmed = {false};
+        final String[] selectedScope = {"Month"};
+        final String[] selectedFormat = {"CSV"};
+
+        JDialog dialog = new JDialog(this, "Export Transactions", true);
+        dialog.setUndecorated(true);
+        dialog.setBackground(new Color(0, 0, 0, 0));
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ModernTheme.SURFACE);
+        mainPanel.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(22, ModernTheme.BORDER),
+            BorderFactory.createEmptyBorder(0, 0, 0, 0)
+        ));
+
+        JPanel headerPanel = new JPanel(new BorderLayout(12, 0));
+        headerPanel.setBackground(ModernTheme.PRIMARY_DARK);
+        headerPanel.setBorder(new EmptyBorder(14, 18, 14, 12));
+
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titlePanel.setOpaque(false);
+        JLabel iconLabel = new JLabel(ModernIcons.create(IconType.EXPORT, ModernTheme.TEXT_WHITE, 20));
+        JLabel titleLabel = new JLabel("Export Transactions");
+        titleLabel.setFont(ModernTheme.FONT_HEADER.deriveFont(Font.BOLD, 16f));
+        titleLabel.setForeground(ModernTheme.TEXT_WHITE);
+        titlePanel.add(iconLabel);
+        titlePanel.add(titleLabel);
+
+        headerPanel.add(titlePanel, BorderLayout.WEST);
+        headerPanel.add(createDialogCloseButton(dialog, ModernTheme.TEXT_WHITE), BorderLayout.EAST);
+
+        JPanel contentPanel = new JPanel();
+        contentPanel.setBackground(ModernTheme.SURFACE);
+        contentPanel.setBorder(new EmptyBorder(20, 22, 24, 22));
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+
+        JLabel helperLabel = new JLabel("Choose the range and format for your export.");
+        helperLabel.setFont(ModernTheme.FONT_SMALL.deriveFont(12f));
+        helperLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        helperLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        contentPanel.add(helperLabel);
+        contentPanel.add(Box.createVerticalStrut(14));
+
+        JRadioButton monthRadio = new JRadioButton("Current month only");
+        JRadioButton yearRadio = new JRadioButton("Entire selected year");
         ButtonGroup scopeGroup = new ButtonGroup();
-        scopeGroup.add(monthRadio); scopeGroup.add(yearRadio);
+        scopeGroup.add(monthRadio);
+        scopeGroup.add(yearRadio);
         monthRadio.setSelected(true);
-        
-        JPanel scopePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        scopePanel.setBorder(BorderFactory.createTitledBorder("Scope"));
-        scopePanel.add(monthRadio); scopePanel.add(yearRadio);
 
-    // Option 2: Format (CSV, PDF)
-    JRadioButton csvRadio = new JRadioButton("CSV (Comma Separated)");
-    JRadioButton pdfRadio = new JRadioButton("PDF Document");
-    ButtonGroup formatGroup = new ButtonGroup();
-    formatGroup.add(csvRadio); formatGroup.add(pdfRadio);
-    csvRadio.setSelected(true);
-        
-        JPanel formatPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    formatPanel.setBorder(BorderFactory.createTitledBorder("Format"));
-    formatPanel.add(csvRadio); formatPanel.add(pdfRadio);
-        
-        panel.add(scopePanel);
-        panel.add(formatPanel);
+        styleRadioButton(monthRadio);
+        styleRadioButton(yearRadio);
 
-        int result = JOptionPane.showConfirmDialog(this, panel, "Export Options", 
-                                                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        
-        if (result != JOptionPane.OK_OPTION) {
-            return; // User cancelled
+        JPanel scopeCard = new JPanel();
+        scopeCard.setLayout(new BoxLayout(scopeCard, BoxLayout.Y_AXIS));
+        scopeCard.setBackground(ModernTheme.CARD_BG);
+        scopeCard.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(18, ModernTheme.BORDER),
+            new EmptyBorder(14, 18, 14, 18)
+        ));
+        scopeCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    JLabel scopeLabel = createDialogLabel("Scope");
+    scopeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        scopeCard.add(scopeLabel);
+        scopeCard.add(Box.createVerticalStrut(6));
+        scopeCard.add(monthRadio);
+        scopeCard.add(Box.createVerticalStrut(6));
+        scopeCard.add(yearRadio);
+
+        JRadioButton csvRadio = new JRadioButton("CSV (comma separated)");
+        JRadioButton pdfRadio = new JRadioButton("PDF document");
+        ButtonGroup formatGroup = new ButtonGroup();
+        formatGroup.add(csvRadio);
+        formatGroup.add(pdfRadio);
+        csvRadio.setSelected(true);
+
+        styleRadioButton(csvRadio);
+        styleRadioButton(pdfRadio);
+
+        JPanel formatCard = new JPanel();
+        formatCard.setLayout(new BoxLayout(formatCard, BoxLayout.Y_AXIS));
+        formatCard.setBackground(ModernTheme.CARD_BG);
+        formatCard.setBorder(BorderFactory.createCompoundBorder(
+            new ModernTheme.RoundedBorder(18, ModernTheme.BORDER),
+            new EmptyBorder(14, 18, 14, 18)
+        ));
+        formatCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    JLabel formatLabel = createDialogLabel("Format");
+    formatLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        formatCard.add(formatLabel);
+        formatCard.add(Box.createVerticalStrut(6));
+        formatCard.add(csvRadio);
+        formatCard.add(Box.createVerticalStrut(6));
+        formatCard.add(pdfRadio);
+
+        contentPanel.add(scopeCard);
+        contentPanel.add(Box.createVerticalStrut(14));
+        contentPanel.add(formatCard);
+        contentPanel.add(Box.createVerticalStrut(16));
+
+        JLabel infoLabel = new JLabel("Exports always respect your current filters and sorting.");
+        infoLabel.setFont(ModernTheme.FONT_SMALL.deriveFont(11.5f));
+        infoLabel.setForeground(ModernTheme.TEXT_SECONDARY);
+        infoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        contentPanel.add(infoLabel);
+        contentPanel.add(Box.createVerticalStrut(18));
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setOpaque(false);
+        JButton cancelButton = ModernTheme.createSecondaryButton("Cancel");
+        JButton exportButton = ModernTheme.createPrimaryButton("Export");
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(exportButton);
+        buttonPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        contentPanel.add(buttonPanel);
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+        exportButton.addActionListener(e -> {
+            confirmed[0] = true;
+            selectedScope[0] = monthRadio.isSelected() ? "Month" : "Year";
+            selectedFormat[0] = csvRadio.isSelected() ? "CSV" : "PDF";
+            dialog.dispose();
+        });
+
+        dialog.getRootPane().setDefaultButton(exportButton);
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+
+        dialog.add(mainPanel);
+        dialog.pack();
+        if (dialog.getWidth() < 420) {
+            dialog.setSize(420, dialog.getHeight());
+        }
+        dialog.setShape(new RoundRectangle2D.Double(0, 0, dialog.getWidth(), dialog.getHeight(), 26, 26));
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+
+        if (!confirmed[0]) {
+            return;
         }
 
-        // --- Get selected options ---
-        String scope = monthRadio.isSelected() ? "Month" : "Year";
-    String format = csvRadio.isSelected() ? "CSV" : "PDF";
-        
+        String scope = selectedScope[0];
+        String format = selectedFormat[0];
+
         // --- Get the data to export ---
         List<Transaction> dataToExport = new ArrayList<>();
         String defaultFilename = "";
-        
+
         try {
             if (scope.equals("Month")) {
                 String selectedMonth = (String) monthComboBox.getSelectedItem();
@@ -4374,56 +5517,49 @@ private void deleteSelectedTaxProfile() {
                     JOptionPane.showMessageDialog(this, "Please select a specific month to export.", "Export Error", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
-                
-                // Export from the current filtered table
+
                 JTable currentTable = transactionsTable;
                 String selectedYear = (String) yearComboBox.getSelectedItem();
-                
-                // Get filtered/sorted data directly from the JTable
+
                 for (int i = 0; i < currentTable.getRowCount(); i++) {
-                    // Find this transaction in the full list (this is inefficient but simple)
-                    // A better way would be to get the data directly from the table row
-                    // Let's just export what's visible in the table
-                     dataToExport.add(new Transaction(
-                         (int) currentTable.getValueAt(i, 0), // S.No (ID)
-                         (String) currentTable.getValueAt(i, 1), // Date
-                         (String) currentTable.getValueAt(i, 2), // Timestamp
-                         (String) currentTable.getValueAt(i, 3), // Day
-                         (String) currentTable.getValueAt(i, 5), // Category
-                         (String) currentTable.getValueAt(i, 6), // Type
-                         (Double) currentTable.getValueAt(i, 9), // Amount
-                         (String) currentTable.getValueAt(i, 8), // Description
-                         (String) currentTable.getValueAt(i, 4), // Payment Method
-                         (String) currentTable.getValueAt(i, 7)  // Payee
-                     ));
+                    dataToExport.add(new Transaction(
+                        (int) currentTable.getValueAt(i, 0),
+                        (String) currentTable.getValueAt(i, 1),
+                        (String) currentTable.getValueAt(i, 2),
+                        (String) currentTable.getValueAt(i, 3),
+                        (String) currentTable.getValueAt(i, 5),
+                        (String) currentTable.getValueAt(i, 6),
+                        (Double) currentTable.getValueAt(i, 9),
+                        (String) currentTable.getValueAt(i, 8),
+                        (String) currentTable.getValueAt(i, 4),
+                        (String) currentTable.getValueAt(i, 7)
+                    ));
                 }
                 defaultFilename = selectedMonth + "_" + selectedYear + "_Transactions";
-                
-            } else { // "Year"
+
+            } else {
                 String selectedYear = (String) yearComboBox.getSelectedItem();
                 if (selectedYear == null || selectedYear.equals("All Years")) {
-                     dataToExport = manager.getAllTransactionsForYear("All Years");
-                     defaultFilename = "All_Transactions";
+                    dataToExport = manager.getAllTransactionsForYear("All Years");
+                    defaultFilename = "All_Transactions";
                 } else {
-                     dataToExport = manager.getAllTransactionsForYear(selectedYear);
-                     defaultFilename = selectedYear + "_Transactions";
+                    dataToExport = manager.getAllTransactionsForYear(selectedYear);
+                    defaultFilename = selectedYear + "_Transactions";
                 }
             }
-            
+
             if (dataToExport.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "No transactions found to export.", "Info", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
-            
-            // --- Show Save Dialog ---
+
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Save Export File");
             fileChooser.setSelectedFile(new File(defaultFilename + "." + format.toLowerCase()));
-            
+
             if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File file = fileChooser.getSelectedFile();
-                
-                // --- Call the correct writer ---
+
                 if (format.equals("CSV")) {
                     writeToCsv(dataToExport, file);
                 } else if (format.equals("PDF")) {

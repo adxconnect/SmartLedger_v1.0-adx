@@ -34,6 +34,8 @@ d:\Finance-Manager--Adx\src\UI\AddEditLoanDialog.java
 d:\Finance-Manager--Adx\src\UI\AddEditTaxProfileDialog.java
 d:\Finance-Manager--Adx\src\UI\CardRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\DepositRecycleBinDialog.java
+d:\Finance-Manager--Adx\src\UI\TaxProfileRecycleBinDialog.java
+d:\Finance-Manager--Adx\src\UI\BankAccountRecycleBinDialog.java
 d:\Finance-Manager--Adx\src\UI\EditProfileDialog.java
 d:\Finance-Manager--Adx\src\UI\EnterOtpDialog.java
 d:\Finance-Manager--Adx\src\UI\FinanceManagerApp.java

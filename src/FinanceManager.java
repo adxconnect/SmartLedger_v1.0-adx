@@ -33,6 +33,7 @@ public class FinanceManager {
         "transactions",
         "recycle_bin_transactions",
         "bank_accounts",
+    "recycle_bin_bank_accounts",
         "deposits",
         "recycle_bin_deposits",
         "cards",
@@ -43,7 +44,8 @@ public class FinanceManager {
         "recycle_bin_loans",
         "lendings",
         "recycle_bin_lendings",
-        "tax_profiles"
+        "tax_profiles",
+        "recycle_bin_tax_profiles"
     );
     private static void launch() {
     // --- ADD THIS LINE ---
@@ -268,9 +270,116 @@ public class FinanceManager {
         return accounts;
     }
 
-    public void deleteBankAccount(int bankAccountId) throws SQLException {
+    private void moveBankAccountToRecycleBin(int bankAccountId) throws SQLException {
         int accountId = requireAccountId();
-        String sql = "DELETE FROM bank_accounts WHERE id = ? AND account_id = ?";
+        String copySql = "INSERT INTO recycle_bin_bank_accounts "
+                + "(id, account_id, account_number, holder_name, bank_name, ifsc_code, balance, account_type, interest_rate, annual_expense, account_subtype, company_name, business_name) "
+                + "SELECT id, account_id, account_number, holder_name, bank_name, ifsc_code, balance, account_type, interest_rate, annual_expense, account_subtype, company_name, business_name "
+                + "FROM bank_accounts WHERE id = ? AND account_id = ?";
+        String deleteSql = "DELETE FROM bank_accounts WHERE id = ? AND account_id = ?";
+
+        Connection conn = connection;
+        boolean originalAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+
+        try (PreparedStatement copyPs = conn.prepareStatement(copySql);
+             PreparedStatement deletePs = conn.prepareStatement(deleteSql)) {
+
+            copyPs.setInt(1, bankAccountId);
+            copyPs.setInt(2, accountId);
+            deletePs.setInt(1, bankAccountId);
+            deletePs.setInt(2, accountId);
+
+            copyPs.executeUpdate();
+            deletePs.executeUpdate();
+
+            conn.commit();
+        } catch (SQLException ex) {
+            conn.rollback();
+            throw ex;
+        } finally {
+            conn.setAutoCommit(originalAutoCommit);
+        }
+    }
+
+    public void deleteBankAccount(int bankAccountId) throws SQLException {
+        moveBankAccountToRecycleBin(bankAccountId);
+    }
+
+    public List<Map<String, Object>> getRecycledBankAccountsForUI() throws SQLException {
+        int accountId = requireAccountId();
+        List<Map<String, Object>> recycled = new ArrayList<>();
+        String sql = "SELECT id, bank_name, account_number, holder_name, account_type, account_subtype, balance, interest_rate, annual_expense, company_name, business_name, "
+                + "DATE_FORMAT(deleted_on, '%Y-%m-%d %H:%i:%s') AS deleted_on_str "
+                + "FROM recycle_bin_bank_accounts WHERE account_id = ? ORDER BY deleted_on DESC";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, accountId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", rs.getInt("id"));
+                    row.put("bank_name", rs.getString("bank_name"));
+                    row.put("account_number", rs.getString("account_number"));
+                    row.put("holder_name", rs.getString("holder_name"));
+                    row.put("account_type", rs.getString("account_type"));
+                    row.put("account_subtype", rs.getString("account_subtype"));
+                    row.put("balance", rs.getDouble("balance"));
+                    row.put("interest_rate", rs.getDouble("interest_rate"));
+                    row.put("annual_expense", rs.getDouble("annual_expense"));
+                    row.put("company_name", rs.getString("company_name"));
+                    row.put("business_name", rs.getString("business_name"));
+                    row.put("deleted_on_str", rs.getString("deleted_on_str"));
+                    recycled.add(row);
+                }
+            }
+        }
+        return recycled;
+    }
+
+    public void restoreBankAccount(int bankAccountId) throws SQLException {
+        int accountId = requireAccountId();
+        String copySql = "INSERT INTO bank_accounts (id, account_id, account_number, holder_name, bank_name, ifsc_code, balance, account_type, interest_rate, annual_expense, account_subtype, company_name, business_name) "
+                + "SELECT id, account_id, account_number, holder_name, bank_name, ifsc_code, balance, account_type, interest_rate, annual_expense, account_subtype, company_name, business_name "
+                + "FROM recycle_bin_bank_accounts WHERE id = ? AND account_id = ?";
+        String deleteSql = "DELETE FROM recycle_bin_bank_accounts WHERE id = ? AND account_id = ?";
+
+        Connection conn = connection;
+        boolean originalAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+
+        try (PreparedStatement copyPs = conn.prepareStatement(copySql);
+             PreparedStatement deletePs = conn.prepareStatement(deleteSql)) {
+
+            copyPs.setInt(1, bankAccountId);
+            copyPs.setInt(2, accountId);
+            deletePs.setInt(1, bankAccountId);
+            deletePs.setInt(2, accountId);
+
+            copyPs.executeUpdate();
+            deletePs.executeUpdate();
+
+            conn.commit();
+        } catch (SQLException ex) {
+            conn.rollback();
+            if (ex.getErrorCode() == 1062) {
+                try (PreparedStatement deleteOnly = conn.prepareStatement(deleteSql)) {
+                    deleteOnly.setInt(1, bankAccountId);
+                    deleteOnly.setInt(2, accountId);
+                    deleteOnly.executeUpdate();
+                    conn.commit();
+                }
+            } else {
+                throw ex;
+            }
+        } finally {
+            conn.setAutoCommit(originalAutoCommit);
+        }
+    }
+
+    public void permanentlyDeleteBankAccount(int bankAccountId) throws SQLException {
+        int accountId = requireAccountId();
+        String sql = "DELETE FROM recycle_bin_bank_accounts WHERE id = ? AND account_id = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, bankAccountId);
             ps.setInt(2, accountId);
@@ -494,21 +603,22 @@ public class FinanceManager {
         moveTransactionToRecycleBin(transactionId);
     }
 
-    public void deleteTransactionsByMonth(String monthYear) throws SQLException {
+    public void deleteTransactionsByMonth(int year, int month) throws SQLException {
         int accountId = requireAccountId();
         List<Integer> idsToDelete = new ArrayList<>();
-        String sql = "SELECT id FROM transactions WHERE account_id = ? AND DATE_FORMAT(date, '%m-%Y') = ?";
+        String sql = "SELECT id FROM transactions WHERE account_id = ? AND YEAR(date) = ? AND MONTH(date) = ?";
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, accountId);
-            ps.setString(2, monthYear);
+            ps.setInt(2, year);
+            ps.setInt(3, month);
             ResultSet rs = ps.executeQuery();
-            while(rs.next()) {
+            while (rs.next()) {
                 idsToDelete.add(rs.getInt("id"));
             }
             rs.close();
         }
-        
+
         for (int id : idsToDelete) {
             moveTransactionToRecycleBin(id);
         }
@@ -1489,6 +1599,21 @@ public class FinanceManager {
                 "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
                 "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE" +
             ")");
+            
+            stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_tax_profiles (" +
+                "id INT NOT NULL PRIMARY KEY," +
+                "account_id INT NOT NULL," +
+                "profile_name VARCHAR(100) NOT NULL," +
+                "profile_type VARCHAR(50) NOT NULL," +
+                "financial_year VARCHAR(10) NOT NULL," +
+                "gross_income DECIMAL(15, 2) DEFAULT 0.00," +
+                "total_deductions DECIMAL(15, 2) DEFAULT 0.00," +
+                "taxable_income DECIMAL(15, 2) DEFAULT 0.00," +
+                "tax_paid DECIMAL(15, 2) DEFAULT 0.00," +
+                "notes TEXT," +
+                "deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE" +
+            ")");
              
              
              // --- KEEP EXISTING TABLES ---
@@ -1529,6 +1654,15 @@ public class FinanceManager {
              "annual_expense DECIMAL(15, 2), account_subtype VARCHAR(20), company_name VARCHAR(100), business_name VARCHAR(100), " +
              "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE"
              + ")");
+        stmt.execute("CREATE TABLE IF NOT EXISTS recycle_bin_bank_accounts (" +
+            "id INT NOT NULL PRIMARY KEY, " +
+            "account_id INT NOT NULL, " +
+            "account_number VARCHAR(50) NOT NULL, holder_name VARCHAR(100), bank_name VARCHAR(100), ifsc_code VARCHAR(20), " +
+            "balance DECIMAL(15, 2) DEFAULT 0.00, account_type VARCHAR(20) NOT NULL, interest_rate DECIMAL(5, 2), " +
+            "annual_expense DECIMAL(15, 2), account_subtype VARCHAR(20), company_name VARCHAR(100), business_name VARCHAR(100), " +
+            "deleted_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+            "FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE"
+            + ")");
          stmt.execute("CREATE TABLE IF NOT EXISTS deposits (" +
              "id INT AUTO_INCREMENT PRIMARY KEY, " +
              "account_id INT NOT NULL, " +
@@ -1718,6 +1852,7 @@ public class FinanceManager {
         ensureColumnExists("transactions", "account_id INT");
         ensureColumnExists("recycle_bin_transactions", "account_id INT");
         ensureColumnExists("bank_accounts", "account_id INT");
+    ensureColumnExists("recycle_bin_bank_accounts", "account_id INT");
         ensureColumnExists("deposits", "account_id INT");
         ensureColumnExists("recycle_bin_deposits", "account_id INT");
         ensureColumnExists("cards", "account_id INT");
@@ -1908,8 +2043,36 @@ public class FinanceManager {
     /**
      * Deletes a tax profile from the database (Hard Delete).
      */
+    /**
+     * Moves a tax profile to recycle bin before deletion.
+     */
+    private void moveTaxProfileToRecycleBin(int profileId) throws SQLException {
+        int accountId = requireAccountId();
+        String copySql = "INSERT INTO recycle_bin_tax_profiles "
+                + "(id, account_id, profile_name, profile_type, financial_year, "
+                + "gross_income, total_deductions, taxable_income, tax_paid, notes, deleted_on) "
+                + "SELECT id, account_id, profile_name, profile_type, financial_year, "
+                + "gross_income, total_deductions, taxable_income, tax_paid, notes, NOW() "
+                + "FROM tax_profiles WHERE id = ? AND account_id = ?";
+        
+        try (PreparedStatement ps = connection.prepareStatement(copySql)) {
+            ps.setInt(1, profileId);
+            ps.setInt(2, accountId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR moving tax profile to recycle bin !!!"); 
+            e.printStackTrace();
+            throw e;
+        }
+    }
+    
     public void deleteTaxProfile(int profileId) throws SQLException {
         int accountId = requireAccountId();
+        
+        // First move to recycle bin
+        moveTaxProfileToRecycleBin(profileId);
+        
+        // Then delete from main table
         String sql = "DELETE FROM tax_profiles WHERE id = ? AND account_id = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, profileId);
@@ -1919,6 +2082,97 @@ public class FinanceManager {
             System.err.println("!!! ERROR deleting tax profile (SQL) !!!"); 
             e.printStackTrace(); 
             throw e; 
+        }
+    }
+    
+    /**
+     * Retrieves all deleted tax profiles from the recycle bin.
+     */
+    public List<TaxProfile> getTaxProfilesFromRecycleBin() throws SQLException {
+        int accountId = requireAccountId();
+        List<TaxProfile> profiles = new ArrayList<>();
+        
+        String sql = "SELECT id, account_id, profile_name, profile_type, financial_year, "
+                + "gross_income, total_deductions, taxable_income, tax_paid, notes, deleted_on "
+                + "FROM recycle_bin_tax_profiles WHERE account_id = ? ORDER BY deleted_on DESC";
+        
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, accountId);
+            ResultSet rs = ps.executeQuery();
+            
+            while (rs.next()) {
+                TaxProfile profile = new TaxProfile(
+                    rs.getInt("id"),
+                    rs.getString("profile_name"),
+                    rs.getString("profile_type"),
+                    rs.getString("financial_year"),
+                    rs.getDouble("gross_income"),
+                    rs.getDouble("total_deductions"),
+                    rs.getDouble("taxable_income"),
+                    rs.getDouble("tax_paid"),
+                    rs.getString("notes")
+                );
+                profile.setDeletedOn(rs.getTimestamp("deleted_on"));
+                profiles.add(profile);
+            }
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR fetching tax profiles from recycle bin !!!"); 
+            e.printStackTrace();
+            throw e;
+        }
+        
+        return profiles;
+    }
+    
+    /**
+     * Restores a tax profile from the recycle bin.
+     */
+    public void restoreTaxProfileFromRecycleBin(int profileId) throws SQLException {
+        int accountId = requireAccountId();
+        
+        // Copy back to main table
+        String copySql = "INSERT INTO tax_profiles "
+                + "(id, account_id, profile_name, profile_type, financial_year, "
+                + "gross_income, total_deductions, taxable_income, tax_paid, notes) "
+                + "SELECT id, account_id, profile_name, profile_type, financial_year, "
+                + "gross_income, total_deductions, taxable_income, tax_paid, notes "
+                + "FROM recycle_bin_tax_profiles WHERE id = ? AND account_id = ?";
+        
+        String deleteSql = "DELETE FROM recycle_bin_tax_profiles WHERE id = ? AND account_id = ?";
+        
+        try (PreparedStatement copyPs = connection.prepareStatement(copySql);
+             PreparedStatement deletePs = connection.prepareStatement(deleteSql)) {
+            
+            copyPs.setInt(1, profileId);
+            copyPs.setInt(2, accountId);
+            copyPs.executeUpdate();
+            
+            deletePs.setInt(1, profileId);
+            deletePs.setInt(2, accountId);
+            deletePs.executeUpdate();
+            
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR restoring tax profile from recycle bin !!!"); 
+            e.printStackTrace();
+            throw e;
+        }
+    }
+    
+    /**
+     * Permanently deletes a tax profile from the recycle bin.
+     */
+    public void deleteTaxProfilePermanently(int profileId) throws SQLException {
+        int accountId = requireAccountId();
+        String sql = "DELETE FROM recycle_bin_tax_profiles WHERE id = ? AND account_id = ?";
+        
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, profileId);
+            ps.setInt(2, accountId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("!!! ERROR permanently deleting tax profile !!!"); 
+            e.printStackTrace();
+            throw e;
         }
     }
     /**

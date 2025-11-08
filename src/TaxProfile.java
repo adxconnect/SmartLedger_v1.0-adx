@@ -1,5 +1,7 @@
 package src;
 
+import java.sql.Timestamp;
+
 public class TaxProfile {
 
     private int id;
@@ -12,6 +14,7 @@ public class TaxProfile {
     private double taxableIncome; // Calculated: gross - deductions
     private double taxPaid;
     private String notes;
+    private Timestamp deletedOn; // For recycle bin tracking
 
     // Constructor for loading from DB
     public TaxProfile(int id, String profileName, String profileType, String financialYear, 
@@ -70,6 +73,7 @@ public class TaxProfile {
     public double getTaxableIncome() { return taxableIncome; }
     public double getTaxPaid() { return taxPaid; }
     public String getNotes() { return notes; }
+    public Timestamp getDeletedOn() { return deletedOn; }
 
     // --- Setters (for editing) ---
     public void setProfileName(String profileName) { this.profileName = profileName; }
@@ -78,5 +82,6 @@ public class TaxProfile {
     public void setTotalDeductions(double totalDeductions) { this.totalDeductions = totalDeductions; }
     public void setTaxPaid(double taxPaid) { this.taxPaid = taxPaid; }
     public void setNotes(String notes) { this.notes = notes; }
+    public void setDeletedOn(Timestamp deletedOn) { this.deletedOn = deletedOn; }
     // Note: profileType and id should not be changed after creation
 }

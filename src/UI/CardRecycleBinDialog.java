@@ -2,17 +2,13 @@ package src.UI;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-
-import src.UI.FinanceManagerFullUI;
+import javax.swing.border.EmptyBorder;
 
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map; // Import Map
 
-import src.Card; // Still useful for reference, though we use Map
 import src.FinanceManager;
 
 public class CardRecycleBinDialog extends JDialog {
@@ -27,37 +23,125 @@ public class CardRecycleBinDialog extends JDialog {
         this.manager = manager;
         this.parentUI = parentUI;
 
-        setSize(700, 450); // Adjusted size
+        setUndecorated(true);
+        setBackground(new Color(0, 0, 0, 0));
+
+        initComponents();
+
+        pack();
+        if (getWidth() < 850) {
+            setSize(850, Math.max(getHeight(), 500));
+        }
+        setShape(new java.awt.geom.RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 24, 24));
         setLocationRelativeTo(owner);
-        setLayout(new BorderLayout(10, 10));
+    }
+    
+    private void initComponents() {
+        // Main wrapper with rounded border
+        JPanel mainWrapper = new JPanel(new BorderLayout());
+        mainWrapper.setBackground(new Color(0, 0, 0, 0));
+        
+        // Main panel with white background
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(Color.WHITE);
+        mainPanel.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 2));
+
+        // Header panel with green background
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(new Color(34, 139, 34)); // Green for Cards
+        headerPanel.setPreferredSize(new Dimension(0, 56));
+        headerPanel.setBorder(new EmptyBorder(10, 16, 10, 16));
+
+        // Title with icon
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titlePanel.setBackground(new Color(34, 139, 34));
+        
+        JLabel iconLabel = new JLabel();
+        iconLabel.setIcon(ModernIcons.create(ModernIcons.IconType.RECYCLE, Color.WHITE, 24));
+        JLabel titleLabel = new JLabel("Card Recycle Bin");
+        titleLabel.setFont(ModernTheme.FONT_HEADER);
+        titleLabel.setForeground(Color.WHITE);
+        
+        titlePanel.add(iconLabel);
+        titlePanel.add(titleLabel);
+        
+        headerPanel.add(titlePanel, BorderLayout.WEST);
+        headerPanel.add(createHeaderCloseButton(), BorderLayout.EAST);
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        
+        // Content wrapper
+        JPanel contentWrapper = new JPanel(new BorderLayout(10, 10));
+        contentWrapper.setBackground(Color.WHITE);
+        contentWrapper.setBorder(new EmptyBorder(16, 16, 18, 16));
 
         // --- Table Setup ---
         // Define columns relevant for identifying deleted cards
         String[] columns = {"Original ID", "Type", "Name", "Masked Number", "Valid Thru", "Deleted On"};
         cardRecycleBinModel = new DefaultTableModel(columns, 0);
         cardRecycleBinTable = new JTable(cardRecycleBinModel);
+        
+        // Style the table
+        cardRecycleBinTable.setFont(ModernTheme.FONT_BODY);
+        cardRecycleBinTable.setRowHeight(32);
+        cardRecycleBinTable.setSelectionBackground(new Color(34, 139, 34, 40));
+        cardRecycleBinTable.setSelectionForeground(ModernTheme.TEXT_PRIMARY);
+        cardRecycleBinTable.getTableHeader().setFont(ModernTheme.FONT_BODY.deriveFont(Font.BOLD));
+        cardRecycleBinTable.getTableHeader().setBackground(ModernTheme.SURFACE);
+        cardRecycleBinTable.getTableHeader().setForeground(ModernTheme.TEXT_PRIMARY);
 
         JScrollPane scrollPane = new JScrollPane(cardRecycleBinTable);
-        add(scrollPane, BorderLayout.CENTER);
+        scrollPane.setBorder(BorderFactory.createLineBorder(ModernTheme.BORDER, 1));
+        contentWrapper.add(scrollPane, BorderLayout.CENTER);
 
         // --- Button Panel ---
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton restoreButton = new JButton("Restore Selected");
-        JButton deletePermButton = new JButton("Permanently Delete Selected");
-        JButton closeButton = new JButton("Close");
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        buttonPanel.setBackground(Color.WHITE);
+        
+        JButton restoreButton = ModernTheme.createSuccessButton("Restore Selected");
+        JButton deletePermButton = ModernTheme.createDangerButton("Delete Permanently");
+        JButton closeButton = ModernTheme.createSecondaryButton("Close");
 
         buttonPanel.add(restoreButton);
         buttonPanel.add(deletePermButton);
         buttonPanel.add(closeButton);
-        add(buttonPanel, BorderLayout.SOUTH);
+        
+        contentWrapper.add(buttonPanel, BorderLayout.SOUTH);
 
         // --- Action Listeners ---
         restoreButton.addActionListener(e -> restoreSelectedCard());
         deletePermButton.addActionListener(e -> deletePermanentlySelectedCard());
         closeButton.addActionListener(e -> dispose());
 
+        mainPanel.add(contentWrapper, BorderLayout.CENTER);
+        mainWrapper.add(mainPanel, BorderLayout.CENTER);
+        add(mainWrapper);
+
         // --- Load Initial Data ---
         loadRecycledCards();
+    }
+    
+    /**
+     * Creates the close button for the header (× symbol).
+     */
+    private JButton createHeaderCloseButton() {
+        JButton closeBtn = new JButton("×");
+        closeBtn.setFont(new Font("Arial", Font.BOLD, 20));
+        closeBtn.setForeground(Color.WHITE);
+        closeBtn.setBackground(new Color(34, 139, 34));
+        closeBtn.setBorder(new EmptyBorder(0, 10, 0, 10));
+        closeBtn.setFocusPainted(false);
+        closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeBtn.addActionListener(e -> dispose());
+        closeBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                closeBtn.setBackground(new Color(24, 119, 24));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                closeBtn.setBackground(new Color(34, 139, 34));
+            }
+        });
+        return closeBtn;
     }
 
     private void loadRecycledCards() {
