@@ -1642,10 +1642,10 @@ For issues, questions, or suggestions:
 ## 👤 Author
 
 **SmartLedger v1.0**  
-**Developer**: Adx Connect  
+**Developer**: AdxConnect  
 **Repository**: [Finance-Manager--Adx](https://github.com/adxconnect/Finance-Manager--Adx)  
-**Email**: adxconnect@outlook.com  
-**LinkedIn**: [Adx Connect](https://linkedin.com/in/adxconnect)  
+**Email**: soft.link.reg@outlook.com | banerjeeaniket003@gmail.com
+**LinkedIn**: [Aniket Banerjee]([https://linkedin.com/in/adxconnect](https://www.linkedin.com/in/aniket-banerjee-a36191295/))  
 
 ### Acknowledgments
 - **Java Swing Community** for GUI framework
