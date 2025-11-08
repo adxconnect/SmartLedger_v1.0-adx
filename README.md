@@ -1554,4 +1554,110 @@ For issues, questions, or suggestions:
 
 ---
 
+<<<<<<< HEAD
 <!-- Duplicate footer content removed for brevity. Original changelog & author block retained earlier in README. -->
+=======
+**End of Documentation**
+
+*Generated on: October 31, 2025*  
+<<<<<<< HEAD
+*Last Updated: November 6, 2025*  
+*Version: 2.0*  
+*Status: Production Ready* ✅
+
+### Changelog
+- **v2.0 (November 6, 2025)** - Major UI/UX Overhaul:
+  - **Ultra-Modern Sidebar Redesign**:
+    - Gradient blue selection highlight (12px rounded, vibrant #0078D4 to #005BA1)
+    - Borderless design with enhanced icon visibility
+    - Slim modern scrollbar (8px width, rounded thumb, transparent track)
+    - Collapsible sidebar with icon-only mode and tooltips
+    - Action command preservation across collapsed/expanded states
+  
+  - **Dark Mode Synchronization**:
+    - Fixed filter button icons not updating on theme toggle
+    - Fixed export button icons not syncing in dark mode
+    - Fixed column menu item icons not reflecting theme changes
+    - Enhanced theme update logic to refresh all dynamic UI elements
+  
+  - **Transaction UI Improvements**:
+    - Right-aligned search field using BoxLayout with horizontal glue
+    - Completely borderless transaction table for cleaner appearance
+    - Modern scrollbar styling for table viewport
+  
+  - **Profile Management System**:
+    - New EditProfileDialog with modern card-based design
+    - Real-time email validation with ✓/✗ indicators
+    - Editable fields: Account Name, Account Type, Email, Phone
+    - Database integration with automatic session context refresh
+    - Responsive layout with proper spacing (12px margins, 16px gaps)
+  
+  - **Login Experience Enhancement**:
+    - Password field eye icon properly positioned using BorderLayout
+    - Consistent field sizing (490×42px matching email field)
+    - Fixed eye toggle button overlapping with password text
+    - 45px right padding for eye button placement
+    - Improved visual hierarchy and form alignment
+
+- **v1.1 (November 5, 2025)**:
+  - Fixed dark mode toggle in login dialog (no longer logs out users)
+  - Implemented bold, theme-aware placeholder labels across all sections
+  - Redesigned taxation section with compact single-page layout
+  - Fixed placeholder text styling in Loans and Lending sections
+  - Enhanced visual hierarchy with color-coded financial data
+  - Improved user experience with in-place theme refresh
+
+---
+
+## 👤 Author
+
+**SmartLedger v1.0**  
+**Developer**: AdxConnect  
+**Repository**: [Finance-Manager--Adx](https://github.com/adxconnect/Finance-Manager--Adx)  
+**Email**: soft.link.reg@outlook.com | banerjeeaniket003@gmail.com
+**LinkedIn**: [Aniket Banerjee]([https://linkedin.com/in/adxconnect](https://www.linkedin.com/in/aniket-banerjee-a36191295/))  
+
+### Acknowledgments
+- **Java Swing Community** for GUI framework
+- **MySQL Team** for database management
+- **Apache POI** for Excel operations
+- **iTextPDF** for PDF generation
+- **Google Fonts** for typography
+
+---
+
+## 📞 Support & Contact
+
+### Getting Help
+1. **Check Documentation**: Review this README and PROJECT_DOCUMENTATION.md
+2. **Search Issues**: Look for existing GitHub issues
+3. **Create Issue**: Open new issue for bugs or questions
+4. **Community**: Join discussions in GitHub Discussions
+
+### Common Issues
+- **Database Connection**: Verify MySQL credentials in DBHelper.java
+- **Missing Libraries**: Ensure all JAR files are in lib/ folder
+- **Font Issues**: Check resources/ folder for TTF files
+- **Compilation Errors**: Use UTF-8 encoding flag
+
+### System Requirements
+- **OS**: Windows 10+, macOS 10.14+, Linux (Ubuntu 18.04+)
+- **RAM**: 512MB minimum, 1GB recommended
+- **Storage**: 50MB for application, plus database space
+- **Display**: 1024×768 minimum resolution
+
+---
+
+<div align="center">
+
+**🎉 Thank you for choosing SmartLedger! 🎉**
+
+*Transform your financial management experience with modern technology and beautiful design.*
+
+---
+
+**SmartLedger v1.0** - *Released November 2025*  
+*Made with ❤️ by Adx Connect*
+
+</div>
+>>>>>>> d965d71877fe7f12493a76d4f43a98f620b739e8
