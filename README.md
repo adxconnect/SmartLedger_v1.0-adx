@@ -1,8 +1,8 @@
-# 🎯 FinanceHub v1.0 - Modern Personal Finance Manager
+# 🎯 SmartLedger v1.0 - Modern Personal Finance Manager
 
 <div align="center">
 
-![FinanceHub Logo](logo/Logo1.png)
+![SmartLedger Logo](logo/Logo1.png)
 
 **Your Complete Financial Companion for 2025**  
 *Track, Manage, and Optimize Your Financial Life with Style*
@@ -54,9 +54,9 @@
 
 ## 🌟 Overview
 
-**FinanceHub** is a cutting-edge personal finance management application designed for the modern user. Built with Java Swing and featuring a stunning custom UI, FinanceHub provides comprehensive financial tracking across 8 major modules with enterprise-grade security and user experience.
+**SmartLedger** is a cutting-edge personal finance management application designed for the modern user. Built with Java Swing and featuring a stunning custom UI, SmartLedger provides comprehensive financial tracking across 8 major modules with enterprise-grade security and user experience.
 
-### 🎯 Why FinanceHub?
+### 🎯 Why SmartLedger?
 
 - **🔒 Bank-Level Security**: Multi-user authentication, encrypted data, OTP verification
 - **🎨 Beautiful Interface**: Modern design with dark mode, custom icons, smooth animations
@@ -205,7 +205,7 @@ Finance-Manager--Adx/
 │   └── ... (9 total JARs)
 │
 ├── 📁 logo/                         # Application logos and branding
-│   └── financehub-logo.png
+│   └── smartledger-logo.png
 │
 ├── 📁 src/                          # Source code
 │   ├── 📁 auth/                     # Authentication package
@@ -486,7 +486,7 @@ try {
 
 ## 🤝 Contributing
 
-We welcome contributions to FinanceHub! Here's how you can help:
+We welcome contributions to SmartLedger! Here's how you can help:
 
 ### Development Setup
 1. Fork the repository
@@ -522,7 +522,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👤 Author
 
-**FinanceHub v1.0**  
+**SmartLedger v1.0**  
 **Developer**: Adx Connect  
 **Repository**: [Finance-Manager--Adx](https://github.com/adxconnect/Finance-Manager--Adx)  
 **Email**: adxconnect@outlook.com  
@@ -561,13 +561,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**🎉 Thank you for choosing FinanceHub! 🎉**
+**🎉 Thank you for choosing SmartLedger! 🎉**
 
 *Transform your financial management experience with modern technology and beautiful design.*
 
 ---
 
-**FinanceHub v1.0** - *Released November 2025*  
+**SmartLedger v1.0** - *Released November 2025*  
 *Made with ❤️ by Adx Connect*
 
 </div>
@@ -1287,7 +1287,7 @@ Total Files: 94+ Java files
 #### 10. UI/UX ✓
 - [x] Modern design system (ModernTheme)
 - [x] Custom icon system (19 icons)
-- [x] Logo branding (FinanceHub)
+- [x] Logo branding (SmartLedger)
 - [x] Responsive layouts
 - [x] Master-detail views
 - [x] Custom styled components
@@ -1570,7 +1570,7 @@ This project is created for educational and personal use.
 
 ## 👤 Author
 
-**Project**: Finance Manager (FinanceHub)  
+**Project**: Finance Manager (SmartLedger)  
 **Developer**: Adx Connect  
 **Repository**: Finance-Manager--Adx  
 **Last Updated**: October 31, 2025
@@ -1641,7 +1641,7 @@ For issues, questions, or suggestions:
 
 ## 👤 Author
 
-**FinanceHub v1.0**  
+**SmartLedger v1.0**  
 **Developer**: Adx Connect  
 **Repository**: [Finance-Manager--Adx](https://github.com/adxconnect/Finance-Manager--Adx)  
 **Email**: adxconnect@outlook.com  
@@ -1680,13 +1680,13 @@ For issues, questions, or suggestions:
 
 <div align="center">
 
-**🎉 Thank you for choosing FinanceHub! 🎉**
+**🎉 Thank you for choosing SmartLedger! 🎉**
 
 *Transform your financial management experience with modern technology and beautiful design.*
 
 ---
 
-**FinanceHub v1.0** - *Released November 2025*  
-*Made with ❤️ by ΔdxConnect*
+**SmartLedger v1.0** - *Released November 2025*  
+*Made with ❤️ by Adx Connect*
 
 </div>
