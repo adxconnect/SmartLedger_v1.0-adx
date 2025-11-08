@@ -1,60 +1,576 @@
-# Finance Manager - SmartLedger
-## Comprehensive Project Documentation
+# 🎯 FinanceHub v1.0 - Modern Personal Finance Manager
+
+<div align="center">
+
+![FinanceHub Logo](logo/Logo1.png)
+
+**Your Complete Financial Companion for 2025**  
+*Track, Manage, and Optimize Your Financial Life with Style*
+
+[![Java](https://img.shields.io/badge/Java-8%2B-orange.svg)](https://www.oracle.com/java/)
+[![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-blue.svg)](https://www.mysql.com/)
+[![Swing](https://img.shields.io/badge/Swing-Modern%20UI-green.svg)](https://docs.oracle.com/javase/tutorial/uiswing/)
+[![License](https://img.shields.io/badge/License-MIT-red.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0-brightgreen.svg)]()
+
+*✨ Modern Dark Mode • 🔒 Secure Authentication • 📊 Real-time Analytics • 📱 Cross-Platform*
+
+[📥 Download](#-installation--setup) • [🚀 Quick Start](#-quick-start) • [📖 Documentation](#-features-overview) • [🎨 Screenshots](#-ui-showcase)
+
+</div>
+
+---
+
+## 🌟 What's New in v1.0 (November 2025)
+
+- **🎨 Ultra-Modern UI**: Complete redesign with gradient themes, custom icons, and fluid animations
+- **🌙 Advanced Dark Mode**: Seamless theme switching with intelligent color adaptation
+- **🔐 Enhanced Security**: OTP-based card protection, SHA-256 password hashing, account isolation
+- **📊 Smart Analytics**: Real-time financial insights, automated calculations, comprehensive reporting
+- **♻️ Recycle Bin System**: Soft delete for all financial data with easy recovery
+- **📱 Responsive Design**: Optimized for all screen sizes with modern scrollbars and layouts
+- **⚡ Performance Optimized**: Fast loading, efficient database queries, background processing
+- **🔄 Multi-User Support**: Secure account-scoped data with session management
 
 ---
 
 ## 📋 Table of Contents
 
-1.  [Project Overview](#project-overview)
-2.  [Technology Stack](#technology-stack)
-3.  [Architecture]    (#architecture)
-4.  [Features & Modules](#features--modules)
-5.  [UI/UX Design](#uiux-design)
-6.  [Database Schema](#database-schema)
-7.  [Project Structure](#project-structure)
-8.  [Progress & Status](#progress--status)
-9.  [Installation & Setup](#installation--setup)
-10. [Usage Guide](#usage-guide)
-
-=======
-
-1. [Project Overview](#project-overview)
-2. [Technology Stack](#technology-stack)
-3. [Architecture](#architecture)
-4. [Features & Modules](#features--modules)
-5. [UI/UX Design](#uiux-design)
-6. [Database Schema](#database-schema)
-7. [Project Structure](#project-structure)
-8. [Progress & Status](#progress--status)
-9. [Installation & Setup](#installation--setup)
-10.[Usage Guide](#usage-guide)
->>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
+- [🌟 Overview](#-overview)
+- [✨ Key Features](#-key-features)
+- [💻 Technology Stack](#-technology-stack)
+- [🏗️ Architecture](#-architecture)
+- [📁 Project Structure](#-project-structure)
+- [⚡ Installation & Setup](#-installation--setup)
+- [🚀 Quick Start](#-quick-start)
+- [🎨 UI Showcase](#-ui-showcase)
+- [📖 Features Overview](#-features-overview)
+- [🔧 Configuration](#-configuration)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+- [👤 Author](#-author)
 
 ---
 
-## 🎯 Project Overview
+## 🌟 Overview
 
-**FinanceHub** is a comprehensive personal finance management application built with Java Swing. The application enables users to track and manage all aspects of their financial life including transactions, bank accounts, deposits, investments, loans, credit cards, and taxation profiles.
+**FinanceHub** is a cutting-edge personal finance management application designed for the modern user. Built with Java Swing and featuring a stunning custom UI, FinanceHub provides comprehensive financial tracking across 8 major modules with enterprise-grade security and user experience.
 
-### Key Highlights
-- **Multi-user Support**: Secure authentication with account-scoped data
-- **Comprehensive Finance Tracking**: 8 major financial modules
-- **Modern UI**: Custom-built modern design system with dark mode support
-- **Real-time Data**: MySQL database integration for persistent storage
-- **Export Capabilities**: CSV and PDF export functionality
-- **Recycle Bin**: Soft delete for all major entities
+### 🎯 Why FinanceHub?
+
+- **🔒 Bank-Level Security**: Multi-user authentication, encrypted data, OTP verification
+- **🎨 Beautiful Interface**: Modern design with dark mode, custom icons, smooth animations
+- **📊 Complete Financial Picture**: Track every aspect of your financial life in one place
+- **⚡ Lightning Fast**: Optimized performance with real-time calculations and updates
+- **📱 Cross-Platform**: Runs on Windows, macOS, and Linux with native look and feel
+- **🔄 Data Safety**: Recycle bin system prevents accidental data loss
+- **📈 Smart Analytics**: Automated EMI calculations, investment tracking, tax optimization
+
+### 📊 Financial Modules
+
+| Module | Description | Key Features |
+|--------|-------------|--------------|
+| 💳 **Transactions** | Income & expense tracking | Monthly tabs, live search, bulk operations |
+| 🏦 **Bank Accounts** | Multi-bank account management | Balance tracking, account types, IFSC validation |
+| 💰 **Deposits** | FD, RD, Gullak management | Auto-calculations, maturity tracking, denomination counting |
+| 📈 **Investments** | Portfolio management | 7 investment types, gain/loss tracking, price updates |
+| 💸 **Loans & EMI** | Loan management | EMI calculator, repayment tracking, status monitoring |
+| 🎴 **Credit Cards** | Card management | Secure storage, limit tracking, OTP protection |
+| 📋 **Taxation** | Tax profile management | Multi-year support, deduction tracking, auto-calculations |
+| 📊 **Summary & Reports** | Financial dashboard | PDF/CSV export, comprehensive analytics, year filtering |
+
+---
+
+## ✨ Key Features
+
+### 🔐 Security & Authentication
+- **Multi-User Support** with account-scoped data isolation
+- **SHA-256 Password Hashing** with unique salt per user
+- **OTP-Based Recovery** for forgotten passwords
+- **Session Management** with automatic logout
+- **Login Audit Trail** for security monitoring
+- **Card Data Protection** with OTP verification for sensitive details
+
+### 🎨 Modern UI/UX
+- **Custom Design System** with 19 vector icons
+- **Dark/Light Mode Toggle** with instant theme switching
+- **Responsive Layouts** with master-detail views
+- **Modern Components**: Rounded buttons, custom scrollbars, gradient themes
+- **Professional Branding** with custom logo and typography
+- **Smooth Animations** and transitions throughout
+
+### 📊 Financial Intelligence
+- **Real-Time Calculations**: EMI, interest, maturity amounts
+- **Automated Analytics**: Gain/loss tracking, balance summaries
+- **Export Capabilities**: PDF reports, CSV data export
+- **Recycle Bin System**: Soft delete with recovery for all entities
+- **Search & Filter**: Live search across all financial data
+- **Bulk Operations**: Select multiple items for batch actions
+
+### 🔧 Technical Excellence
+- **MySQL Database** with optimized queries and foreign key constraints
+- **JDBC Integration** for reliable data persistence
+- **External Libraries**: PDF generation, Excel operations, JSON handling
+- **Modular Architecture** with clean separation of concerns
+- **Error Handling** with user-friendly messages
+- **Performance Monitoring** and optimization
 
 ---
 
 ## 💻 Technology Stack
 
 ### Core Technologies
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Java** | Java 8+ | Primary programming language |
-| **Swing** | Built-in | GUI framework |
-| **MySQL** | 5.7+ | Database management system |
-| **JDBC** | 9.4.0 | Database connectivity |
+```java
+Java 8+           // Primary language
+Swing             // Modern GUI framework
+MySQL 5.7+        // Database management
+JDBC 9.4.0        // Database connectivity
+```
+
+### External Dependencies
+| Library | Version | Purpose |
+|---------|---------|---------|
+| `mysql-connector-j` | 9.4.0 | MySQL database driver |
+| `itextpdf` | 5.5.13.4 | PDF generation and export |
+| `poi` | 5.4.1 | Excel file operations |
+| `poi-ooxml` | 5.4.1 | Excel OOXML format support |
+| `gson` | 2.10.1 | JSON serialization/deserialization |
+| `commons-compress` | 1.28.0 | Archive file handling |
+| `commons-collections4` | 4.5.0 | Enhanced Java collections |
+| `xmlbeans` | 5.3.0 | XML processing |
+| `log4j-api` | 3.0.0-beta2 | Logging framework |
+
+### Development Tools
+- **IDE**: VS Code, IntelliJ IDEA, Eclipse
+- **Build Tool**: javac with UTF-8 encoding
+- **Version Control**: Git
+- **Package Manager**: Manual JAR management
+
+---
+
+## 🏗️ Architecture
+
+### Three-Layer Architecture
+
+```
+┌─────────────────┐
+│   UI Layer      │  🎨 Modern Swing Components
+│   (src/UI/)     │  • LoginDialog, FinanceManagerFullUI
+│                 │  • ModernTheme, ModernIcons
+└─────────────────┘
+         │
+┌─────────────────┐
+│  Auth Layer     │  🔐 Authentication & Security
+│  (src/auth/)    │  • AuthManager, SessionContext
+│                 │  • PasswordHasher, OtpService
+└─────────────────┘
+         │
+┌─────────────────┐
+│  Data Layer     │  💾 Database Operations
+│  (src/db/)      │  • DBHelper, FinanceManager
+│                 │  • Business Logic & Queries
+└─────────────────┘
+```
+
+### Key Design Patterns
+- **MVC Architecture**: Clear separation of Model-View-Controller
+- **Singleton Pattern**: Database connections, session management
+- **Factory Pattern**: UI component creation
+- **Observer Pattern**: Theme change notifications
+- **Strategy Pattern**: Different export formats (PDF, CSV)
+
+### Database Design
+- **14 Tables** with proper normalization
+- **Foreign Key Constraints** for data integrity
+- **Account Scoping** on all queries
+- **Recycle Bin Tables** for soft deletes
+- **Audit Trails** for security logging
+
+---
+
+## 📁 Project Structure
+
+```
+Finance-Manager--Adx/
+│
+├── 📁 bin/                          # Compiled Java classes
+│   ├── org/apache/...              # External library classes
+│   └── src/...                     # Application classes
+│
+├── 📁 lib/                          # External JAR dependencies
+│   ├── mysql-connector-j-9.4.0.jar
+│   ├── itextpdf-5.5.13.4.jar
+│   ├── poi-5.4.1.jar
+│   ├── gson-2.10.1.jar
+│   └── ... (9 total JARs)
+│
+├── 📁 logo/                         # Application logos and branding
+│   └── financehub-logo.png
+│
+├── 📁 src/                          # Source code
+│   ├── 📁 auth/                     # Authentication package
+│   │   ├── Account.java            # User account model
+│   │   ├── AuthManager.java        # Authentication service
+│   │   ├── EmailService.java       # Email functionality
+│   │   │   ├── OtpService.java         # OTP generation/verification
+│   │   ├── PasswordHasher.java     # Password hashing utility
+│   │   ├── SessionContext.java     # Session management
+│   │   └── UserPreferencesCache.java # User preferences
+│   │
+│   ├── 📁 db/                       # Database package
+│   │   └── DBHelper.java           # Database connection helper
+│   │
+│   ├── 📁 UI/                       # User interface package
+│   │   ├── FinanceManagerApp.java   # Application entry point
+│   │   ├── LoginDialog.java         # Login screen
+│   │   ├── FinanceManagerFullUI.java # Main application window
+│   │   ├── ModernTheme.java         # Design system & theming
+│   │   ├── ModernIcons.java         # Custom icon system
+│   │   ├── LogoPanel.java           # Logo component
+│   │   ├── EditProfileDialog.java   # Profile management
+│   │   └── ... (25+ dialog classes)
+│   │
+│   ├── BankAccount.java            # Bank account model
+│   ├── Card.java                   # Credit/debit card model
+│   ├── Deposit.java                # Deposit model (FD/RD/Gullak)
+│   ├── Investment.java             # Investment model
+│   ├── Loan.java                   # Loan model
+│   ├── TaxProfile.java             # Tax profile model
+│   ├── Transaction.java            # Transaction model
+│   ├── SummaryData.java            # Summary aggregation model
+│   ├── FinanceManager.java         # Core business logic
+│   └── Main.java                   # Console app entry point
+│
+├── 📁 data/                         # Legacy data files (not used)
+│   ├── transactions.txt
+│   ├── creditcards.txt
+│   └── ... (6 files)
+│
+├── 📄 README.md                     # This file
+├── 📄 sources.txt                   # Compilation source list
+├── 📄 PROJECT_DOCUMENTATION.md      # Detailed documentation
+└── 📄 .gitignore                    # Git ignore rules
+```
+
+**File Count**: 94+ Java files, 9 JARs, 6 data files
+**Lines of Code**: ~30,000+ lines
+**Packages**: 3 main packages (auth, db, UI)
+
+---
+
+## ⚡ Installation & Setup
+
+### 📋 Prerequisites
+
+| Requirement | Version | Download Link |
+|-------------|---------|---------------|
+| **Java JDK** | 8 or higher | [Oracle JDK](https://www.oracle.com/java/technologies/javase-downloads.html) |
+| **MySQL Server** | 5.7 or higher | [MySQL Downloads](https://dev.mysql.com/downloads/mysql/) |
+| **Git** | Latest | [Git Downloads](https://git-scm.com/downloads) |
+
+### 🗄️ Database Setup
+
+1. **Install MySQL Server** and start the service
+2. **Open MySQL Command Line** or MySQL Workbench
+3. **Create Database**:
+   ```sql
+   CREATE DATABASE finance_manager;
+   ```
+4. **Update Credentials** in `src/db/DBHelper.java`:
+   ```java
+   String url = "jdbc:mysql://localhost:3306/finance_manager";
+   String user = "root";              // Your MySQL username
+   String password = "your_password";  // Your MySQL password
+   ```
+
+### 📦 Project Setup
+
+1. **Clone Repository**:
+   ```bash
+   git clone https://github.com/adxconnect/Finance-Manager--Adx.git
+   cd Finance-Manager--Adx
+   ```
+
+2. **Verify Dependencies**:
+   - Check that all 9 JAR files exist in `lib/` folder
+   - If missing, download from Maven Central Repository
+
+3. **Compile Application**:
+   ```powershell
+   # Windows PowerShell
+   javac -encoding UTF-8 -d bin -cp "lib/*;src" @sources.txt
+   ```
+   ```bash
+   # Linux/macOS
+   javac -encoding UTF-8 -d bin -cp "lib/*:src" @sources.txt
+   ```
+
+4. **Run Application**:
+   ```powershell
+   # Windows PowerShell
+   java -cp "bin;lib/*" src.UI.FinanceManagerApp
+   ```
+   ```bash
+   # Linux/macOS
+   java -cp "bin:lib/*" src.UI.FinanceManagerApp
+   ```
+
+### 🎯 First Run Setup
+
+1. **Launch Application** - Login screen appears
+2. **Create Account**:
+   - Click "Sign Up" tab
+   - Enter: Account Name, Email, Phone, Account Type
+   - Set strong password
+   - Click "Create Account"
+3. **Login** with your credentials
+4. **Start Managing** your finances!
+
+---
+
+## 🚀 Quick Start
+
+### Adding Your First Transaction
+1. Navigate to **Transactions** tab
+2. Select year from dropdown
+3. Click **"Add Transaction"**
+4. Fill details: Date, Category, Type, Amount, Payment Method
+5. Click **"Save"**
+
+### Setting Up Bank Accounts
+1. Go to **Bank Accounts** tab
+2. Click **"Add New Account"**
+3. Enter account details: Holder name, Account number, Bank, IFSC
+4. Set opening balance
+5. Click **"Save"**
+
+### Creating Investment Portfolio
+1. Navigate to **Investments** tab
+2. Click **"Add Investment"**
+3. Select type: Stocks, Mutual Funds, Gold, etc.
+4. Enter quantity, purchase price, current price
+5. Click **"Save"**
+
+---
+
+## 🎨 UI Showcase
+
+### Modern Login Experience
+- **Clean Card Design** with centered logo
+- **Tabbed Interface** for Sign In/Sign Up
+- **Dark Mode Toggle** with smooth animations
+- **Form Validation** with real-time feedback
+- **Professional Branding** throughout
+
+### Main Dashboard
+- **Header Bar** with logo, user info, and controls
+- **8 Main Tabs** with modern rounded design
+- **Dark Mode Toggle** (44×44px round button)
+- **Responsive Layout** adapting to screen size
+
+### Transaction Management
+- **Monthly Tab Organization** for easy navigation
+- **Live Search** across all transaction fields
+- **Modern Table Design** with grid lines and custom scrollbars
+- **Bulk Operations** for efficient data management
+- **Export Capabilities** to CSV and PDF
+
+### Financial Analytics
+- **Comprehensive Dashboard** showing all financial data
+- **Real-time Calculations** for balances and totals
+- **Color-coded Categories** for easy identification
+- **Export Options** for professional reporting
+
+---
+
+## 📖 Features Overview
+
+### 💳 Transaction Management
+- **Complete CRUD Operations**: Add, edit, delete transactions
+- **Monthly Organization**: Transactions grouped by month in tabs
+- **Advanced Search**: Live filtering across date, amount, category, payee
+- **Bulk Operations**: Select all, delete multiple, export selected
+- **Recycle Bin**: Recover accidentally deleted transactions
+- **Export Support**: CSV export for spreadsheet analysis
+
+### 🏦 Bank Account Management
+- **Multi-Bank Support**: Track accounts from different banks
+- **Account Types**: Savings, Current, Salary, Business accounts
+- **Balance Tracking**: Real-time balance calculations
+- **Secure Storage**: Account numbers, IFSC codes, bank details
+- **Master-Detail View**: List view with detailed information panel
+
+### 💰 Deposit Management
+- **Fixed Deposits (FD)**: Principal, interest rate, tenure tracking
+- **Recurring Deposits (RD)**: Monthly deposits with maturity calculation
+- **Gullak (Piggy Bank)**: Cash denomination tracking system
+  - Track ₹500, ₹200, ₹100, ₹50, ₹20, ₹10, ₹5, ₹2, ₹1 notes
+  - Real-time total calculation
+  - Due amount tracking
+- **Auto-Calculations**: Maturity amounts, interest earned
+
+### 📈 Investment Portfolio
+- **7 Investment Types**: Gold/Silver, Mutual Funds, Stocks, Bonds, Real Estate, Crypto, Others
+- **Price Tracking**: Purchase price vs current price
+- **Gain/Loss Calculation**: Automatic profit/loss computation
+- **Quantity Management**: Units/shares tracking
+- **Portfolio Overview**: Total investment value, returns percentage
+
+### 💸 Loans & EMI Management
+- **Loan Types**: Personal, Home, Car, Education, Business, Credit Card EMI
+- **EMI Calculator**: Automatic calculation using standard formula
+- **Repayment Tracking**: Principal paid, outstanding balance
+- **Status Management**: Active, Paid Off, Defaulted loans
+- **Flexible Tenure**: Months or years configuration
+
+### 🎴 Credit Card Management
+- **Secure Card Storage**: Encrypted card numbers and CVV
+- **Card Types**: Credit, Debit, Prepaid cards
+- **Limit Tracking**: Credit limit, current expenses, utilization %
+- **Payment Management**: Amount due, days left to pay
+- **OTP Protection**: Secure access to sensitive card details
+
+### 📋 Taxation Management
+- **Multi-Year Support**: Financial year-wise tax profiles
+- **Profile Types**: Individual, Business, HUF, Trust
+- **Income Tracking**: Gross income recording
+- **Deduction Management**: Total deductions tracking
+- **Auto-Calculations**: Taxable income computation
+- **Notes Support**: Additional tax-related information
+
+### 📊 Summary & Reports
+- **Financial Dashboard**: Complete overview of all finances
+- **Real-time Totals**: Transaction balances, account sums, investment values
+- **Export Options**: Professional PDF reports, CSV data export
+- **Customization**: Company name, designation, report holder details
+- **Year Filtering**: Generate reports for specific years
+
+---
+
+## 🔧 Configuration
+
+### Database Configuration
+Edit `src/db/DBHelper.java`:
+```java
+// Update these values according to your MySQL setup
+private static final String DB_URL = "jdbc:mysql://localhost:3306/finance_manager";
+private static final String DB_USER = "root";
+private static final String DB_PASSWORD = "your_password";
+```
+
+### Theme Customization
+Modify `src/UI/ModernTheme.java` for custom colors:
+```java
+// Primary colors
+public static final Color PRIMARY = new Color(67, 97, 238);
+public static final Color PRIMARY_DARK = new Color(48, 73, 191);
+
+// Accent colors
+public static final Color SUCCESS = new Color(46, 213, 115);
+public static final Color DANGER = new Color(255, 71, 87);
+```
+
+### Font Configuration
+Update font loading in `src/UI/ModernTheme.java`:
+```java
+// Register Google Fonts (Poppins)
+try {
+    GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+    ge.registerFont(Font.createFont(Font.TRUETYPE_FONT, new File("resources/Poppins-Regular.ttf")));
+} catch (Exception e) {
+    // Fallback to system fonts
+}
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions to FinanceHub! Here's how you can help:
+
+### Development Setup
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and test thoroughly
+4. Commit your changes: `git commit -m 'Add amazing feature'`
+5. Push to the branch: `git push origin feature/amazing-feature`
+6. Open a Pull Request
+
+### Code Standards
+- Follow Java naming conventions
+- Add comments for complex logic
+- Test all new features
+- Update documentation for API changes
+- Maintain backward compatibility
+
+### Feature Requests
+- Open an issue with the "enhancement" label
+- Provide detailed description and use cases
+- Include mockups if UI-related
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**Permissions**: Commercial use, modification, distribution, private use
+**Limitations**: No liability, no warranty
+**Conditions**: Include copyright notice
+
+---
+
+## 👤 Author
+
+**FinanceHub v1.0**  
+**Developer**: Adx Connect  
+**Repository**: [Finance-Manager--Adx](https://github.com/adxconnect/Finance-Manager--Adx)  
+**Email**: adxconnect@outlook.com  
+**LinkedIn**: [Adx Connect](https://linkedin.com/in/adxconnect)  
+
+### Acknowledgments
+- **Java Swing Community** for GUI framework
+- **MySQL Team** for database management
+- **Apache POI** for Excel operations
+- **iTextPDF** for PDF generation
+- **Google Fonts** for typography
+
+---
+
+## 📞 Support & Contact
+
+### Getting Help
+1. **Check Documentation**: Review this README and PROJECT_DOCUMENTATION.md
+2. **Search Issues**: Look for existing GitHub issues
+3. **Create Issue**: Open new issue for bugs or questions
+4. **Community**: Join discussions in GitHub Discussions
+
+### Common Issues
+- **Database Connection**: Verify MySQL credentials in DBHelper.java
+- **Missing Libraries**: Ensure all JAR files are in lib/ folder
+- **Font Issues**: Check resources/ folder for TTF files
+- **Compilation Errors**: Use UTF-8 encoding flag
+
+### System Requirements
+- **OS**: Windows 10+, macOS 10.14+, Linux (Ubuntu 18.04+)
+- **RAM**: 512MB minimum, 1GB recommended
+- **Storage**: 50MB for application, plus database space
+- **Display**: 1024×768 minimum resolution
+
+---
+
+<div align="center">
+
+**🎉 Thank you for choosing FinanceHub! 🎉**
+
+*Transform your financial management experience with modern technology and beautiful design.*
+
+---
+
+**FinanceHub v1.0** - *Released November 2025*  
+*Made with ❤️ by Adx Connect*
+
+</div>
 
 ### External Libraries
 | Library | Version | Purpose |
@@ -1121,11 +1637,56 @@ For issues, questions, or suggestions:
   - Enhanced visual hierarchy with color-coded financial data
   - Improved user experience with in-place theme refresh
 
-- **v1.0 (October 31, 2025)**:
-  - Initial documentation
-  - Complete feature set implementation
-  - Full database schema documentation
-=======
-*Version: 1.0*  
-*Status: Production Ready* ✅
->>>>>>> 674ea5741c636a7ca63b8abf2bdbb9192b2a48df
+---
+
+## 👤 Author
+
+**FinanceHub v1.0**  
+**Developer**: Adx Connect  
+**Repository**: [Finance-Manager--Adx](https://github.com/adxconnect/Finance-Manager--Adx)  
+**Email**: adxconnect@outlook.com  
+**LinkedIn**: [Adx Connect](https://linkedin.com/in/adxconnect)  
+
+### Acknowledgments
+- **Java Swing Community** for GUI framework
+- **MySQL Team** for database management
+- **Apache POI** for Excel operations
+- **iTextPDF** for PDF generation
+- **Google Fonts** for typography
+
+---
+
+## 📞 Support & Contact
+
+### Getting Help
+1. **Check Documentation**: Review this README and PROJECT_DOCUMENTATION.md
+2. **Search Issues**: Look for existing GitHub issues
+3. **Create Issue**: Open new issue for bugs or questions
+4. **Community**: Join discussions in GitHub Discussions
+
+### Common Issues
+- **Database Connection**: Verify MySQL credentials in DBHelper.java
+- **Missing Libraries**: Ensure all JAR files are in lib/ folder
+- **Font Issues**: Check resources/ folder for TTF files
+- **Compilation Errors**: Use UTF-8 encoding flag
+
+### System Requirements
+- **OS**: Windows 10+, macOS 10.14+, Linux (Ubuntu 18.04+)
+- **RAM**: 512MB minimum, 1GB recommended
+- **Storage**: 50MB for application, plus database space
+- **Display**: 1024×768 minimum resolution
+
+---
+
+<div align="center">
+
+**🎉 Thank you for choosing FinanceHub! 🎉**
+
+*Transform your financial management experience with modern technology and beautiful design.*
+
+---
+
+**FinanceHub v1.0** - *Released November 2025*  
+*Made with ❤️ by ΔdxConnect*
+
+</div>
