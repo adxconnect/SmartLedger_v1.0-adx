@@ -1533,29 +1533,6 @@ This is a personal finance management project. Future enhancements could include
 
 This project is created for educational and personal use.
 
----
-
-## 👤 Author
-
-**Project**: Finance Manager (SmartLedger)  
-**Developer**: Adx Connect  
-**Repository**: Finance-Manager--Adx  
-**Last Updated**: October 31, 2025
-
----
-
-## 📞 Support
-
-For issues, questions, or suggestions:
-1. Check this documentation
-2. Review code comments
-3. Test with sample data
-4. Verify database connection
-
----
-
-<<<<<<< HEAD
-<!-- Duplicate footer content removed for brevity. Original changelog & author block retained earlier in README. -->
 =======
 **End of Documentation**
 
