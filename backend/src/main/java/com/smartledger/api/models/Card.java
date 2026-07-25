@@ -23,7 +23,10 @@ public class Card {
     private double amountToPay;
     private int daysLeftToPay;
     private String creationDate;
-
+    private String cardNetwork;
+    private String cardNetworkOther;
+    private String cardFeeType;
+    private double annualFee;
     public String getMaskedCardNumber() {
         if (cardNumber == null || cardNumber.length() < 4) {
             return "**** **** **** " + (cardNumber != null ? cardNumber : "");

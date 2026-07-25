@@ -13,6 +13,9 @@ public class Deposit {
     private String id;
     private String depositType;
     private String holderName;
+    private String ifscCode;
+    private String bankName;
+    private String branchName;
     private String description;
     private String goal;
     private String creationDate;
@@ -26,6 +29,8 @@ public class Deposit {
     private double currentTotal;
     private String lastUpdated;
     private double gullakDueAmount;
+    private String dateOfMaturity;
+    private String interestType;
 
     public double calculateFDMaturityAmount() {
         if (!"FD".equals(depositType) || interestRate <= 0 || principalAmount <= 0 || tenure <= 0 || startDate == null) {

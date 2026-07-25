@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 :root {
   --bg-dark: #0a0a0f;
@@ -18,7 +18,7 @@
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --glass-backdrop: blur(16px);
 
-  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -1003,4 +1003,118 @@ td.danger {
     opacity: 1;
     transform: translateY(0);
   }
+}
+[data-theme='dark'] {
+  --dash-bg: #0a0d10;
+  --dash-sidebar: #121619;
+  --dash-card: #1c2025;
+  --dash-text: #fff;
+  --dash-text-muted: #8892b0;
+  --dash-border: rgba(255,255,255,0.05);
+  --dash-border-strong: rgba(255,255,255,0.1);
+  --dash-text-inverse: #000;
+}
+
+[data-theme='light'] {
+  --dash-bg: #f8fafc;
+  --dash-sidebar: #ffffff;
+}
+[data-theme='dark'] {
+  --dash-bg: #0a0d10;
+  --dash-sidebar: #121619;
+  --dash-card: #1c2025;
+  --dash-glass-bg: rgba(28, 32, 37, 0.4);
+  --dash-text: #fff;
+  --dash-text-muted: #8892b0;
+  --dash-border: rgba(255,255,255,0.05);
+  --dash-border-strong: rgba(255,255,255,0.1);
+  --dash-text-inverse: #000;
+}
+
+[data-theme='light'] {
+  --dash-bg: #f8fafc;
+  --dash-sidebar: #ffffff;
+  --dash-card: #ffffff;
+  --dash-glass-bg: rgba(255, 255, 255, 0.4);
+  --dash-text: #0f172a;
+  --dash-text-muted: #475569;
+  --dash-border: rgba(0,0,0,0.1);
+  --dash-border-strong: rgba(0,0,0,0.15);
+  --dash-text-inverse: #fff;
+}
+
+/* Dashboard Sidebar Navigation */
+.nav-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin: 5px 0;
+  cursor: pointer;
+  gap: 4px;
+  color: var(--dash-text-muted);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  color: var(--dash-text);
+}
+
+.nav-item.active {
+  color: #34d399;
+}
+
+.nav-item .icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.nav-item:hover .icon-circle {
+  background: rgba(136, 146, 176, 0.08);
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.nav-item.active .icon-circle {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.15) 0%, rgba(52, 211, 153, 0.05) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.2), inset 0 0 10px rgba(52, 211, 153, 0.1);
+  transform: scale(1.1);
+}
+
+.nav-item.active:hover .icon-circle {
+  transform: scale(1.15);
+  box-shadow: 0 0 25px rgba(52, 211, 153, 0.25), inset 0 0 12px rgba(52, 211, 153, 0.15);
+}
+
+.nav-item .icon-svg {
+  transition: all 0.3s ease;
+  color: inherit;
+}
+
+.nav-item.active .icon-svg {
+  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.6));
+}
+
+.nav-item .nav-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
+}
+
+.nav-item.active .nav-label {
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
 }

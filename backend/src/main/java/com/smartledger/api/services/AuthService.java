@@ -45,4 +45,19 @@ public class AuthService {
         acc.setPasswordSalt(null);
         return acc;
     }
+    
+    public Account getAccountById(String id) throws Exception {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentSnapshot doc = db.collection("accounts").document(id).get().get();
+        if (doc.exists()) {
+            Account acc = doc.toObject(Account.class);
+            if (acc != null) {
+                acc.setPasswordHash(null);
+                acc.setPasswordSalt(null);
+                acc.setId(doc.getId());
+                return acc;
+            }
+        }
+        return null;
+    }
 }

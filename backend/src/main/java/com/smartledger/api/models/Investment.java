@@ -9,18 +9,12 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class Investment {
     private String id;
+    private String investmentName;
     private String assetType;
-    private String holderName;
-    private String description;
-    private String goal;
-    private String startDate;
-    private String accountDetails;
-    private String tickerSymbol;
-    private String exchange;
+    private String assetSymbol;
     private double quantity;
-    private double initialUnitCost;
-    private double currentUnitPrice;
-    private String propertyAddress;
-    private int tenureYears;
-    private double interestRate;
+    private double amountInvested;
+    private String investmentType;
+    private String startDate;
+    private String dateOfMaturity;
 }

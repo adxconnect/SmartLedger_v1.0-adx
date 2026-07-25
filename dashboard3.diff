@@ -1,0 +1,682 @@
+diff --git a/frontend/src/Dashboard.jsx b/frontend/src/Dashboard.jsx
+index 6b17fa4..de8bdfe 100644
+--- a/frontend/src/Dashboard.jsx
++++ b/frontend/src/Dashboard.jsx
+@@ -1,51 +1,84 @@
+-import React, { useState, useEffect } from 'react';
+-import { auth } from './firebase';
++import React, { useState, useEffect, useCallback } from 'react';
++import Cropper from 'react-easy-crop';
++import getCroppedImg from './cropImage';
++import { auth, storage } from './firebase';
++import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
++import { updateProfile } from 'firebase/auth';
++import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera } from 'lucide-react';
+ 
+ const MODULES = [
+-    { id: 'overview', label: 'Overview Dashboard', isSummary: true },
++    { id: 'overview', label: 'Overview Dashboard', isSummary: true, icon: LayoutDashboard },
+     {
+-        id: 'transactions', label: 'Transactions', endpoint: '/api/transactions',
++        id: 'transactions', label: 'Transactions', endpoint: '/api/transactions', icon: ArrowRightLeft,
+         fields: [{ name: 'date', type: 'date' }, { name: 'description', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'type', type: 'select', options: ['Income', 'Expense'] }]
+     },
+     {
+-        id: 'bankaccounts', label: 'Bank Accounts', endpoint: '/api/bankaccounts',
++        id: 'bankaccounts', label: 'Bank Accounts', endpoint: '/api/bankaccounts', icon: Landmark,
+         fields: [{ name: 'accountName', type: 'text' }, { name: 'bankName', type: 'text' }, { name: 'accountNumber', type: 'text' }, { name: 'balance', type: 'number' }]
+     },
+     {
+-        id: 'cards', label: 'Cards', endpoint: '/api/cards',
++        id: 'cards', label: 'Cards', endpoint: '/api/cards', icon: CreditCard,
+         fields: [{ name: 'cardName', type: 'text' }, { name: 'cardType', type: 'select', options: ['Credit', 'Debit'] }, { name: 'cardNumber', type: 'text' }, { name: 'creditLimit', type: 'number' }]
+     },
+     {
+-        id: 'deposits', label: 'Deposits', endpoint: '/api/deposits',
++        id: 'deposits', label: 'Deposits', endpoint: '/api/deposits', icon: PiggyBank,
+         fields: [{ name: 'depositType', type: 'select', options: ['FD', 'RD', 'Gullak'] }, { name: 'holderName', type: 'text' }, { name: 'principalAmount', type: 'number' }, { name: 'interestRate', type: 'number' }]
+     },
+     {
+-        id: 'goldsilverinvestments', label: 'Gold & Silver', endpoint: '/api/goldsilverinvestments',
++        id: 'goldsilverinvestments', label: 'Gold & Silver', endpoint: '/api/goldsilverinvestments', icon: Coins,
+         fields: [{ name: 'metalType', type: 'select', options: ['Gold', 'Silver'] }, { name: 'weightGrams', type: 'number' }, { name: 'purchasePrice', type: 'number' }]
+     },
+     {
+-        id: 'investments', label: 'Investments', endpoint: '/api/investments',
++        id: 'investments', label: 'Investments', endpoint: '/api/investments', icon: TrendingUp,
+         fields: [{ name: 'investmentName', type: 'text' }, { name: 'amountInvested', type: 'number' }, { name: 'currentValue', type: 'number' }]
+     },
+     {
+-        id: 'lendings', label: 'Lendings', endpoint: '/api/lendings',
++        id: 'lendings', label: 'Lendings', endpoint: '/api/lendings', icon: Handshake,
+         fields: [{ name: 'borrowerName', type: 'text' }, { name: 'principalAmount', type: 'number' }, { name: 'interestRate', type: 'number' }, { name: 'tenureMonths', type: 'number' }]
+     },
+     {
+-        id: 'loans', label: 'Loans', endpoint: '/api/loans',
++        id: 'loans', label: 'Loans', endpoint: '/api/loans', icon: ReceiptText,
+         fields: [{ name: 'lenderName', type: 'text' }, { name: 'principalAmount', type: 'number' }, { name: 'interestRate', type: 'number' }, { name: 'tenureMonths', type: 'number' }]
+     },
+     {
+-        id: 'mutualfunds', label: 'Mutual Funds', endpoint: '/api/mutualfunds',
++        id: 'mutualfunds', label: 'Mutual Funds', endpoint: '/api/mutualfunds', icon: PieChart,
+         fields: [{ name: 'fundName', type: 'text' }, { name: 'units', type: 'number' }, { name: 'nav', type: 'number' }]
+     },
+     {
+-        id: 'taxprofiles', label: 'Tax Profiles', endpoint: '/api/taxprofiles',
++        id: 'taxprofiles', label: 'Tax Profiles', endpoint: '/api/taxprofiles', icon: FileText,
+         fields: [{ name: 'profileName', type: 'text' }, { name: 'financialYear', type: 'text' }, { name: 'grossIncome', type: 'number' }, { name: 'totalDeductions', type: 'number' }]
+     }
+ ];
+ 
+-function SummaryView() {
++const countryOptions = [
++    { code: 'IN', dial: '+91', name: 'India' },
++    { code: 'PK', dial: '+92', name: 'Pakistan' },
++    { code: 'AE', dial: '+971', name: 'United Arab Emirates' },
++    { code: 'US', dial: '+1', name: 'United States' },
++    { code: 'GB', dial: '+44', name: 'United Kingdom' },
++    { code: 'AU', dial: '+61', name: 'Australia' },
++    { code: 'JP', dial: '+81', name: 'Japan' },
++    { code: 'DE', dial: '+49', name: 'Germany' },
++    { code: 'FR', dial: '+33', name: 'France' },
++    { code: 'CN', dial: '+86', name: 'China' },
++    { code: 'SG', dial: '+65', name: 'Singapore' },
++    { code: 'CA', dial: '+1', name: 'Canada' },
++    { code: 'IT', dial: '+39', name: 'Italy' },
++    { code: 'BR', dial: '+55', name: 'Brazil' },
++    { code: 'ZA', dial: '+27', name: 'South Africa' },
++    { code: 'RU', dial: '+7', name: 'Russia' },
++    { code: 'MX', dial: '+52', name: 'Mexico' },
++    { code: 'KR', dial: '+82', name: 'South Korea' },
++    { code: 'ES', dial: '+34', name: 'Spain' },
++    { code: 'ID', dial: '+62', name: 'Indonesia' },
++    { code: 'TR', dial: '+90', name: 'Turkey' },
++    { code: 'SA', dial: '+966', name: 'Saudi Arabia' },
++    { code: 'BD', dial: '+880', name: 'Bangladesh' },
++    { code: 'LK', dial: '+94', name: 'Sri Lanka' },
++    { code: 'NP', dial: '+977', name: 'Nepal' }
++];
++
++function SummaryView({ onNavigate }) {
+     const [stats, setStats] = useState({ balance: 0, income: 0, expenses: 0 });
+     const [loading, setLoading] = useState(true);
+ 
+@@ -81,58 +114,58 @@ function SummaryView() {
+                 
+                 {/* Monthly Overview (Mock Chart) */}
+                 <div style={{ 
+-                    background: '#1c2025', padding: '24px', borderRadius: '24px', 
+-                    border: '1px solid rgba(255,255,255,0.05)',
++                    background: 'var(--dash-card)', padding: '24px', borderRadius: '24px', 
++                    border: '1px solid var(--dash-border)',
+                     display: 'flex', flexDirection: 'column', gap: '16px',
+                     minHeight: '280px'
+                 }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                         <div>
+-                            <h3 style={{ margin: 0, color: '#fff', fontSize: '16px', fontWeight: '600' }}>Monthly Overview</h3>
+-                            <p style={{ margin: '4px 0 0 0', color: '#8892b0', fontSize: '13px' }}>Spending for the week</p>
++                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '16px', fontWeight: '600' }}>Monthly Overview</h3>
++                            <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Spending for the week</p>
+                         </div>
+-                        <span style={{ color: '#8892b0' }}>•••</span>
++                        <span style={{ color: 'var(--dash-text-muted)' }}>•••</span>
+                     </div>
+                     
+-                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '12px', marginTop: '30px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
++                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '12px', marginTop: '30px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '12px' }}>
+                         {[40, 60, 90, 100, 70, 50, 80].map((h, i) => (
+                             <div key={i} style={{ flex: 1, height: `${h}%`, background: h === 100 ? '#34d399' : 'linear-gradient(180deg, rgba(52,211,153,0.6) 0%, rgba(52,211,153,0.1) 100%)', borderRadius: '4px 4px 0 0', boxShadow: h === 100 ? '0 0 20px rgba(52, 211, 153, 0.4)' : 'none' }}></div>
+                         ))}
+                     </div>
+-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8892b0', fontSize: '11px', marginTop: '-8px' }}>
++                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--dash-text-muted)', fontSize: '11px', marginTop: '-8px' }}>
+                         <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+                     </div>
+                 </div>
+ 
+                 {/* Current Budget */}
+                 <div style={{ 
+-                    background: '#1c2025', padding: '32px 24px', borderRadius: '24px', 
++                    background: 'var(--dash-card)', padding: '32px 24px', borderRadius: '24px', 
+                     border: '1px solid #34d399', boxShadow: '0 0 25px rgba(52,211,153,0.15)',
+                     display: 'flex', flexDirection: 'column', justifyContent: 'center'
+                 }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+-                        <h3 style={{ margin: 0, color: '#fff', fontSize: '18px', fontWeight: '500' }}>Current Budget</h3>
+-                        <div style={{ width: 32, height: 32, borderRadius: '8px', background: '#34d399', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', cursor: 'pointer' }}>+</div>
++                        <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px', fontWeight: '500' }}>Current Budget</h3>
++                        <div style={{ width: 32, height: 32, borderRadius: '8px', background: '#34d399', color: 'var(--dash-text-inverse)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', cursor: 'pointer' }}>+</div>
+                     </div>
+                     
+-                    <p style={{ margin: 0, color: '#8892b0', fontSize: '13px', marginBottom: '8px' }}>Total Available</p>
+-                    <div style={{ fontSize: '42px', fontWeight: '700', color: '#fff', marginBottom: '16px', letterSpacing: '-1px' }}>
++                    <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '8px' }}>Total Available</p>
++                    <div style={{ fontSize: '42px', fontWeight: '700', color: 'var(--dash-text)', marginBottom: '16px', letterSpacing: '-1px' }}>
+                         ₹{stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                     </div>
+-                    <p style={{ margin: 0, color: '#8892b0', fontSize: '12px' }}>Updated just now</p>
++                    <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '12px' }}>Updated just now</p>
+                 </div>
+ 
+                 {/* Goal Progress */}
+                 <div style={{ 
+-                    background: '#1c2025', padding: '24px', borderRadius: '24px', 
+-                    border: '1px solid rgba(255,255,255,0.05)',
++                    background: 'var(--dash-card)', padding: '24px', borderRadius: '24px', 
++                    border: '1px solid var(--dash-border)',
+                     display: 'flex', flexDirection: 'column'
+                 }}>
+-                    <h3 style={{ margin: 0, color: '#fff', fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Goal Progress</h3>
+-                    <p style={{ margin: 0, color: '#8892b0', fontSize: '13px', marginBottom: '8px' }}>Save ₹1,00,000</p>
+-                    <div style={{ fontSize: '32px', fontWeight: '700', color: '#fff', marginBottom: '16px' }}>65%</div>
++                    <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Goal Progress</h3>
++                    <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '8px' }}>Save ₹1,00,000</p>
++                    <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--dash-text)', marginBottom: '16px' }}>65%</div>
+                     
+-                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '16px' }}>
++                    <div style={{ width: '100%', height: '6px', background: 'var(--dash-border-strong)', borderRadius: '3px', marginBottom: '16px' }}>
+                         <div style={{ width: '65%', height: '100%', background: '#34d399', borderRadius: '3px', boxShadow: '0 0 10px rgba(52,211,153,0.5)' }}></div>
+                     </div>
+                     
+@@ -143,26 +176,54 @@ function SummaryView() {
+             {/* Quick Stats Bottom Row */}
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
+                  <div style={{ 
+-                    background: '#1c2025', padding: '24px', borderRadius: '20px', 
+-                    border: '1px solid rgba(255,255,255,0.05)',
++                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px', 
++                    border: '1px solid var(--dash-border)',
+                     display: 'flex', alignItems: 'center', gap: '16px'
+                 }}>
+                     <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(52,211,153,0.1)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📈</div>
+                     <div>
+-                        <p style={{ margin: 0, color: '#8892b0', fontSize: '13px', marginBottom: '4px' }}>Total Income</p>
+-                        <h4 style={{ margin: 0, color: '#fff', fontSize: '20px' }}>₹{stats.income.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
++                        <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '4px' }}>Total Income</p>
++                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '20px' }}>₹{stats.income.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
+                     </div>
+                 </div>
+ 
+                 <div style={{ 
+-                    background: '#1c2025', padding: '24px', borderRadius: '20px', 
+-                    border: '1px solid rgba(255,255,255,0.05)',
++                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px', 
++                    border: '1px solid var(--dash-border)',
+                     display: 'flex', alignItems: 'center', gap: '16px'
+                 }}>
+                     <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255,71,87,0.1)', color: '#FF4757', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📉</div>
+                     <div>
+-                        <p style={{ margin: 0, color: '#8892b0', fontSize: '13px', marginBottom: '4px' }}>Total Expenses</p>
+-                        <h4 style={{ margin: 0, color: '#fff', fontSize: '20px' }}>₹{stats.expenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
++                        <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '4px' }}>Total Expenses</p>
++                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '20px' }}>₹{stats.expenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
++                    </div>
++                </div>
++
++                <div onClick={() => onNavigate && onNavigate('bankaccounts')} style={{ 
++                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px', 
++                    border: '1px solid var(--dash-border)', cursor: 'pointer',
++                    display: 'flex', alignItems: 'center', gap: '16px', transition: 'transform 0.2s'
++                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)' }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none' }}>
++                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(99,102,241,0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
++                        <Landmark size={24} />
++                    </div>
++                    <div>
++                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px' }}>Bank Accounts</h4>
++                        <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Manage accounts</p>
++                    </div>
++                </div>
++
++                <div onClick={() => onNavigate && onNavigate('cards')} style={{ 
++                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px', 
++                    border: '1px solid var(--dash-border)', cursor: 'pointer',
++                    display: 'flex', alignItems: 'center', gap: '16px', transition: 'transform 0.2s'
++                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)' }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none' }}>
++                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
++                        <CreditCard size={24} />
++                    </div>
++                    <div>
++                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px' }}>Cards</h4>
++                        <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Manage cards</p>
+                     </div>
+                 </div>
+             </div>
+@@ -275,23 +336,88 @@ export default function Dashboard({ onLogout }) {
+     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+     const [formData, setFormData] = useState({});
+     const [refreshTrigger, setRefreshTrigger] = useState(0);
+-    const [theme, setTheme] = useState('light'); // default to light theme
++    const [theme, setTheme] = useState('dark'); // default to dark theme
+     const [userName, setUserName] = useState('User');
++    const [showProfileDropdown, setShowProfileDropdown] = useState(false);
++    const [activeSettingsModal, setActiveSettingsModal] = useState(null);
++    const [accountAction, setAccountAction] = useState(null);
++    const [profilePicture, setProfilePicture] = useState(null);
++    const [isUploading, setIsUploading] = useState(false);
++    
++    // Cropper States
++    const [imageSrc, setImageSrc] = useState(null);
++    const [crop, setCrop] = useState({ x: 0, y: 0 });
++    const [zoom, setZoom] = useState(1);
++    const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
++    const [isCropping, setIsCropping] = useState(false);
+ 
+     useEffect(() => {
+         const unsubscribe = auth.onAuthStateChanged((user) => {
+             if (user) {
+                 setUserName(user.displayName || 'User');
++                setProfilePicture(user.photoURL || null);
+             }
+         });
+         
+         if (auth.currentUser) {
+             setUserName(auth.currentUser.displayName || 'User');
++            setProfilePicture(auth.currentUser.photoURL || null);
+         }
+ 
+         return () => unsubscribe();
+     }, []);
+ 
++    const onCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
++        setCroppedAreaPixels(croppedAreaPixels);
++    }, []);
++
++    const handleFileSelect = (e) => {
++        if (e.target.files && e.target.files.length > 0) {
++            const reader = new FileReader();
++            reader.addEventListener('load', () => {
++                setImageSrc(reader.result);
++                setIsCropping(true);
++            });
++            reader.readAsDataURL(e.target.files[0]);
++        }
++    };
++
++    const handleCropAndUpload = async () => {
++        if (!imageSrc || !auth.currentUser) return;
++        
++        setIsUploading(true);
++        try {
++            const croppedImageBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
++            const storageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
++            
++            await uploadBytes(storageRef, croppedImageBlob);
++            const downloadURL = await getDownloadURL(storageRef);
++            
++            await updateProfile(auth.currentUser, { photoURL: downloadURL });
++            setProfilePicture(downloadURL);
++            
++            setIsCropping(false);
++            setImageSrc(null);
++            alert("Profile picture updated successfully!");
++        } catch (error) {
++            console.error("Error uploading profile picture:", error);
++            alert("Failed to upload profile picture. Please try again.");
++        } finally {
++            setIsUploading(false);
++        }
++    };
++
++    const getGreeting = () => {
++        const hour = new Date().getHours();
++        if (hour < 12) return 'Good Morning';
++        if (hour < 17) return 'Good Afternoon';
++        return 'Good Evening';
++    };
++
++    const getCurrentMonthYear = () => {
++        return new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
++    };
++
+     const handleFormChange = (e) => {
+         const { name, value, type } = e.target;
+         const finalValue = type === 'number' ? (value ? Number(value) : 0) : value;
+@@ -345,7 +471,7 @@ export default function Dashboard({ onLogout }) {
+                                             required
+                                         >
+                                             <option value="">Select...</option>
+-                                            {field.options.map(opt => <option key={opt} value={opt} style={{color: '#000'}}>{opt}</option>)}
++                                            {field.options.map(opt => <option key={opt} value={opt} style={{color: 'var(--dash-text-inverse)'}}>{opt}</option>)}
+                                         </select>
+                                     ) : (
+                                         <input 
+@@ -360,106 +486,275 @@ export default function Dashboard({ onLogout }) {
+                             ))}
+                             <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                                 <button type="button" className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', cursor: 'pointer' }} onClick={() => setIsAddModalOpen(false)}>Cancel</button>
+-                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #6A5AE0, #8A7CF0)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
++                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #6A5AE0, #8A7CF0)', color: 'var(--dash-text)', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
+                             </div>
+                         </form>
+                     </div>
+                 </div>
+             )}
+ 
++            {/* Settings Modals */}
++            {activeSettingsModal && (
++                <div style={{
++                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
++                    background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', 
++                    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200
++                }}>
++                    <div className="glass-card" style={{ width: '400px', padding: '32px', background: 'var(--surface-dark)', border: '1px solid var(--border-dark)', borderRadius: '24px', display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden' }}>
++                        <h2 style={{ marginBottom: '24px', color: 'var(--text-main)', fontSize: '24px', fontWeight: '600', flexShrink: 0 }}>
++                            {activeSettingsModal === 'editProfile' && 'Edit Profile'}
++                            {activeSettingsModal === 'privacyPolicy' && 'Privacy Policy'}
++                            {activeSettingsModal === 'enable2FA' && 'Two-Factor Authentication'}
++                            {activeSettingsModal === 'subscriptions' && 'Your Subscriptions'}
++                        </h2>
++                        
++                        <div style={{ color: 'var(--text-muted)', lineHeight: '1.6', flex: 1, overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
++                            {activeSettingsModal === 'editProfile' && (
++                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
++                                    
++                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
++                                        <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', background: '#34d399', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '24px', overflow: 'hidden' }}>
++                                            {profilePicture ? (
++                                                <img src={profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
++                                            ) : (
++                                                userName.charAt(0).toUpperCase()
++                                            )}
++                                            {isUploading && (
++                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '12px' }}>...</div>
++                                            )}
++                                            <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--bg-dark)', borderRadius: '50%', padding: '4px', border: '2px solid var(--surface-dark)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
++                                                <Camera size={12} color="var(--text-main)" />
++                                            </div>
++                                            <input type="file" accept="image/*" onChange={handleFileSelect} disabled={isUploading} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 20 }} />
++                                        </div>
++                                        <div>
++                                            <div style={{ color: 'var(--text-main)', fontWeight: '500' }}>Profile Picture</div>
++                                            <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Click icon to upload</div>
++                                        </div>
++                                    </div>
++
++                                    <div className="input-group">
++                                        <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Display Name</label>
++                                        <input type="text" defaultValue={userName} style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
++                                    </div>
++                                    <div className="input-group">
++                                        <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Email Address</label>
++                                        <input type="email" placeholder="your@email.com" style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
++                                    </div>
++                                    <div className="input-group">
++                                        <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Phone Number</label>
++                                        <div style={{ display: 'flex', gap: '8px' }}>
++                                            <select defaultValue="+91" style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', width: '90px', outline: 'none', transition: 'all 0.2s', appearance: 'none', cursor: 'pointer' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'}>
++                                                {countryOptions.map(country => (
++                                                    <option key={country.code} value={country.dial} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>
++                                                        {country.dial}
++                                                    </option>
++                                                ))}
++                                            </select>
++                                            <input type="tel" placeholder="00000 00000" style={{ flex: 1, padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
++                                        </div>
++                                    </div>
++
++                                    <div style={{ display: 'flex', gap: '12px', background: 'rgba(52, 211, 153, 0.05)', border: '1px solid rgba(52, 211, 153, 0.2)', padding: '12px', borderRadius: '12px', marginTop: '8px' }}>
++                                        <Shield size={24} color="#34d399" style={{ flexShrink: 0 }} />
++                                        <div style={{ fontSize: '12px', color: '#34d399', lineHeight: '1.4' }}>
++                                            <strong>Your Banking Informations</strong> including transactions, bank account, and investments are <strong>END-TO-END Encrypted</strong> (only you can see those transactions). You are secured.
++                                        </div>
++                                    </div>
++
++                                </div>
++                            )}
++                            {activeSettingsModal === 'privacyPolicy' && (
++                                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
++                                    <p style={{ margin: 0 }}>We take your privacy seriously. Your financial data is encrypted and securely stored. We never share your personal information with third parties without your explicit consent. Read our full policy on our website.</p>
++                                    
++                                    <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '24px' }}>
++                                        <h3 style={{ color: '#ef4444', fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
++                                            Danger Zone
++                                        </h3>
++                                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
++                                            <button 
++                                                style={{ flex: 1, padding: '10px', borderRadius: '10px', background: accountAction === 'deactivate' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255, 255, 255, 0.05)', color: accountAction === 'deactivate' ? '#f59e0b' : 'var(--text-main)', border: `1px solid ${accountAction === 'deactivate' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }} 
++                                                onClick={() => setAccountAction('deactivate')}
++                                            >
++                                                Deactivate Account
++                                            </button>
++                                            <button 
++                                                style={{ flex: 1, padding: '10px', borderRadius: '10px', background: accountAction === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.05)', color: accountAction === 'delete' ? '#ef4444' : 'var(--text-main)', border: `1px solid ${accountAction === 'delete' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }} 
++                                                onClick={() => setAccountAction('delete')}
++                                            >
++                                                Delete Account
++                                            </button>
++                                        </div>
++
++                                        {accountAction === 'deactivate' && (
++                                            <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '16px', borderRadius: '12px', animation: 'slideUp 0.2s ease forwards' }}>
++                                                <label style={{ display: 'block', color: '#f59e0b', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Deactivate for how many days?</label>
++                                                <select style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid rgba(245, 158, 11, 0.4)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
++                                                    <option value="7">7 Days</option>
++                                                    <option value="14">14 Days</option>
++                                                    <option value="30">30 Days</option>
++                                                    <option value="90">90 Days</option>
++                                                </select>
++                                                <button style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f59e0b', color: '#000', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Confirm Deactivation</button>
++                                            </div>
++                                        )}
++                                        
++                                        {accountAction === 'delete' && (
++                                            <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '16px', borderRadius: '12px', color: '#ef4444', fontSize: '13px', lineHeight: '1.5', animation: 'slideUp 0.2s ease forwards' }}>
++                                                <strong>Warning:</strong> If you proceed, your account will be permanently scheduled for deletion. <br/><br/><strong>It will take 30 days</strong> to fully delete your data, during which you can cancel the request by logging back in.
++                                                <button style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#ef4444', color: '#fff', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Confirm Deletion</button>
++                                            </div>
++                                        )}
++                                    </div>
++                                </div>
++                            )}
++                            {activeSettingsModal === 'enable2FA' && (
++                                <div style={{ textAlign: 'center' }}>
++                                    <Shield size={48} color="#34d399" style={{ marginBottom: '16px' }} />
++                                    <p>Protect your account with an extra layer of security. Once configured, you'll be required to enter both your password and an authentication code from your mobile phone in order to sign in.</p>
++                                </div>
++                            )}
++                            {activeSettingsModal === 'subscriptions' && (
++                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
++                                    <div style={{ background: 'var(--bg-dark)', padding: '16px', borderRadius: '12px', border: '1px solid #34d399' }}>
++                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
++                                            <strong style={{ color: 'var(--text-main)' }}>Pro Plan</strong>
++                                            <span style={{ color: '#34d399', fontSize: '12px', fontWeight: 'bold', background: 'rgba(52, 211, 153, 0.1)', padding: '4px 8px', borderRadius: '20px' }}>ACTIVE</span>
++                                        </div>
++                                        <div style={{ fontSize: '14px' }}>₹999 / year • Auto-renews next month</div>
++                                    </div>
++                                </div>
++                            )}
++                        </div>
++
++                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', flexShrink: 0 }}>
++                            <button className="btn-secondary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'transparent', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.1)', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: '500' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'; }} onClick={() => setActiveSettingsModal(null)}>Close</button>
++                            {(activeSettingsModal === 'editProfile' || activeSettingsModal === 'enable2FA') && (
++                                <button className="btn-primary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: '600', boxShadow: '0 4px 15px rgba(52, 211, 153, 0.3)', transition: 'all 0.2s ease' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(52, 211, 153, 0.3)'; }} onClick={() => setActiveSettingsModal(null)}>Save Changes</button>
++                            )}
++                        </div>
++                    </div>
++                </div>
++            )}
++
+             {/* Slim Vertical Sidebar */}
+             <div style={{ 
+-                width: '100px', background: '#121619', borderRight: '1px solid rgba(255,255,255,0.05)', 
++                width: '100px', background: 'var(--dash-sidebar)', borderRight: '1px solid var(--dash-border)', 
+                 display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0', zIndex: 10
+             }}>
+                 {/* Logo Area */}
+-                <div style={{ marginBottom: '40px' }}>
+-                    <div style={{ background: '#34d399', color: '#121619', width: 40, height: 40, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px', boxShadow: '0 4px 15px rgba(52,211,153,0.3)' }}>
+-                        <svg viewBox="0 0 50 50" width="24" height="24">
+-                            <path d="M 8 22 L 18 38 L 28 12 C 38 12 42 22 24 42 L 44 42" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+-                        </svg>
+-                    </div>
++                <div style={{ marginBottom: '40px', display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: '4px', width: '100%' }}>
++                    <img 
++                        src="/assets/logo.png" 
++                        alt="SmartLedger Logo" 
++                        style={{ 
++                            width: '32px', 
++                            height: '32px', 
++                            objectFit: 'cover',
++                            borderRadius: '8px',
++                            border: '1.5px solid black',
++                            filter: 'drop-shadow(0 4px 12px rgba(52,211,153,0.2))'
++                        }} 
++                    />
++                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 0 4px rgba(52,211,153,0.5))', marginBottom: '2px' }}>
++                        <path d="M 4 10 L 9 18 L 14 6 C 17 3 21 5 21 9 C 21 14 12 18 12 18 L 21 18" />
++                    </svg>
+                 </div>
+ 
+                 {/* Nav Links */}
+-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', overflowY: 'auto' }}>
+-                    {MODULES.map(m => (
++                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', width: '100%', overflowY: 'auto' }}>
++                    {MODULES.filter(m => m.id !== 'bankaccounts' && m.id !== 'cards' && m.id !== 'goldsilverinvestments' && m.id !== 'mutualfunds').map(m => (
+                         <div 
+                             key={m.id}
+                             onClick={() => setActiveModule(m)}
+-                            style={{
+-                                padding: '16px 0',
+-                                width: '100%',
+-                                cursor: 'pointer',
+-                                background: activeModule.id === m.id ? 'linear-gradient(90deg, rgba(52,211,153,0.1) 0%, transparent 100%)' : 'transparent',
+-                                color: activeModule.id === m.id ? '#34d399' : '#8892b0',
+-                                borderLeft: activeModule.id === m.id ? '3px solid #34d399' : '3px solid transparent',
+-                                display: 'flex',
+-                                flexDirection: 'column',
+-                                justifyContent: 'center',
+-                                alignItems: 'center',
+-                                gap: '8px',
+-                                transition: 'all 0.2s ease',
+-                            }}
++                            className={`nav-item ${activeModule.id === m.id ? 'active' : ''}`}
+                         >
+-                            <span style={{ fontSize: '20px' }}>{activeModule.isSummary ? '⊞' : '📄'}</span>
+-                            <span style={{ fontSize: '10px', fontWeight: '500', textAlign: 'center', padding: '0 4px' }}>{m.label.replace(' Dashboard', '')}</span>
++                            <div className="icon-circle">
++                                {m.icon ? <m.icon className="icon-svg" size={20} strokeWidth={1.5} /> : (m.isSummary ? '⊞' : '📄')}
++                            </div>
++                            <span className="nav-label">{m.label.replace(' Dashboard', '')}</span>
+                         </div>
+                     ))}
+                 </div>
+ 
+-                {/* Bottom Actions */}
+-                <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', alignItems: 'center' }}>
+-                    <button onClick={onLogout} style={{
+-                        width: '40px', height: '40px', borderRadius: '50%', 
+-                        background: 'rgba(255,255,255,0.05)', border: 'none', 
+-                        color: '#8892b0', cursor: 'pointer',
+-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+-                        fontSize: '18px'
+-                    }} title="Logout">
+-                        🚪
+-                    </button>
+-                </div>
++
+             </div>
+ 
+             {/* Main Content Area */}
+-            <div style={{ flex: 1, padding: '48px 64px', overflowY: 'auto', background: '#0a0d10' }}>
++            <div style={{ flex: 1, padding: '24px 64px', overflowY: 'auto', background: 'var(--dash-bg)' }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+                     <div>
+-                        <h2 style={{ fontSize: '28px', fontWeight: '600', color: '#fff', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+-                            Good Morning, {userName} <span style={{fontSize: '24px'}}>👋</span>
++                        <h2 style={{ fontSize: '28px', fontWeight: '600', color: 'var(--dash-text)', margin: '0 0 4px 0', lineHeight: '1.2', display: 'flex', alignItems: 'center', gap: '8px' }}>
++                            {getGreeting()}, {userName} <span style={{fontSize: '24px'}}>👋</span>
+                         </h2>
+-                        <p style={{ color: '#8892b0', fontSize: '14px', margin: 0 }}>November 2023 | overview</p>
++                        <p style={{ color: 'var(--dash-text-muted)', fontSize: '14px', margin: '0' }}>{getCurrentMonthYear()} | overview</p>
+                         
+-                        <h1 style={{ fontSize: '32px', fontWeight: '600', color: '#fff', margin: '32px 0 0 0' }}>
++                        <h1 style={{ fontSize: '32px', fontWeight: '600', color: 'var(--dash-text)', margin: '32px 0 0 0' }}>
+                             {activeModule.label.replace(' Dashboard', '')}
+                         </h1>
+                     </div>
+                     
+                     <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+-                        {!activeModule.isSummary && (
+-                            <button onClick={() => setIsAddModalOpen(true)} style={{
+-                                background: '#34d399', color: '#000', border: 'none',
+-                                padding: '12px 24px', borderRadius: '30px', fontWeight: '600',
+-                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+-                                boxShadow: '0 4px 15px rgba(52, 211, 153, 0.2)'
+-                            }}>
+-                                Add {activeModule.label}
++                        <div 
++                            style={{ position: 'relative' }}
++                            onMouseEnter={() => setShowProfileDropdown(true)}
++                            onMouseLeave={() => setShowProfileDropdown(false)}
++                        >
++                            <button style={{
++                                width: '44px', height: '44px', borderRadius: '50%',
++                                background: 'var(--dash-card)', border: '1px solid var(--dash-border)',
++                                color: 'var(--dash-text)', cursor: 'pointer', display: 'flex',
++                                alignItems: 'center', justifyContent: 'center',
++                                boxShadow: '0 4px 15px rgba(0,0,0,0.05)', transition: 'all 0.3s ease'
++                            }} onMouseOver={(e) => { e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.4)'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.1)'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.05)'; }} title="Settings">
++                                <Settings size={20} />
+                             </button>
+-                        )}
++                            
++                            {showProfileDropdown && (
++                                <div style={{ position: 'absolute', top: '100%', right: 0, paddingTop: '8px', zIndex: 100 }}>
++                                    <div style={{
++                                        background: 'var(--dash-card)', border: '1px solid var(--dash-border)',
++                                        borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
++                                        padding: '8px', minWidth: '240px',
++                                        display: 'flex', flexDirection: 'column', gap: '4px',
++                                        animation: 'slideUp 0.2s ease forwards'
++                                    }}>
++                                        {[
++                                            { id: 'editProfile', label: 'Edit Profile', icon: <User size={16} /> },
++                                            { id: 'privacyPolicy', label: 'Privacy Policy', icon: <Shield size={16} /> },
++                                            { id: 'enable2FA', label: 'Enable 2FA', icon: <Lock size={16} /> },
++                                            { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard size={16} /> }
++                                        ].map((item, idx) => (
++                                            <button key={idx} onClick={() => { setActiveSettingsModal(item.id); setShowProfileDropdown(false); }} style={{
++                                                display: 'flex', alignItems: 'center', gap: '12px',
++                                                width: '100%', padding: '10px 16px', background: 'transparent',
++                                                border: 'none', color: 'var(--dash-text)', fontSize: '14px',
++                                                fontWeight: '500', cursor: 'pointer', borderRadius: '12px',
++                                                textAlign: 'left', transition: 'all 0.2s'
++                                            }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.1)'; e.currentTarget.style.color = '#34d399'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dash-text)'; }}>
++                                                {item.icon}
++                    <div style={{ position: 'relative', width: '400px', height: '400px', background: '#333', borderRadius: '12px', overflow: 'hidden' }}>
++                        <Cropper
++                            image={imageSrc}
++                            crop={crop}
++                            zoom={zoom}
++                            aspect={1}
++                            cropShape="round"
++                            showGrid={false}
++                            onCropChange={setCrop}
++                            onCropComplete={onCropComplete}
++                            onZoomChange={setZoom}
++                        />
++                    </div>
++                    <div style={{ marginTop: '24px', display: 'flex', gap: '16px' }}>
++                        <button onClick={() => { setIsCropping(false); setImageSrc(null); }} style={{ padding: '10px 24px', borderRadius: '8px', background: 'transparent', border: '1px solid #fff', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
++                        <button onClick={handleCropAndUpload} disabled={isUploading} style={{ padding: '10px 24px', borderRadius: '8px', background: '#34d399', border: 'none', color: '#000', fontWeight: 'bold', cursor: 'pointer' }}>
++                            {isUploading ? 'Uploading...' : 'Crop & Upload'}
++                        </button>
+                     </div>
+                 </div>
+-
+-                <div style={{ 
+-                    width: '100%'
+-                }}>
+-                    {activeModule.isSummary ? (
+-                        <SummaryView />
+-                    ) : (
+-                        <ModuleView module={activeModule} refreshTrigger={refreshTrigger} />
+-                    )}
+-                </div>
+-            </div>
++            )}
+         </div>
+     );
+ }

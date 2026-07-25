@@ -36,4 +36,21 @@ public class AuthController {
             return ResponseEntity.status(401).body(err);
         }
     }
+    
+    @GetMapping("/user/{uid}")
+    public ResponseEntity<?> getUserByUid(@PathVariable String uid) {
+        try {
+            Account acc = authService.getAccountById(uid);
+            if (acc != null) {
+                Map<String, String> res = new HashMap<>();
+                res.put("name", acc.getAccountName());
+                return ResponseEntity.ok(res);
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            Map<String, String> err = new HashMap<>();
+            err.put("error", e.getMessage());
+            return ResponseEntity.status(500).body(err);
+        }
+    }
 }

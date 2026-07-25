@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './index.css';
 import Dashboard from './Dashboard';
 import Landing from './Landing';
@@ -39,8 +39,17 @@ function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   const [formData, setFormData] = useState({ name: '', phone: '', email: '', password: '' });
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setIsAuthenticated(!!user);
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
   const [selectedCountry, setSelectedCountry] = useState(countryOptions[0]);
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
@@ -148,8 +157,12 @@ function App() {
     setAuthMode('login');
   };
 
+  if (isAuthLoading) {
+    return <div style={{ background: 'var(--bg-dark)', width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><div className="auth-spinner" style={{ width: '40px', height: '40px' }}></div></div>;
+  }
+
   if (isAuthenticated) {
-    return <Dashboard onLogout={() => { setIsAuthenticated(false); setShowAuthModal(false); }} />;
+    return <Dashboard onLogout={() => { auth.signOut(); setIsAuthenticated(false); setShowAuthModal(false); }} />;
   }
 
   return (

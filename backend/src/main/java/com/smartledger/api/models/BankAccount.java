@@ -10,7 +10,7 @@ import lombok.AllArgsConstructor;
 public class BankAccount {
     private String id;
     private String accountNumber;
-    private String holderName;
+    private String accountName;
     private String bankName;
     private String ifscCode;
     private double balance;
@@ -20,4 +20,10 @@ public class BankAccount {
     private String accountSubtype;
     private String companyName;
     private String businessName;
+    private String branchName;
+    private String upiId;
+    private String creditPeriod;
+    private String dateOfMature;
+    private String dateOfAccountOpening;
+    private String connectedCardId;
 }

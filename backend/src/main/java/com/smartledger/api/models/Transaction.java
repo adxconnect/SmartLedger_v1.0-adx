@@ -12,9 +12,11 @@ public class Transaction {
     private String date;
     private String day;
     private String category;
-    private String type; // "Income" or "Expense"
+    private String type; // "Debit", "Credit", "Interest"
     private double amount;
     private String description;
     private String paymentMethod;
     private String payee;
+    private String accountId;
+    private String accountType;
 }
