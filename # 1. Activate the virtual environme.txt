@@ -1,0 +1,5 @@
+# 1. Activate the virtual environment from the parent folder
+..\.venv\Scripts\activate
+
+# 2. Start the AI microservice
+python -m uvicorn main:app --reload --port 8000

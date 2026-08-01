@@ -4,7 +4,8 @@ import getCroppedImg from './cropImage';
 import { auth, storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
-import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft } from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft, MoreHorizontal, Edit2, Trash2 } from 'lucide-react';
+import AiVirtualCaImportView from './AiVirtualCaImportView';
 
 const LiveTracker = ({ principalAmount, interestRate, dateOfAccountOpening, interestType, dateOfMaturity, isRD }) => {
     const [income, setIncome] = useState(0);
@@ -376,6 +377,7 @@ const MODULES = [
         id: 'transactions', label: 'Transactions', endpoint: '/api/transactions', icon: ArrowRightLeft,
         fields: [
             { name: 'date', type: 'date' },
+            { name: 'refId', type: 'text', label: 'Ref ID / UTR' },
             { name: 'description', type: 'text' },
             { name: 'amount', type: 'number' },
             { name: 'type', type: 'select', options: ['Debit', 'Credit', 'Interest'], label: 'Transaction Type' },
@@ -523,14 +525,20 @@ function SummaryView({ onNavigate }) {
         balance: 0, income: 0, expenses: 0,
         weeklyChartHeights: [0, 0, 0, 0, 0, 0, 0],
         weeklyLabels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+        weeklyExpensesRaw: [0, 0, 0, 0, 0, 0, 0],
+        weeklyDates: ['', '', '', '', '', '', ''],
         savedPercentage: 0,
         breakdown: { bank: { total: 0, count: 0 }, fd: { total: 0, count: 0 }, rd: { total: 0, count: 0 }, cash: { total: 0, count: 0 } }
     });
+    const [selectedBar, setSelectedBar] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isGullakModalOpen, setIsGullakModalOpen] = useState(false);
+    const [selectedBreakdown, setSelectedBreakdown] = useState('bank');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [denominations, setDenominations] = useState({
         500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
     });
+    const [weekOffset, setWeekOffset] = useState(0);
 
     const totalGullak = Object.entries(denominations).reduce((sum, [den, qty]) => sum + (Number(den) * (Number(qty) || 0)), 0);
 
@@ -554,6 +562,25 @@ function SummaryView({ onNavigate }) {
                 alert('Gullak Cash Hold saved successfully!');
             }
         }).catch(err => console.error(err));
+    };
+
+    const handleDeleteGullak = () => {
+        if(window.confirm("Are you sure you want to delete all Cash Holds? This will permanently reset your Gullak to ₹0.")) {
+            fetch('http://localhost:8080/api/deposits')
+                .then(r => r.json())
+                .then(deposits => {
+                    if (Array.isArray(deposits)) {
+                        const gullaks = deposits.filter(d => d.depositType === 'Gullak');
+                        Promise.all(gullaks.map(g => fetch(`http://localhost:8080/api/deposits/${g.id}`, { method: 'DELETE' })))
+                            .then(() => {
+                                setDenominations({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
+                                fetchStats();
+                                alert('Cash holds reset successfully!');
+                            })
+                            .catch(err => console.error(err));
+                    }
+                });
+        }
     };
 
     const fetchStats = () => {
@@ -591,6 +618,7 @@ function SummaryView({ onNavigate }) {
 
             let weeklyExpenses = [0, 0, 0, 0, 0, 0, 0];
             const today = new Date();
+            today.setDate(today.getDate() - (weekOffset * 7));
             const last7Days = [];
             const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
             const weeklyLabels = [];
@@ -604,14 +632,33 @@ function SummaryView({ onNavigate }) {
 
             if (Array.isArray(transactions)) {
                 transactions.forEach(t => {
-                    if (t.type === 'Income' || t.type === 'income' || t.type === 'Credit' || t.type === 'Interest') totalIncome += (t.amount || 0);
-                    else if (t.type === 'Expense' || t.type === 'expense' || t.type === 'Debit') {
-                        totalExpenses += (t.amount || 0);
+                    const typeStr = String(t.transactionType || t.type || '').toUpperCase();
+                    if (['INCOME', 'CREDIT', 'INTEREST'].includes(typeStr)) {
+                        totalIncome += (parseFloat(t.amount) || 0);
+                    }
+                    else if (['EXPENSE', 'DEBIT'].includes(typeStr)) {
+                        totalExpenses += (parseFloat(t.amount) || 0);
                         if (t.date) {
-                            const dateIdx = last7Days.indexOf(t.date);
-                            if (dateIdx !== -1) {
-                                weeklyExpenses[dateIdx] += (t.amount || 0);
-                            }
+                            try {
+                                let d = new Date(t.date);
+                                if (typeof t.date === 'string' && t.date.includes('/')) {
+                                    const parts = t.date.split('/');
+                                    if (parts.length === 3) {
+                                        let day = parseInt(parts[0], 10);
+                                        let month = parseInt(parts[1], 10) - 1;
+                                        let year = parseInt(parts[2], 10);
+                                        if (year < 100) year += 2000;
+                                        d = new Date(year, month, day);
+                                    }
+                                }
+                                if (!isNaN(d.getTime())) {
+                                    const localDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                                    const dateIdx = last7Days.indexOf(localDate);
+                                    if (dateIdx !== -1) {
+                                        weeklyExpenses[dateIdx] += (parseFloat(t.amount) || 0);
+                                    }
+                                }
+                            } catch (e) {}
                         }
                     }
                 });
@@ -623,7 +670,7 @@ function SummaryView({ onNavigate }) {
             const goalAmount = 100000;
             const savedPercentage = Math.max(0, Math.min(100, Math.round((totalBalance / goalAmount) * 100)));
 
-            setStats({ balance: totalBalance, income: totalIncome, expenses: totalExpenses, weeklyChartHeights, weeklyLabels, savedPercentage, breakdown: { bank: { total: bankTotal, count: bankCount }, fd: { total: fdTotal, count: fdCount }, rd: { total: rdTotal, count: rdCount }, cash: { total: cashTotal, count: cashCount } } });
+            setStats({ balance: totalBalance, income: totalIncome, expenses: totalExpenses, weeklyChartHeights, weeklyLabels, weeklyExpensesRaw: weeklyExpenses, weeklyDates: last7Days, savedPercentage, breakdown: { bank: { total: bankTotal, count: bankCount }, fd: { total: fdTotal, count: fdCount }, rd: { total: rdTotal, count: rdCount }, cash: { total: cashTotal, count: cashCount } } });
             setLoading(false);
         }).catch(err => {
             console.error("Failed to load summary stats", err);
@@ -633,172 +680,267 @@ function SummaryView({ onNavigate }) {
 
     useEffect(() => {
         fetchStats();
-    }, []);
+    }, [weekOffset]);
 
     if (loading) return <div className="loading-spinner">Loading Financial Summary...</div>;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Quick Income/Expenses Overview */}
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '10px 20px', borderRadius: '100px', border: '1px solid rgba(52,211,153,0.3)',
+                    display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 15px rgba(52,211,153,0.05)'
+                }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(52,211,153,0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '900' }}>↑</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                        <span style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Income</span>
+                        <span style={{ color: 'var(--dash-text)', fontSize: '18px', fontWeight: '800' }}>₹{stats.income.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+                
+                <div style={{
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '10px 20px', borderRadius: '100px', border: '1px solid rgba(239,68,68,0.3)',
+                    display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 15px rgba(239,68,68,0.05)'
+                }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(239,68,68,0.15)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '900' }}>↓</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                        <span style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expenses</span>
+                        <span style={{ color: 'var(--dash-text)', fontSize: '18px', fontWeight: '800' }}>₹{stats.expenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
 
                 {/* Monthly Overview (Mock Chart) */}
                 <div style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '24px',
-                    border: '1px solid var(--dash-border)',
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '28px', borderRadius: '28px',
+                    border: '1px solid var(--dash-border)', boxShadow: '0 10px 40px rgba(0,0,0,0.04)',
                     display: 'flex', flexDirection: 'column', gap: '16px',
-                    minHeight: '280px'
+                    minHeight: '280px', position: 'relative', overflow: 'hidden'
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ position: 'absolute', top: -100, right: -100, width: 250, height: 250, background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 0 }}></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
                         <div>
-                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '16px', fontWeight: '600' }}>Monthly Overview</h3>
-                            <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Spending for the week</p>
+                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px', fontWeight: '700', letterSpacing: '-0.3px' }}>Weekly Overview</h3>
+                            <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px', fontWeight: '500' }}>{weekOffset === 0 ? 'Spending for this week' : weekOffset === 1 ? 'Spending for last week' : `Spending for ${weekOffset} weeks ago`}</p>
                         </div>
-                        <span style={{ color: 'var(--dash-text-muted)' }}>•••</span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setWeekOffset(prev => prev + 1)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--dash-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--dash-border)'} onMouseOut={(e) => e.currentTarget.style.background = 'var(--dash-card)'}>
+                                &larr;
+                            </button>
+                            <button onClick={() => setWeekOffset(prev => Math.max(0, prev - 1))} disabled={weekOffset === 0} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--dash-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: weekOffset === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s', border: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', opacity: weekOffset === 0 ? 0.3 : 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} onMouseOver={(e) => { if(weekOffset > 0) e.currentTarget.style.background = 'var(--dash-border)'}} onMouseOut={(e) => e.currentTarget.style.background = 'var(--dash-card)'}>
+                                &rarr;
+                            </button>
+                        </div>
                     </div>
 
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '12px', marginTop: '30px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '12px' }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '14px', marginTop: '30px', paddingBottom: '12px', position: 'relative', zIndex: 1 }}>
                         {stats.weeklyChartHeights.map((h, i) => (
-                            <div key={i} style={{ flex: 1, height: `${h}%`, background: h === 100 && h > 0 ? '#34d399' : 'linear-gradient(180deg, rgba(52,211,153,0.6) 0%, rgba(52,211,153,0.1) 100%)', borderRadius: '4px 4px 0 0', boxShadow: h === 100 && h > 0 ? '0 0 20px rgba(52, 211, 153, 0.4)' : 'none' }}></div>
+                            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', position: 'relative', group: 'true' }} className="bar-group">
+                                <div style={{ 
+                                    width: '100%', height: `${Math.max(h, 4)}%`, 
+                                    background: h === 100 && h > 0 ? 'linear-gradient(180deg, #34d399 0%, #10b981 100%)' : 'linear-gradient(180deg, rgba(99,102,241,0.6) 0%, rgba(99,102,241,0.1) 100%)', 
+                                    borderRadius: '6px 6px 4px 4px', 
+                                    boxShadow: h === 100 && h > 0 ? '0 0 20px rgba(52, 211, 153, 0.4)' : 'none',
+                                    transition: 'all 0.3s ease', cursor: 'pointer'
+                                }} onClick={() => setSelectedBar(selectedBar === i ? null : i)} onMouseOver={(e) => { e.currentTarget.style.transform = 'scaleY(1.05)'; e.currentTarget.style.filter = 'brightness(1.2)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scaleY(1)'; e.currentTarget.style.filter = 'brightness(1)'; }}></div>
+
+                                {selectedBar === i && (
+                                    <div style={{ 
+                                        position: 'absolute', bottom: `calc(${Math.max(h, 4)}% + 12px)`, left: '50%', transform: 'translateX(-50%)', 
+                                        background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', border: '1px solid var(--dash-border)', 
+                                        padding: '10px 14px', borderRadius: '12px', zIndex: 50, whiteSpace: 'nowrap', 
+                                        boxShadow: '0 8px 30px rgba(0,0,0,0.2)', pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' 
+                                    }}>
+                                        <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600', letterSpacing: '0.5px' }}>
+                                            {stats.weeklyDates[i] ? new Date(stats.weeklyDates[i]).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                                        </div>
+                                        <div style={{ fontSize: '15px', color: 'var(--dash-text)', fontWeight: '800' }}>
+                                            ₹{(stats.weeklyExpensesRaw[i] || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                        <div style={{ position: 'absolute', bottom: '-6px', left: '50%', transform: 'translateX(-50%) rotate(45deg)', width: '10px', height: '10px', background: 'var(--dash-card)', borderRight: '1px solid var(--dash-border)', borderBottom: '1px solid var(--dash-border)', pointerEvents: 'none' }}></div>
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--dash-text-muted)', fontSize: '11px', marginTop: '-8px' }}>
-                        {stats.weeklyLabels.map((l, i) => <span key={i} style={{ width: '14px', textAlign: 'center' }}>{l}</span>)}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--dash-text-muted)', fontSize: '12px', marginTop: '4px', fontWeight: '600', position: 'relative', zIndex: 1 }}>
+                        {stats.weeklyLabels.map((l, i) => <span key={i} style={{ flex: 1, textAlign: 'center' }}>{l}</span>)}
                     </div>
                 </div>
 
                 {/* Current Budget */}
                 <div style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '24px',
-                    border: '1px solid #34d399', boxShadow: '0 0 25px rgba(52,211,153,0.15)',
-                    display: 'flex', flexDirection: 'column'
+                    background: 'linear-gradient(145deg, rgba(52, 211, 153, 0.12) 0%, rgba(16, 185, 129, 0.04) 100%)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '28px', borderRadius: '28px',
+                    border: '1px solid rgba(52, 211, 153, 0.25)', boxShadow: '0 15px 35px rgba(52,211,153,0.12), inset 0 0 20px rgba(52,211,153,0.05)',
+                    display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '28px', overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
+                        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'radial-gradient(circle, rgba(52, 211, 153, 0.2) 0%, transparent 70%)', filter: 'blur(30px)' }}></div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', position: 'relative', zIndex: 20 }}>
                         <div>
-                            <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '4px' }}>Total Available</p>
-                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '28px', fontWeight: '700', letterSpacing: '-1px' }}>
-                                ₹{stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <p style={{ margin: 0, color: '#10b981', fontSize: '13.5px', marginBottom: '6px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Available</p>
+                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '36px', fontWeight: '800', letterSpacing: '-1.5px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                <span style={{ fontSize: '24px', opacity: 0.7 }}>₹</span>
+                                {stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </h3>
                         </div>
-                        <div style={{ width: 32, height: 32, borderRadius: '8px', background: '#34d399', color: 'var(--dash-text-inverse)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', cursor: 'pointer' }}>+</div>
+                        <div style={{ position: 'relative' }}>
+                            <div 
+                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                style={{ 
+                                    background: 'var(--dash-card)', color: 'var(--dash-text)', 
+                                    border: '1px solid var(--dash-border)', padding: '8px 16px', 
+                                    borderRadius: '12px', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer',
+                                    backdropFilter: 'blur(10px)', transition: 'all 0.2s ease',
+                                    boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '8px'
+                                }}
+                                onMouseOver={(e) => { e.currentTarget.style.background = 'var(--dash-border)'; }}
+                                onMouseOut={(e) => { e.currentTarget.style.background = 'var(--dash-card)'; }}
+                            >
+                                {selectedBreakdown === 'bank' ? 'Bank Accounts' : selectedBreakdown === 'fd' ? 'Fixed Deposits' : selectedBreakdown === 'rd' ? 'Recurring Deposits' : 'Cash Holdings'}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                            {isDropdownOpen && (
+                                <>
+                                    <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setIsDropdownOpen(false)}></div>
+                                    <div style={{ 
+                                        position: 'absolute', top: 'calc(100% + 2px)', right: 0, width: '180px',
+                                        background: 'var(--dash-glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                                        border: '1px solid var(--dash-border)', borderRadius: '12px', padding: '6px',
+                                        boxShadow: '0 10px 40px rgba(0,0,0,0.1)', zIndex: 11,
+                                        display: 'flex', flexDirection: 'column', gap: '4px'
+                                    }}>
+                                        {['bank', 'fd', 'rd', 'cash'].map(opt => (
+                                            <div 
+                                                key={opt}
+                                                onClick={() => { setSelectedBreakdown(opt); setIsDropdownOpen(false); }}
+                                                style={{ 
+                                                    padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13.5px', fontWeight: '600',
+                                                    color: selectedBreakdown === opt ? 'var(--dash-text)' : 'var(--dash-text-muted)',
+                                                    background: selectedBreakdown === opt ? 'var(--dash-border)' : 'transparent',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseOver={(e) => { if(selectedBreakdown !== opt) { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; e.currentTarget.style.color = 'var(--dash-text)'; } }}
+                                                onMouseOut={(e) => { if(selectedBreakdown !== opt) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dash-text-muted)'; } }}
+                                            >
+                                                {opt === 'bank' ? 'Bank Accounts' : opt === 'fd' ? 'Fixed Deposits' : opt === 'rd' ? 'Recurring Deposits' : 'Cash Holdings'}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', flex: 1, alignContent: 'center' }}>
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '500' }}>Bank</span>
-                                <span style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1', padding: '2px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold' }}>{stats.breakdown?.bank.count || 0} a/c</span>
-                            </div>
-                            <div style={{ color: 'var(--dash-text)', fontSize: '14px', fontWeight: '600' }}>₹{(stats.breakdown?.bank.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Breakdown</span>
                         </div>
-
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '500' }}>FD</span>
-                                <span style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b', padding: '2px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold' }}>{stats.breakdown?.fd.count || 0} a/c</span>
+                        
+                        <div style={{ background: 'var(--dash-card)', padding: '20px', borderRadius: '20px', border: '1px solid var(--dash-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', transition: 'all 0.3s ease' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--dash-text-muted)', fontSize: '14px', fontWeight: '600' }}>
+                                    {selectedBreakdown === 'bank' ? 'Bank' : selectedBreakdown === 'fd' ? 'FD' : selectedBreakdown === 'rd' ? 'RD' : 'Cash'} Balance
+                                </span>
+                                <span style={{ 
+                                    background: selectedBreakdown === 'bank' ? 'rgba(99,102,241,0.1)' : selectedBreakdown === 'fd' ? 'rgba(245,158,11,0.1)' : selectedBreakdown === 'rd' ? 'rgba(236,72,153,0.1)' : 'rgba(52,211,153,0.1)', 
+                                    color: selectedBreakdown === 'bank' ? '#6366f1' : selectedBreakdown === 'fd' ? '#f59e0b' : selectedBreakdown === 'rd' ? '#ec4899' : '#34d399', 
+                                    padding: '6px 12px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700' 
+                                }}>
+                                    {stats.breakdown?.[selectedBreakdown]?.count || 0} a/c
+                                </span>
                             </div>
-                            <div style={{ color: 'var(--dash-text)', fontSize: '14px', fontWeight: '600' }}>₹{(stats.breakdown?.fd.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        </div>
-
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '500' }}>RD</span>
-                                <span style={{ background: 'rgba(236,72,153,0.1)', color: '#ec4899', padding: '2px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold' }}>{stats.breakdown?.rd.count || 0} a/c</span>
+                            <div style={{ color: 'var(--dash-text)', fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+                                ₹{(stats.breakdown?.[selectedBreakdown]?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
-                            <div style={{ color: 'var(--dash-text)', fontSize: '14px', fontWeight: '600' }}>₹{(stats.breakdown?.rd.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        </div>
-
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '500' }}>Cash</span>
-                                <span style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399', padding: '2px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold' }}>{stats.breakdown?.cash.count || 0} a/c</span>
-                            </div>
-                            <div style={{ color: 'var(--dash-text)', fontSize: '14px', fontWeight: '600' }}>₹{(stats.breakdown?.cash.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         </div>
                     </div>
                 </div>
 
                 {/* Goal Progress */}
                 <div style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '24px',
-                    border: '1px solid var(--dash-border)',
-                    display: 'flex', flexDirection: 'column'
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '28px', borderRadius: '28px',
+                    border: '1px solid var(--dash-border)', boxShadow: '0 10px 40px rgba(0,0,0,0.04)',
+                    display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden'
                 }}>
-                    <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Goal Progress</h3>
-                    <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '8px' }}>Save ₹1,00,000</p>
-                    <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--dash-text)', marginBottom: '16px' }}>{stats.savedPercentage}%</div>
+                    <div style={{ position: 'absolute', bottom: -100, left: -100, width: 250, height: 250, background: 'radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 0 }}></div>
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                        <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px', fontWeight: '700', marginBottom: '16px', letterSpacing: '-0.3px' }}>Goal Progress</h3>
+                        <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13.5px', marginBottom: '12px', fontWeight: '500' }}>Save ₹1,00,000</p>
+                        
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', marginBottom: '20px' }}>
+                            <div style={{ fontSize: '42px', fontWeight: '800', color: 'var(--dash-text)', letterSpacing: '-1.5px', lineHeight: '1' }}>{stats.savedPercentage}%</div>
+                            <div style={{ fontSize: '14px', color: '#0ea5e9', fontWeight: '600', paddingBottom: '6px' }}>On track</div>
+                        </div>
 
-                    <div style={{ width: '100%', height: '6px', background: 'var(--dash-border-strong)', borderRadius: '3px', marginBottom: '16px' }}>
-                        <div style={{ width: `${stats.savedPercentage}%`, height: '100%', background: '#34d399', borderRadius: '3px', boxShadow: '0 0 10px rgba(52,211,153,0.5)' }}></div>
+                        <div style={{ width: '100%', height: '8px', background: 'var(--dash-border-strong)', borderRadius: '4px', marginBottom: '20px', overflow: 'hidden' }}>
+                            <div style={{ width: `${stats.savedPercentage}%`, height: '100%', background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)', borderRadius: '4px', boxShadow: '0 0 15px rgba(14,165,233,0.5)', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }}></div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <p style={{ margin: 0, color: '#38bdf8', fontSize: '14px', fontWeight: '700' }}>₹{Math.max(0, stats.balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Saved</p>
+                            <button style={{ background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(14, 165, 233, 0.2)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(14, 165, 233, 0.1)'; }}>Manage Goal</button>
+                        </div>
                     </div>
-
-                    <p style={{ margin: 0, color: '#34d399', fontSize: '13px', fontWeight: '500' }}>₹{Math.max(0, stats.balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Saved</p>
                 </div>
             </div>
 
             {/* Quick Stats Bottom Row */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
-                <div style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px',
-                    border: '1px solid var(--dash-border)',
-                    display: 'flex', alignItems: 'center', gap: '16px'
-                }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(52,211,153,0.1)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📈</div>
-                    <div>
-                        <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '4px' }}>Total Income</p>
-                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '20px' }}>₹{stats.income.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
-                    </div>
-                </div>
-
-                <div style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px',
-                    border: '1px solid var(--dash-border)',
-                    display: 'flex', alignItems: 'center', gap: '16px'
-                }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255,71,87,0.1)', color: '#FF4757', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📉</div>
-                    <div>
-                        <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13px', marginBottom: '4px' }}>Total Expenses</p>
-                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '20px' }}>₹{stats.expenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
-                    </div>
-                </div>
 
                 <div onClick={() => onNavigate && onNavigate('bankaccounts')} style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px',
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '24px', borderRadius: '24px',
                     border: '1px solid var(--dash-border)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '16px', transition: 'transform 0.2s'
-                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)' }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(99,102,241,0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Landmark size={24} />
+                    display: 'flex', alignItems: 'center', gap: '20px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 8px 32px rgba(0,0,0,0.04)'
+                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 16px 40px rgba(99,102,241,0.15)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = 'var(--dash-border)'; }}>
+                    <div style={{ width: 56, height: 56, borderRadius: '16px', background: 'rgba(99,102,241,0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
+                        <Landmark size={28} strokeWidth={2} />
                     </div>
                     <div>
-                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px' }}>Bank Accounts</h4>
-                        <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Manage accounts</p>
+                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '19px', fontWeight: '700', letterSpacing: '-0.3px' }}>Bank Accounts</h4>
+                        <p style={{ margin: '6px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px', fontWeight: '500' }}>Manage accounts</p>
                     </div>
                 </div>
 
                 <div onClick={() => onNavigate && onNavigate('cards')} style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px',
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '24px', borderRadius: '24px',
                     border: '1px solid var(--dash-border)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '16px', transition: 'transform 0.2s'
-                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)' }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <CreditCard size={24} />
+                    display: 'flex', alignItems: 'center', gap: '20px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 8px 32px rgba(0,0,0,0.04)'
+                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 16px 40px rgba(245,158,11,0.15)'; e.currentTarget.style.borderColor = 'rgba(245,158,11,0.3)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = 'var(--dash-border)'; }}>
+                    <div style={{ width: 56, height: 56, borderRadius: '16px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
+                        <CreditCard size={28} strokeWidth={2} />
                     </div>
                     <div>
-                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px' }}>Cards</h4>
-                        <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Manage cards</p>
+                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '19px', fontWeight: '700', letterSpacing: '-0.3px' }}>Cards</h4>
+                        <p style={{ margin: '6px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px', fontWeight: '500' }}>Manage cards</p>
                     </div>
                 </div>
+                
                 <div onClick={() => setIsGullakModalOpen(true)} style={{
-                    background: 'var(--dash-card)', padding: '24px', borderRadius: '20px',
+                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    padding: '24px', borderRadius: '24px',
                     border: '1px solid var(--dash-border)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '16px', transition: 'transform 0.2s'
-                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)' }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(52,211,153,0.1)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <PiggyBank size={24} />
+                    display: 'flex', alignItems: 'center', gap: '20px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 8px 32px rgba(0,0,0,0.04)'
+                }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 16px 40px rgba(52,211,153,0.15)'; e.currentTarget.style.borderColor = 'rgba(52,211,153,0.3)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = 'var(--dash-border)'; }}>
+                    <div style={{ width: 56, height: 56, borderRadius: '16px', background: 'rgba(52,211,153,0.1)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
+                        <PiggyBank size={28} strokeWidth={2} />
                     </div>
                     <div>
-                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px' }}>Gullak</h4>
-                        <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Cash Hold</p>
+                        <h4 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '19px', fontWeight: '700', letterSpacing: '-0.3px' }}>Gullak</h4>
+                        <p style={{ margin: '6px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px', fontWeight: '500' }}>Cash Hold</p>
                     </div>
                 </div>
             </div>
@@ -810,15 +952,22 @@ function SummaryView({ onNavigate }) {
                     background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
                     display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
                 }}>
-                    <div className="glass-card" style={{ width: '450px', padding: '24px', background: 'var(--surface-dark)', border: '1px solid var(--border-dark)', borderRadius: '24px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-                        <h2 style={{ margin: '0 0 8px 0', color: 'var(--text-main)', flexShrink: 0 }}>Gullak - Cash Hold</h2>
-                        <p style={{ margin: '0 0 16px 0', color: 'var(--text-muted)', fontSize: '13px' }}>Enter the quantity for each denomination to calculate your total cash hold.</p>
+                    <div className="glass-card" style={{ width: '450px', padding: '24px', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', borderRadius: '24px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <h2 style={{ margin: 0, color: 'var(--dash-text)', flexShrink: 0 }}>Gullak - Cash Hold</h2>
+                            {stats.breakdown?.cash.total > 0 && (
+                                <button type="button" onClick={handleDeleteGullak} style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '4px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.15)'} onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}>
+                                    Reset / Delete
+                                </button>
+                            )}
+                        </div>
+                        <p style={{ margin: '0 0 16px 0', color: 'var(--dash-text-muted)', fontSize: '13px' }}>Enter the quantity for each denomination to calculate your total cash hold.</p>
 
                         <div style={{ background: 'rgba(52, 211, 153, 0.1)', padding: '16px', borderRadius: '12px', marginBottom: '16px', textAlign: 'center', border: '1px solid rgba(52, 211, 153, 0.3)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid rgba(52, 211, 153, 0.2)' }}>
                                 <div style={{ textAlign: 'left' }}>
                                     <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Previously Saved</div>
-                                    <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-main)' }}>₹{(stats.breakdown?.cash.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                    <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--dash-text)' }}>₹{(stats.breakdown?.cash.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>New Addition</div>
@@ -826,7 +975,7 @@ function SummaryView({ onNavigate }) {
                                 </div>
                             </div>
                             <div style={{ fontSize: '13px', color: '#34d399', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Cash Hold (After Save)</div>
-                            <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                            <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--dash-text)' }}>
                                 ₹{((stats.breakdown?.cash.total || 0) + totalGullak).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
@@ -834,23 +983,23 @@ function SummaryView({ onNavigate }) {
                         <form onSubmit={handleSaveGullak} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                 {[500, 200, 100, 50, 20, 10, 5, 2, 1].map(den => (
-                                    <div key={den} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                        <div style={{ width: '40px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '14px' }}>₹{den}</div>
-                                        <div style={{ color: 'var(--text-muted)' }}>x</div>
+                                    <div key={den} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--dash-glass-bg)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--dash-border)' }}>
+                                        <div style={{ width: '40px', fontWeight: '600', color: 'var(--dash-text-muted)', fontSize: '14px' }}>₹{den}</div>
+                                        <div style={{ color: 'var(--dash-text-muted)' }}>x</div>
                                         <input
                                             type="number"
                                             min="0"
                                             value={denominations[den] || ''}
                                             onChange={(e) => setDenominations(prev => ({ ...prev, [den]: parseInt(e.target.value) || 0 }))}
-                                            style={{ flex: 1, padding: '8px', borderRadius: '6px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', width: '100%', outline: 'none' }}
+                                            style={{ flex: 1, padding: '8px', borderRadius: '6px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', width: '100%', outline: 'none' }}
                                             placeholder="0"
                                         />
                                     </div>
                                 ))}
                             </div>
                             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', flexShrink: 0, paddingBottom: '4px' }}>
-                                <button type="button" className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', cursor: 'pointer' }} onClick={() => setIsGullakModalOpen(false)}>Cancel</button>
-                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #6A5AE0, #8A7CF0)', color: 'var(--dash-text)', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Save as Asset</button>
+                                <button type="button" className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: 'pointer' }} onClick={() => setIsGullakModalOpen(false)}>Cancel</button>
+                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #6A5AE0, #8A7CF0)', color: '#ffffff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Save as Asset</button>
                             </div>
                         </form>
                     </div>
@@ -860,10 +1009,59 @@ function SummaryView({ onNavigate }) {
     );
 }
 
-function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
+function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [lendingTab, setLendingTab] = useState('Lent'); // 'Lent' or 'Borrowed'
+    const [openDropdownId, setOpenDropdownId] = useState(null);
+
+    // AI Analysis States for Transactions Page
+    const [isAnalysing, setIsAnalysing] = useState(false);
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [selectedGroup, setSelectedGroup] = useState('ALL');
+    const [aiInsight, setAiInsight] = useState('');
+    const [insightLoading, setInsightLoading] = useState(false);
+
+    // Pagination and general filtering for Transactions
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterDate, setFilterDate] = useState('');
+    const [filterYear, setFilterYear] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const recordsPerPage = 20;
+
+    // Smart Category Grouping Engine
+    const CATEGORY_GROUPS = [
+        { id: 'ALL', label: 'All Groups (View Everything)', keywords: [] },
+        { id: 'FOOD', label: 'Group: Food & Dining', keywords: ['food', 'dining', 'groceries', 'restaurant', 'cafe', 'zomato', 'swiggy', 'supermarket', 'mart', 'coffee'] },
+        { id: 'BILLS', label: 'Group: Bills & Utilities', keywords: ['recharge', 'electricity', 'water', 'gas', 'wifi', 'broadband', 'utility', 'bills', 'mobile', 'bill'] },
+        { id: 'EDUCATION', label: 'Group: Education & Learning', keywords: ['education', 'tuition', 'books', 'course', 'school', 'college', 'university', 'training'] },
+        { id: 'SHOPPING', label: 'Group: Shopping & Retail', keywords: ['shopping', 'ecommerce', 'clothes', 'electronics', 'amazon', 'flipkart', 'myntra', 'store', 'retail'] },
+        { id: 'TRAVEL', label: 'Group: Travel & Transport', keywords: ['travel', 'transport', 'fuel', 'petrol', 'diesel', 'uber', 'ola', 'flight', 'train', 'metro', 'cab', 'taxi'] },
+        { id: 'HEALTH', label: 'Group: Health & Medical', keywords: ['health', 'medical', 'hospital', 'pharmacy', 'insurance', 'mediclaim', 'doctor', 'clinic'] },
+        { id: 'INCOME', label: 'Group: Income & Salary', keywords: ['salary', 'income', 'bonus', 'refund', 'interest', 'dividend', 'stipend', 'credit'] },
+        { id: 'INVESTMENT', label: 'Group: Investments & Savings', keywords: ['investment', 'mutual fund', 'sip', 'ppf', 'elss', 'fd', 'rd', 'stocks', 'gold', 'nps'] }
+    ];
+
+    const getTransactionGroup = (category) => {
+        if (!category) return 'GENERAL';
+        const c = String(category).toLowerCase();
+        for (const g of CATEGORY_GROUPS) {
+            if (g.id === 'ALL') continue;
+            if (g.keywords.some(kw => c.includes(kw))) return g.id;
+        }
+        return 'GENERAL';
+    };
+
+    // Calculate dynamic groups present in the data plus standard groups
+    const availableGroups = React.useMemo(() => {
+        const presentGroupIds = new Set(data.map(d => getTransactionGroup(d.category)));
+        const list = CATEGORY_GROUPS.filter(g => g.id === 'ALL' || presentGroupIds.has(g.id));
+        if (presentGroupIds.has('GENERAL')) {
+            list.push({ id: 'GENERAL', label: 'Group: General / Others', keywords: [] });
+        }
+        return list;
+    }, [data]);
 
     const fetchData = () => {
         setLoading(true);
@@ -942,6 +1140,86 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
         fetchData();
     }, [module, refreshTrigger]);
 
+    const displayData = React.useMemo(() => {
+        let processedData = data;
+        
+        if (module.id === 'lendings') {
+            processedData = data.filter(d => lendingTab === 'Lent' ? (d.lenderUid === userUid || !d.lenderUid) : d.borrowerUid === userUid);
+        } else if (module.id === 'transactions') {
+            if (isAnalysing) {
+                processedData = data.filter(d => {
+                    const matchFrom = !dateFrom || (d.date && d.date >= dateFrom);
+                    const matchTo = !dateTo || (d.date && d.date <= dateTo);
+                    const matchGroup = selectedGroup === 'ALL' || getTransactionGroup(d.category) === selectedGroup;
+                    return matchFrom && matchTo && matchGroup;
+                });
+            } else {
+                processedData = data.filter(d => {
+                    const matchSearch = !searchTerm || Object.values(d).some(val => 
+                        val && String(val).toLowerCase().includes(searchTerm.toLowerCase())
+                    );
+                    const matchDate = !filterDate || (d.date && d.date === filterDate);
+                    const matchYear = !filterYear || (d.date && String(d.date).startsWith(filterYear));
+                    return matchSearch && matchDate && matchYear;
+                });
+            }
+        }
+        
+        return processedData;
+    }, [module.id, lendingTab, data, isAnalysing, dateFrom, dateTo, selectedGroup, userUid, searchTerm, filterDate, filterYear]);
+
+    const totalPages = Math.ceil(displayData.length / recordsPerPage);
+
+    const finalTableData = React.useMemo(() => {
+        if (module.id === 'transactions' && !isAnalysing) {
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            return displayData.slice(startIndex, startIndex + recordsPerPage);
+        }
+        return displayData;
+    }, [displayData, currentPage, module.id, isAnalysing]);
+
+    const totalExpense = React.useMemo(() => {
+        return (module.id === 'transactions' && isAnalysing)
+            ? displayData
+                  .filter(d => (d.transactionType && (String(d.transactionType).toUpperCase() === 'EXPENSE' || String(d.transactionType).toUpperCase() === 'DEBIT')) || (d.type && String(d.type).toUpperCase() === 'DEBIT'))
+                  .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0)
+            : 0;
+    }, [module.id, isAnalysing, displayData]);
+
+    const totalInflow = React.useMemo(() => {
+        return (module.id === 'transactions' && isAnalysing)
+            ? displayData
+                  .filter(d => (d.transactionType && (String(d.transactionType).toUpperCase() === 'INCOME' || String(d.transactionType).toUpperCase() === 'CREDIT')) || (d.type && String(d.type).toUpperCase() === 'CREDIT'))
+                  .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0)
+            : 0;
+    }, [module.id, isAnalysing, displayData]);
+
+    const netCashFlow = totalInflow - totalExpense;
+
+    useEffect(() => {
+        if (module.id !== 'transactions' || !isAnalysing) return;
+        if (displayData.length === 0) {
+            setAiInsight("No transactions found in this group and date range. Adjust your filter to analyze your cash flow.");
+            return;
+        }
+        setInsightLoading(true);
+        const timeoutId = setTimeout(() => {
+            const topCatMap = {};
+            displayData.forEach(t => {
+                const cat = t.category || 'General';
+                const amt = parseFloat(t.amount) || 0;
+                topCatMap[cat] = (topCatMap[cat] || 0) + amt;
+            });
+            const topCategoryEntry = Object.entries(topCatMap).sort((a,b) => b[1] - a[1])[0];
+            const topCat = topCategoryEntry ? `${topCategoryEntry[0]} (₹${topCategoryEntry[1].toFixed(2)})` : 'None';
+            const groupLabel = (availableGroups.find(g => g.id === selectedGroup) || {}).label || 'All Groups';
+
+            setAiInsight(`In the selected period across [${groupLabel}], you have ${displayData.length} transaction(s) analyzed.\n\n• Total Spent: ₹${totalExpense.toFixed(2)}\n• Total Inflow: ₹${totalInflow.toFixed(2)}\n• Top Expense Category in Group: ${topCat}\n\n💡 AI Virtual CA Advisory: Based on your ${groupLabel} cash flow, monitor regular outflows and consider setting aside 20% of net inflows into tax-saving ELSS or emergency liquid funds.`);
+            setInsightLoading(false);
+        }, 300);
+        return () => clearTimeout(timeoutId);
+    }, [isAnalysing, dateFrom, dateTo, selectedGroup, displayData, availableGroups, module.id, totalExpense, totalInflow]);
+
     if (loading) {
         return <div className="loading-spinner">Loading {module.label} from Java Backend...</div>;
     }
@@ -968,6 +1246,10 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
 
     const displayColumns = module.id === 'lendings'
         ? ['counterpartyUid', 'counterpartyName', 'principalAmount', 'interestRate', 'interestType', 'tenure', 'dateLent', 'dateOfClosing', 'amountToRepay']
+        : module.id === 'bankaccounts'
+        ? ['accountName', 'accountNumber', 'bankName', 'accountType', 'interestRate', 'creditPeriod', 'balance']
+        : module.id === 'deposits'
+        ? ['holderName', 'bankName', 'depositType', 'principalAmount', 'interestRate', 'dateOfMaturity', 'interestAmount', 'maturityValue']
         : columns;
 
     const getColumnLabel = (col) => {
@@ -980,28 +1262,42 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
         return col.replace(/([A-Z])/g, ' $1').trim();
     };
 
-    const displayData = module.id === 'lendings'
-        ? data.filter(d => lendingTab === 'Lent' ? (d.lenderUid === userUid || !d.lenderUid) : d.borrowerUid === userUid)
-        : data;
-
     return (
         <div style={{
-            background: 'var(--dash-card)', padding: '32px', borderRadius: '24px',
-            border: '1px solid var(--dash-border)', overflowX: 'auto', position: 'relative',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+            background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            padding: '32px', borderRadius: '28px',
+            border: '1px solid var(--dash-border)', overflow: 'visible', position: 'relative',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.04)'
         }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '20px', fontWeight: '600' }}>{module.label} Records</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <button
+                        onClick={onBack}
+                        style={{
+                            background: 'var(--dash-glass-bg)', border: '1px solid var(--dash-border)',
+                            color: 'var(--dash-text)', width: '40px', height: '40px', borderRadius: '50%',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                            transition: 'all 0.3s ease', boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
+                        }}
+                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.15)'; e.currentTarget.style.color = '#34d399'; e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.4)'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(52, 211, 153, 0.2)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.background = 'var(--dash-glass-bg)'; e.currentTarget.style.color = 'var(--dash-text)'; e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.05)'; }}
+                        title="Back to Overview"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px' }}>{module.label} Records</h3>
+                </div>
 
                 {module.id === 'lendings' && (
-                    <div style={{ display: 'flex', background: 'var(--dash-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--dash-border)' }}>
+                    <div style={{ display: 'flex', background: 'var(--dash-bg)', padding: '6px', borderRadius: '14px', border: '1px solid var(--dash-border)', gap: '4px' }}>
                         <button
                             onClick={() => setLendingTab('Lent')}
                             style={{
-                                padding: '6px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '13px',
-                                background: lendingTab === 'Lent' ? 'rgba(52, 211, 153, 0.2)' : 'transparent',
-                                color: lendingTab === 'Lent' ? '#34d399' : 'var(--dash-text-muted)',
-                                transition: 'all 0.2s'
+                                padding: '8px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '13px',
+                                background: lendingTab === 'Lent' ? 'var(--dash-card)' : 'transparent',
+                                color: lendingTab === 'Lent' ? '#10b981' : 'var(--dash-text-muted)',
+                                boxShadow: lendingTab === 'Lent' ? '0 2px 10px rgba(0,0,0,0.05)' : 'none',
+                                transition: 'all 0.3s ease', whiteSpace: 'nowrap'
                             }}
                         >
                             Lent (You gave)
@@ -1009,10 +1305,11 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
                         <button
                             onClick={() => setLendingTab('Borrowed')}
                             style={{
-                                padding: '6px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '13px',
-                                background: lendingTab === 'Borrowed' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                                padding: '8px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '13px',
+                                background: lendingTab === 'Borrowed' ? 'var(--dash-card)' : 'transparent',
                                 color: lendingTab === 'Borrowed' ? '#f59e0b' : 'var(--dash-text-muted)',
-                                transition: 'all 0.2s'
+                                boxShadow: lendingTab === 'Borrowed' ? '0 2px 10px rgba(0,0,0,0.05)' : 'none',
+                                transition: 'all 0.3s ease', whiteSpace: 'nowrap'
                             }}
                         >
                             Borrowed (You received)
@@ -1020,34 +1317,267 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
                     </div>
                 )}
 
-                <span style={{ padding: '6px 12px', background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{displayData.length} Total</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {module.id !== 'deposits' && module.id !== 'aica_import' && (
+                        <button onClick={onAdd} style={{
+                            background: 'var(--dash-text)', color: 'var(--dash-bg)', border: 'none',
+                            padding: '10px 20px', borderRadius: '12px', fontWeight: '700',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                            transition: 'all 0.3s ease', fontSize: '14px', letterSpacing: '0.2px',
+                            boxShadow: '0 6px 20px rgba(0, 0, 0, 0.15)'
+                        }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.2)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.15)'; }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Add {module.label}
+                        </button>
+                    )}
+                    {module.id === 'transactions' && (
+                        <button
+                            onClick={() => {
+                                setIsAnalysing(prev => !prev);
+                                if (!isAnalysing) {
+                                    setDateFrom('');
+                                    setDateTo('');
+                                    setSelectedGroup('ALL');
+                                }
+                            }}
+                            style={{
+                                padding: '8px 18px',
+                                borderRadius: '12px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontWeight: '700',
+                                fontSize: '14px',
+                                background: isAnalysing
+                                    ? 'linear-gradient(135deg, #10b981, #059669)'
+                                    : 'rgba(52, 211, 153, 0.15)',
+                                color: isAnalysing ? '#fff' : '#34d399',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                transition: 'all 0.2s',
+                                boxShadow: isAnalysing ? '0 4px 15px rgba(52, 211, 153, 0.3)' : 'none'
+                            }}
+                        >
+                            <span>✨</span>
+                            <span>{isAnalysing ? 'Close AI Analysis' : 'Analyse Transactions'}</span>
+                        </button>
+                    )}
+                    <span style={{ padding: '6px 12px', background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{displayData.length} Total</span>
+                </div>
             </div>
 
-            {!Array.isArray(displayData) || displayData.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 40px', color: 'var(--dash-text-muted)', border: '1px dashed var(--dash-border)', borderRadius: '16px', background: 'var(--dash-glass-bg)' }}>
-                    <div style={{ fontSize: '40px', marginBottom: '16px' }}>📄</div>
-                    <div style={{ fontSize: '16px', fontWeight: '500', color: 'var(--dash-text)' }}>No {module.label} records found</div>
-                    <div style={{ fontSize: '14px', marginTop: '4px' }}>Add a new record to see it listed here.</div>
+            {/* AI TRANSACTIONS ANALYSIS VIEW (Only shown when Analyse option is selected) */}
+            {module.id === 'transactions' && isAnalysing && (
+                <div style={{ marginBottom: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Filter Container */}
+                    <div style={{
+                        background: 'var(--dash-bg)', padding: '24px', borderRadius: '20px',
+                        border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '20px'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                            <h4 style={{ margin: 0, color: '#34d399', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
+                                <span>📊</span> AI Transactions Analysis — Date Range &amp; Smart Group Wise Filter
+                            </h4>
+                            <div style={{ fontSize: '12px', color: 'var(--dash-text-muted)' }}>
+                                Grouping: <strong style={{ color: '#34d399' }}>Smart AI Category Clustering</strong>
+                            </div>
+                        </div>
+
+                        {/* Date From, Date To, and Group Dropdown */}
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '170px' }}>
+                                <label style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>DATE RATE "FROM"</label>
+                                <input
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    style={{
+                                        padding: '10px 14px', borderRadius: '10px',
+                                        background: 'var(--dash-card)', color: 'var(--dash-text)',
+                                        border: '1px solid var(--dash-border)', outline: 'none'
+                                    }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '170px' }}>
+                                <label style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>DATE RATE "TO"</label>
+                                <input
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={(e) => setDateTo(e.target.value)}
+                                    style={{
+                                        padding: '10px 14px', borderRadius: '10px',
+                                        background: 'var(--dash-card)', color: 'var(--dash-text)',
+                                        border: '1px solid var(--dash-border)', outline: 'none'
+                                    }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '240px' }}>
+                                <label style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>GROUP WISE CATEGORIES</label>
+                                <select
+                                    value={selectedGroup}
+                                    onChange={(e) => setSelectedGroup(e.target.value)}
+                                    style={{
+                                        padding: '10px 14px', borderRadius: '10px',
+                                        background: 'var(--dash-card)', color: 'var(--dash-text)',
+                                        border: '1px solid var(--dash-border)', outline: 'none',
+                                        fontWeight: '600', cursor: 'pointer'
+                                    }}
+                                >
+                                    {availableGroups.map(grp => (
+                                        <option key={grp.id} value={grp.id}>{grp.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {(dateFrom || dateTo || selectedGroup !== 'ALL') && (
+                                <button
+                                    onClick={() => { setDateFrom(''); setDateTo(''); setSelectedGroup('ALL'); }}
+                                    style={{
+                                        alignSelf: 'flex-end', padding: '10px 16px', borderRadius: '10px',
+                                        background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)',
+                                        cursor: 'pointer', fontWeight: '600', fontSize: '13px'
+                                    }}
+                                >
+                                    Reset Filters
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Smart Group Filter Chips */}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {availableGroups.map(grp => (
+                                <button
+                                    key={grp.id}
+                                    onClick={() => setSelectedGroup(grp.id)}
+                                    style={{
+                                        padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
+                                        background: selectedGroup === grp.id ? 'linear-gradient(135deg, #10b981, #059669)' : 'var(--dash-card)',
+                                        color: selectedGroup === grp.id ? '#fff' : 'var(--dash-text-muted)',
+                                        border: selectedGroup === grp.id ? 'none' : '1px solid var(--dash-border)',
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    {grp.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Analytics Summary Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                        <div style={{ background: 'var(--dash-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--dash-border)' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--dash-text-muted)', fontWeight: '600', marginBottom: '8px' }}>Total Expense (Debit)</div>
+                            <div style={{ fontSize: '24px', fontWeight: '700', color: '#ef4444' }}>₹{totalExpense.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', marginTop: '4px' }}>In selected group &amp; date range</div>
+                        </div>
+                        <div style={{ background: 'var(--dash-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--dash-border)' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--dash-text-muted)', fontWeight: '600', marginBottom: '8px' }}>Total Inflow (Credit)</div>
+                            <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981' }}>₹{totalInflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', marginTop: '4px' }}>In selected group &amp; date range</div>
+                        </div>
+                        <div style={{ background: 'var(--dash-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--dash-border)' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--dash-text-muted)', fontWeight: '600', marginBottom: '8px' }}>Net Cash Flow</div>
+                            <div style={{ fontSize: '24px', fontWeight: '700', color: netCashFlow >= 0 ? '#38bdf8' : '#ef4444' }}>₹{netCashFlow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', marginTop: '4px' }}>Net savings in this group</div>
+                        </div>
+                        <div style={{ background: 'var(--dash-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--dash-border)' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--dash-text-muted)', fontWeight: '600', marginBottom: '8px' }}>Transactions Analyzed</div>
+                            <div style={{ fontSize: '24px', fontWeight: '700', color: '#a855f7' }}>{displayData.length}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', marginTop: '4px' }}>Group: {availableGroups.find(g => g.id === selectedGroup)?.label || 'All Groups'}</div>
+                        </div>
+                    </div>
+
+                    {/* AI Smart Insight Box */}
+                    <div style={{
+                        background: 'linear-gradient(135deg, rgba(52, 211, 153, 0.08), rgba(16, 185, 129, 0.03))',
+                        padding: '24px', borderRadius: '20px', border: '1px solid rgba(52, 211, 153, 0.25)',
+                        position: 'relative'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '24px' }}>🤖</span>
+                            <div style={{ fontWeight: '700', color: '#34d399', fontSize: '16px' }}>SmartLedger AI Virtual CA — Group Wise Analysis &amp; Insight</div>
+                        </div>
+                        <div style={{
+                            color: 'var(--dash-text)', fontSize: '14px', lineHeight: '1.7', whiteSpace: 'pre-line',
+                            background: 'var(--dash-card)', padding: '16px', borderRadius: '12px', border: '1px solid var(--dash-border)'
+                        }}>
+                            {insightLoading ? '🤖 Analyzing your group wise transactions...' : aiInsight}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* General Filters for Transactions */}
+            {module.id === 'transactions' && !isAnalysing && (
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center', background: 'var(--dash-bg)', padding: '16px', borderRadius: '16px', border: '1px solid var(--dash-border)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '200px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>SEARCH RECORDS</label>
+                        <input
+                            type="text"
+                            placeholder="Search descriptions, categories, amounts..."
+                            value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                            style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--dash-card)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
+                        />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '150px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>FILTER BY DATE</label>
+                        <input
+                            type="date"
+                            value={filterDate}
+                            onChange={(e) => { setFilterDate(e.target.value); setFilterYear(''); setCurrentPage(1); }}
+                            style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--dash-card)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
+                        />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '150px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>FILTER BY YEAR</label>
+                        <select
+                            value={filterYear}
+                            onChange={(e) => { setFilterYear(e.target.value); setFilterDate(''); setCurrentPage(1); }}
+                            style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--dash-card)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', cursor: 'pointer' }}
+                        >
+                            <option value="">All Years</option>
+                            {Array.from(new Set(data.map(d => d.date ? String(d.date).substring(0,4) : null).filter(Boolean))).sort().reverse().map(year => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {(searchTerm || filterDate || filterYear) && (
+                        <button
+                            onClick={() => { setSearchTerm(''); setFilterDate(''); setFilterYear(''); setCurrentPage(1); }}
+                            style={{ alignSelf: 'flex-end', padding: '10px 16px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
+                        >
+                            Clear Filters
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {!Array.isArray(finalTableData) || finalTableData.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '80px 40px', color: 'var(--dash-text-muted)', border: '2px dashed rgba(52, 211, 153, 0.2)', borderRadius: '20px', background: 'rgba(52, 211, 153, 0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '16px' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', marginBottom: '20px', boxShadow: '0 0 20px rgba(52, 211, 153, 0.1)' }}>📄</div>
+                    <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--dash-text)', marginBottom: '8px', letterSpacing: '-0.3px' }}>No {module.label} records found</div>
+                    <div style={{ fontSize: '14.5px', color: 'var(--dash-text-muted)' }}>Click on <strong style={{color: '#34d399'}}>+ Add {module.label}</strong> to create a new record and see it listed here.</div>
                 </div>
             ) : (
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+                <div style={{ overflowX: 'auto', overflowY: module.id === 'transactions' ? 'auto' : 'visible', maxHeight: module.id === 'transactions' ? '600px' : 'none', borderRadius: '16px', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', padding: '0', display: 'flex', flexDirection: 'column' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                        <tr>
+                        <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
                             {displayColumns.map(col => (
-                                <th key={col} style={{ textAlign: 'left', padding: '0 16px 12px', color: 'var(--dash-text-muted)', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                <th key={col} style={{ textAlign: 'left', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--dash-border)' }}>
                                     {getColumnLabel(col)}
                                 </th>
                             ))}
                             {!(module.id === 'lendings' && lendingTab === 'Borrowed') && (
-                                <th style={{ textAlign: 'right', padding: '0 16px 12px', color: 'var(--dash-text-muted)', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
+                                <th style={{ textAlign: 'right', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--dash-border)' }}>Actions</th>
                             )}
                         </tr>
                     </thead>
                     <tbody>
-                        {displayData.map((row, index) => (
-                            <tr key={row.id || index} style={{ transition: 'transform 0.2s, box-shadow 0.2s', background: 'var(--dash-bg)' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
+                        {finalTableData.map((row, index) => (
+                            <tr key={row.id || index} style={{ transition: 'background 0.2s', background: 'transparent' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.05)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                                 {displayColumns.map((col, i) => (
-                                    <td key={col} style={{ padding: '16px', fontSize: '14px', color: 'var(--dash-text)', fontWeight: '500', borderTop: '1px solid var(--dash-border)', borderBottom: '1px solid var(--dash-border)', borderLeft: i === 0 ? '1px solid var(--dash-border)' : 'none', borderTopLeftRadius: i === 0 ? '12px' : '0', borderBottomLeftRadius: i === 0 && !(module.id === 'lendings' && lendingTab === 'Borrowed') ? '12px' : (i === 0 ? '12px' : '0'), borderRight: i === displayColumns.length - 1 && module.id === 'lendings' && lendingTab === 'Borrowed' ? '1px solid var(--dash-border)' : 'none', borderTopRightRadius: i === displayColumns.length - 1 && module.id === 'lendings' && lendingTab === 'Borrowed' ? '12px' : '0', borderBottomRightRadius: i === displayColumns.length - 1 && module.id === 'lendings' && lendingTab === 'Borrowed' ? '12px' : '0' }}>
+                                    <td key={col} style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--dash-text)', fontWeight: '500', borderBottom: '1px solid var(--dash-border)' }}>
                                         {col === 'interestAmount' ? (
                                             <LiveTracker
                                                 principalAmount={row.principalAmount || row.balance}
@@ -1115,31 +1645,77 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid }) {
                                     </td>
                                 ))}
                                 {!(module.id === 'lendings' && lendingTab === 'Borrowed') && (
-                                    <td style={{ padding: '16px', textAlign: 'right', borderTop: '1px solid var(--dash-border)', borderBottom: '1px solid var(--dash-border)', borderRight: '1px solid var(--dash-border)', borderTopRightRadius: '12px', borderBottomRightRadius: '12px' }}>
-                                        <button
-                                            onClick={() => onEdit && onEdit(row)}
-                                            style={{ background: 'rgba(52, 211, 153, 0.1)', border: 'none', color: '#34d399', cursor: 'pointer', fontSize: '13px', padding: '6px 12px', borderRadius: '8px', fontWeight: '500', transition: 'all 0.2s', marginRight: '8px' }}
-                                            onMouseOver={(e) => { e.currentTarget.style.background = '#34d399'; e.currentTarget.style.color = '#000'; }}
-                                            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.1)'; e.currentTarget.style.color = '#34d399'; }}
-                                            title="Edit"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(row)}
-                                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: '6px 12px', borderRadius: '8px', fontWeight: '500', transition: 'all 0.2s' }}
-                                            onMouseOver={(e) => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#fff'; }}
-                                            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#ef4444'; }}
-                                            title="Delete"
-                                        >
-                                            Delete
-                                        </button>
+                                    <td style={{ padding: '16px 20px', textAlign: 'right', borderBottom: '1px solid var(--dash-border)' }}>
+                                        <div style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end' }}>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setOpenDropdownId(openDropdownId === (row.id || index) ? null : (row.id || index)); }}
+                                                style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', color: 'var(--dash-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                                                onMouseOver={(e) => { e.currentTarget.style.background = 'var(--dash-bg)'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                                onMouseOut={(e) => { e.currentTarget.style.background = 'var(--dash-card)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                                title="Actions"
+                                            >
+                                                <MoreHorizontal size={16} />
+                                            </button>
+                                            
+                                            {openDropdownId === (row.id || index) && (
+                                                <div style={{
+                                                    position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                                    background: 'var(--dash-card)', border: '1px solid var(--dash-border)',
+                                                    borderRadius: '12px', padding: '6px', zIndex: 10,
+                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '130px'
+                                                }}>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); onEdit && onEdit(row); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'transparent', border: 'none', color: 'var(--dash-text)', cursor: 'pointer', fontSize: '13px', padding: '10px 12px', borderRadius: '8px', fontWeight: '500', transition: 'background 0.2s', width: '100%', textAlign: 'left' }}
+                                                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.1)'; e.currentTarget.style.color = '#34d399'; }}
+                                                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dash-text)'; }}
+                                                    >
+                                                        <Edit2 size={14} /> Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); handleDelete(row); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: '10px 12px', borderRadius: '8px', fontWeight: '500', transition: 'background 0.2s', width: '100%', textAlign: 'left' }}
+                                                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                                                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                                    >
+                                                        <Trash2 size={14} /> Delete
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
                                 )}
                             </tr>
                         ))}
                     </tbody>
                 </table>
+                {module.id === 'transactions' && !isAnalysing && totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: 'var(--dash-card)', borderTop: '1px solid var(--dash-border)', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', position: 'sticky', bottom: 0, zIndex: 5 }}>
+                        <div style={{ fontSize: '13px', color: 'var(--dash-text-muted)', fontWeight: '500' }}>
+                            Showing {((currentPage - 1) * recordsPerPage) + 1} to {Math.min(currentPage * recordsPerPage, displayData.length)} of {displayData.length} records
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                style={{ padding: '6px 14px', borderRadius: '8px', background: currentPage === 1 ? 'transparent' : 'var(--dash-bg)', color: currentPage === 1 ? 'var(--dash-text-muted)' : 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: '600', transition: 'all 0.2s' }}
+                            >
+                                Previous
+                            </button>
+                            <span style={{ display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: '13px', fontWeight: '600', color: 'var(--dash-text)' }}>
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <button
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                style={{ padding: '6px 14px', borderRadius: '8px', background: currentPage === totalPages ? 'transparent' : 'var(--dash-bg)', color: currentPage === totalPages ? 'var(--dash-text-muted)' : 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: '600', transition: 'all 0.2s' }}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+                </div>
             )}
         </div>
     );
@@ -1459,8 +2035,8 @@ export default function Dashboard({ onLogout }) {
                     background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
                     display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100
                 }}>
-                    <div className="glass-card" style={{ width: '400px', padding: '24px', background: 'var(--surface-dark)', border: '1px solid var(--border-dark)', borderRadius: '24px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-                        <h2 style={{ marginBottom: '16px', color: 'var(--text-main)', flexShrink: 0 }}>{formData.id ? 'Edit' : 'Add'} {activeModule.label}</h2>
+                    <div className="glass-card" style={{ width: '400px', padding: '24px', background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid var(--dash-border)', borderRadius: '24px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+                        <h2 style={{ marginBottom: '24px', color: 'var(--dash-text)', flexShrink: 0, fontWeight: '800', letterSpacing: '-0.5px' }}>{formData.id ? 'Edit' : 'Add'} {activeModule.label}</h2>
                         <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '8px' }}>
                                 {activeModule.fields.map(field => {
@@ -1478,16 +2054,16 @@ export default function Dashboard({ onLogout }) {
                                         if (formData.accountType === 'Fixed Deposit' || formData.accountType === 'Recurring Deposit') return null;
                                         return (
                                             <div key={field.name} className="input-group" style={{ marginBottom: '12px' }}>
-                                                <label style={{ color: 'var(--text-muted)' }}>{field.label}</label>
+                                                <label style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>{field.label}</label>
                                                 <select
                                                     name={field.name}
                                                     value={formData[field.name] || ''}
                                                     onChange={handleFormChange}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)' }}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
                                                 >
-                                                    <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>No Card Connected</option>
+                                                    <option value="" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>No Card Connected</option>
                                                     {cardData.map(card => (
-                                                        <option key={card.id} value={card.id} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>
+                                                        <option key={card.id} value={card.id} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
                                                             {card.cardName} ending in {card.cardNumber?.slice(-4) || 'XXXX'}
                                                         </option>
                                                     ))}
@@ -1499,17 +2075,17 @@ export default function Dashboard({ onLogout }) {
                                     if (field.name === 'category') {
                                         return (
                                             <div key={field.name} className="input-group" style={{ marginBottom: '12px' }}>
-                                                <label style={{ color: 'var(--text-muted)' }}>Category</label>
+                                                <label style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>Category</label>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
                                                     <select
                                                         name={field.name}
                                                         value={formData[field.name] || ''}
                                                         onChange={handleFormChange}
-                                                        style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)' }}
+                                                        style={{ flex: 1, padding: '12px 14px', borderRadius: '12px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
                                                         required
                                                     >
-                                                        <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Select...</option>
-                                                        {categories.map(opt => <option key={opt} value={opt} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>{opt}</option>)}
+                                                        <option value="" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>Select...</option>
+                                                        {categories.map(opt => <option key={opt} value={opt} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>{opt}</option>)}
                                                     </select>
                                                     <button type="button" onClick={() => {
                                                         const newCat = window.prompt("Enter new category name:");
@@ -1517,7 +2093,7 @@ export default function Dashboard({ onLogout }) {
                                                             setCategories(prev => [...prev, newCat.trim()]);
                                                             setFormData(prev => ({ ...prev, category: newCat.trim() }));
                                                         }
-                                                    }} style={{ padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', border: '1px solid var(--border-dark)', cursor: 'pointer', fontSize: '16px' }}>➕</button>
+                                                    }} style={{ padding: '10px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--dash-border)', cursor: 'pointer', fontSize: '16px' }}>➕</button>
                                                 </div>
                                             </div>
                                         );
@@ -1542,21 +2118,21 @@ export default function Dashboard({ onLogout }) {
 
                                         return (
                                             <div key={field.name} className="input-group" style={{ marginBottom: '12px' }}>
-                                                <label style={{ color: 'var(--text-muted)' }}>{isCard ? 'Card' : 'Account'}</label>
+                                                <label style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>{isCard ? 'Card' : 'Account'}</label>
                                                 <select
                                                     name={field.name}
                                                     value={formData[field.name] || ''}
                                                     onChange={handleFormChange}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)' }}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
                                                     required
                                                 >
-                                                    <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Select {isCard ? 'Card' : 'Account'}...</option>
+                                                    <option value="" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>Select {isCard ? 'Card' : 'Account'}...</option>
                                                     {isCard ? filteredList.map(card => (
-                                                        <option key={card.id} value={card.id} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>
+                                                        <option key={card.id} value={card.id} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
                                                             {card.cardName} ending in {card.cardNumber?.slice(-4) || 'XXXX'} - Limit: ₹{card.creditLimit}
                                                         </option>
                                                     )) : filteredList.map(acc => (
-                                                        <option key={acc.id} value={acc.id} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>
+                                                        <option key={acc.id} value={acc.id} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
                                                             {acc.accountName || acc.holderName} {acc.accountNumber ? `(${acc.accountNumber})` : ''} - ₹{acc.balance ?? acc.principalAmount ?? 0}
                                                         </option>
                                                     ))}
@@ -1575,7 +2151,7 @@ export default function Dashboard({ onLogout }) {
 
                                     return (
                                         <div key={field.name} className="input-group" style={{ marginBottom: '12px' }}>
-                                            <label style={{ color: 'var(--text-muted)' }}>
+                                            <label style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>
                                                 {field.name === 'quantity' && formData.assetType === 'Metal - Resource' ? 'Quantity Owned (Grams)' : displayLabel}
                                             </label>
                                             {field.type === 'asset-search' ? (
@@ -1589,11 +2165,11 @@ export default function Dashboard({ onLogout }) {
                                                     name={field.name}
                                                     value={formData[field.name] || ''}
                                                     onChange={handleFormChange}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)' }}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
                                                     required
                                                 >
-                                                    <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Select...</option>
-                                                    {field.options.map(opt => <option key={opt} value={opt} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>{opt}</option>)}
+                                                    <option value="" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>Select...</option>
+                                                    {field.options.map(opt => <option key={opt} value={opt} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>{opt}</option>)}
                                                 </select>
                                             ) : (
                                                 <input
@@ -1602,7 +2178,7 @@ export default function Dashboard({ onLogout }) {
                                                     value={formData[field.name] !== undefined ? formData[field.name] : ''}
                                                     onChange={handleFormChange}
                                                     onClick={(e) => { if (field.type === 'date' && e.target.showPicker && !field.readOnly) e.target.showPicker(); }}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', cursor: field.type === 'date' && !field.readOnly ? 'pointer' : 'text', colorScheme: theme === 'dark' ? 'dark' : 'light', opacity: field.readOnly ? 0.6 : 1 }}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', cursor: field.type === 'date' && !field.readOnly ? 'pointer' : 'text', colorScheme: theme === 'dark' ? 'dark' : 'light', opacity: field.readOnly ? 0.6 : 1 }}
                                                     required={!field.readOnly}
                                                     readOnly={field.readOnly}
                                                     {...(field.type === 'number' ? { step: 'any' } : {})}
@@ -1613,8 +2189,8 @@ export default function Dashboard({ onLogout }) {
                                 })}
                             </div>
                             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', flexShrink: 0, paddingBottom: '4px' }}>
-                                <button type="button" className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', cursor: 'pointer' }} onClick={() => { setIsAddModalOpen(false); setFormData({}); }}>Cancel</button>
-                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #6A5AE0, #8A7CF0)', color: 'var(--dash-text)', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
+                                <button type="button" className="btn-secondary" style={{ flex: 1, padding: '14px', borderRadius: '14px', background: 'transparent', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s ease' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--dash-border)'; }} onClick={() => { setIsAddModalOpen(false); setFormData({}); }}>Cancel</button>
+                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '14px', borderRadius: '14px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: '700', boxShadow: '0 6px 20px rgba(52, 211, 153, 0.3)', transition: 'all 0.3s ease' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(52, 211, 153, 0.45)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.3)'; }}>Save</button>
                             </div>
                         </form>
                     </div>
@@ -1822,22 +2398,87 @@ export default function Dashboard({ onLogout }) {
                     ))}
                 </div>
 
-
+                {/* Ledger AI - Glowing Circular AI Button */}
+                <div style={{ marginTop: 'auto', width: '100%', padding: '0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', paddingBottom: '24px' }}>
+                    <style>
+                        {`
+                        @keyframes aiPulseGlow {
+                            0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4); }
+                            70% { box-shadow: 0 0 0 12px rgba(52, 211, 153, 0); }
+                            100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+                        }
+                        .ai-circular-btn {
+                            animation: aiPulseGlow 2.5s infinite;
+                        }
+                        .ai-circular-btn:hover {
+                            transform: scale(1.05);
+                        }
+                        `}
+                    </style>
+                    <button
+                        onClick={() => {
+                            setActiveModule({ id: 'aica_import', label: 'Ledger AI', icon: null, isSummary: false });
+                        }}
+                        className={`ai-circular-btn ${activeModule.id !== 'aica_import' ? 'ai-modern-btn' : ''}`}
+                        style={{
+                            background: activeModule.id === 'aica_import'
+                                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.1))'
+                                : 'var(--dash-glass-bg)',
+                            backdropFilter: 'blur(10px)',
+                            border: activeModule.id === 'aica_import' ? '2px solid #10b981' : '2px solid rgba(52, 211, 153, 0.4)',
+                            padding: '3px',
+                            borderRadius: '50%',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '46px',
+                            height: '46px',
+                            transition: 'all 0.3s ease',
+                            position: 'relative'
+                        }}
+                        title="Ledger AI Assistant"
+                    >
+                        <img 
+                            src="/assets/logo.png" 
+                            alt="AI" 
+                            className="ai-logo-img"
+                            style={{ 
+                                width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%',
+                                filter: activeModule.id === 'aica_import' ? 'drop-shadow(0 0 8px rgba(52,211,153,0.8))' : 'drop-shadow(0 0 4px rgba(52,211,153,0.3))',
+                                transition: 'all 0.3s ease'
+                            }} 
+                        />
+                        {/* Active status indicator dot */}
+                        <div style={{ position: 'absolute', top: -1, right: -1, width: 12, height: 12, background: '#10b981', borderRadius: '50%', border: '2px solid var(--dash-sidebar)', boxShadow: '0 0 8px rgba(16,185,129,0.8)' }}></div>
+                    </button>
+                    <div style={{
+                        fontSize: '11px', fontWeight: '800', background: 'linear-gradient(135deg, #10b981, #059669)',
+                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                        textTransform: 'uppercase', letterSpacing: '0.5px'
+                    }}>
+                        Ledger AI
+                    </div>
+                </div>
             </div>
 
             {/* Main Content Area */}
-            <div style={{ flex: 1, padding: '24px 64px', overflowY: 'auto', background: 'var(--dash-bg)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
-                    <div>
-                        <h2 style={{ fontSize: '28px', fontWeight: '600', color: 'var(--dash-text)', margin: '0 0 4px 0', lineHeight: '1.2', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {getGreeting()}, {userName} <span style={{ fontSize: '24px' }}>👋</span>
-                        </h2>
-                        <p style={{ color: 'var(--dash-text-muted)', fontSize: '14px', margin: '0', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span style={{ fontWeight: '500' }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                            <span>•</span>
-                            <span>{currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                        </p>
-                    </div>
+            <div style={{ flex: 1, padding: activeModule.id === 'aica_import' ? '0' : '24px 64px', overflowY: activeModule.id === 'aica_import' ? 'hidden' : 'auto', background: 'var(--dash-bg)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: activeModule.id === 'aica_import' ? '0' : '40px', padding: activeModule.id === 'aica_import' ? '16px 24px 0 24px' : '0', flexShrink: 0 }}>
+                    {activeModule.id !== 'aica_import' ? (
+                        <div>
+                            <h2 style={{ fontSize: '28px', fontWeight: '600', color: 'var(--dash-text)', margin: '0 0 4px 0', lineHeight: '1.2', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {getGreeting()}, {userName} <span style={{ fontSize: '24px' }}>👋</span>
+                            </h2>
+                            <p style={{ color: 'var(--dash-text-muted)', fontSize: '14px', margin: '0', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <span style={{ fontWeight: '500' }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                                <span>•</span>
+                                <span>{currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                            </p>
+                        </div>
+                    ) : (
+                        <div></div>
+                    )}
 
                     <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
 
@@ -1851,7 +2492,9 @@ export default function Dashboard({ onLogout }) {
                             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                         </button>
 
-                        <div
+                        {activeModule.id !== 'aica_import' && (
+                            <>
+                                <div
                             style={{ position: 'relative' }}
                             onMouseEnter={() => setShowNotificationDropdown(true)}
                             onMouseLeave={() => setShowNotificationDropdown(false)}
@@ -1966,62 +2609,30 @@ export default function Dashboard({ onLogout }) {
                                 <LogOut size={16} />
                             </button>
                         </div>
-
-                    </div>
-                </div>
-
-                <div style={{
-                    background: 'var(--dash-glass-bg)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                    border: '1px solid var(--dash-border)', borderRadius: '20px', padding: '20px 32px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginBottom: '32px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        {!activeModule.isSummary && (
-                            <button
-                                onClick={() => setActiveModule(MODULES[0])}
-                                style={{
-                                    background: 'var(--dash-glass-bg)', border: '1px solid var(--dash-border)',
-                                    color: 'var(--dash-text)', width: '40px', height: '40px', borderRadius: '50%',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                                    transition: 'all 0.2s ease', boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
-                                }}
-                                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.1)'; e.currentTarget.style.color = '#34d399'; e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.4)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                                onMouseOut={(e) => { e.currentTarget.style.background = 'var(--dash-glass-bg)'; e.currentTarget.style.color = 'var(--dash-text)'; e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                                title="Back to Overview"
-                            >
-                                <ArrowLeft size={20} />
-                            </button>
+                        </>
                         )}
-                        <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--dash-text)', margin: '0', letterSpacing: '-0.5px' }}>
-                            {activeModule.label.replace(' Dashboard', '')}
-                        </h1>
                     </div>
-
-                    {!activeModule.isSummary && activeModule.id !== 'deposits' && (
-                        <button onClick={() => { setFormData({}); setIsAddModalOpen(true); }} style={{
-                            background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none',
-                            padding: '12px 24px', borderRadius: '12px', fontWeight: '600',
-                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                            boxShadow: '0 4px 15px rgba(52, 211, 153, 0.3)', transition: 'all 0.2s ease',
-                            fontSize: '15px'
-                        }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(52, 211, 153, 0.3)'; }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Add {activeModule.label}
-                        </button>
-                    )}
                 </div>
 
                 <div style={{
-                    width: '100%'
+                    width: '100%',
+                    ...(activeModule.id === 'aica_import' ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {})
                 }}>
                     {activeModule.isSummary ? (
                         <SummaryView onNavigate={(id) => setActiveModule(MODULES.find(m => m.id === id))} />
+                    ) : activeModule.id === 'aica_import' ? (
+                        <AiVirtualCaImportView
+                            userUid={userUid}
+                            refreshTrigger={refreshTrigger}
+                            onTransactionsSaved={() => setRefreshTrigger(prev => prev + 1)}
+                        />
                     ) : (
                         <ModuleView
                             module={activeModule}
                             refreshTrigger={refreshTrigger}
                             userUid={userUid}
+                            onBack={() => setActiveModule(MODULES[0])}
+                            onAdd={() => { setFormData({}); setIsAddModalOpen(true); }}
                             onEdit={(row) => {
                                 if (row._originalItem && row._endpoint === '/api/bankaccounts') {
                                     setFormData(row._originalItem);
@@ -2057,6 +2668,179 @@ export default function Dashboard({ onLogout }) {
                         <button onClick={handleCropAndUpload} disabled={isUploading} style={{ padding: '10px 24px', borderRadius: '8px', background: '#34d399', border: 'none', color: '#000', fontWeight: 'bold', cursor: 'pointer' }}>
                             {isUploading ? 'Uploading...' : 'Crop & Upload'}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* AI CA Advisor & Statement Import Modal */}
+            {false && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+                    <div className="glass-card" style={{ width: '900px', maxHeight: '88vh', background: 'var(--surface-dark)', border: '1px solid #34d399', borderRadius: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 0 50px rgba(52,211,153,0.25)' }}>
+                        {/* Modal Header */}
+                        <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(52, 211, 153, 0.05)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontSize: '28px' }}>✨</span>
+                                <div>
+                                    <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '20px', fontWeight: '700' }}>SmartLedger AI Virtual CA & Statement Import</h3>
+                                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '12px' }}>RAG-powered Financial Advisor & Multimodal Statement Parser ($0 Cost)</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setIsAiModalOpen(false); setExtractedTransactions([]); setPdfPassword(''); setAiFile(null); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+                        </div>
+
+                        {/* Modal Tabs */}
+                        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-dark)', background: 'rgba(0,0,0,0.2)' }}>
+                            <button
+                                onClick={() => setAiTab('import')}
+                                style={{
+                                    flex: 1, padding: '16px', background: aiTab === 'import' ? 'rgba(52, 211, 153, 0.1)' : 'transparent',
+                                    border: 'none', borderBottom: aiTab === 'import' ? '2px solid #34d399' : '2px solid transparent',
+                                    color: aiTab === 'import' ? '#34d399' : 'var(--text-muted)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s'
+                                }}
+                            >
+                                📄 AI Statement Parser (PDF/CSV)
+                            </button>
+                            <button
+                                onClick={() => setAiTab('advisor')}
+                                style={{
+                                    flex: 1, padding: '16px', background: aiTab === 'advisor' ? 'rgba(52, 211, 153, 0.1)' : 'transparent',
+                                    border: 'none', borderBottom: aiTab === 'advisor' ? '2px solid #34d399' : '2px solid transparent',
+                                    color: aiTab === 'advisor' ? '#34d399' : 'var(--text-muted)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s'
+                                }}
+                            >
+                                👨‍💼 Virtual Chartered Accountant (RAG Chat)
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div style={{ padding: '24px 32px', overflowY: 'auto', flex: 1 }}>
+                            {aiTab === 'import' ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '16px', border: '1px dashed var(--border-dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                        <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: '500' }}>Upload your Bank Statement (PDF, CSV, or Excel)</p>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.csv,.xlsx"
+                                            onChange={(e) => setAiFile(e.target.files[0])}
+                                            style={{ color: 'var(--text-muted)' }}
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="🔒 PDF Password (if protected)"
+                                            value={pdfPassword}
+                                            onChange={(e) => setPdfPassword(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                maxWidth: '320px',
+                                                padding: '10px 14px',
+                                                borderRadius: '10px',
+                                                background: 'var(--bg-dark)',
+                                                color: 'var(--text-main)',
+                                                border: '1px solid var(--border-dark)',
+                                                outline: 'none',
+                                                fontSize: '13px',
+                                                textAlign: 'center'
+                                            }}
+                                        />
+                                        <button
+                                            onClick={handleAiParseStatement}
+                                            disabled={aiLoading || !aiFile}
+                                            style={{
+                                                padding: '10px 24px', borderRadius: '10px', background: '#34d399', color: '#000',
+                                                border: 'none', fontWeight: 'bold', cursor: aiLoading || !aiFile ? 'not-allowed' : 'pointer',
+                                                opacity: aiLoading || !aiFile ? 0.6 : 1
+                                            }}
+                                        >
+                                            {aiLoading ? '🤖 AI is analyzing statement...' : '🔍 Extract Transactions with AI'}
+                                        </button>
+                                    </div>
+
+                                    {extractedTransactions.length > 0 && (
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                                <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '15px' }}>Extracted {extractedTransactions.length} Transactions</h4>
+                                                <button
+                                                    onClick={handleImportExtractedTransactions}
+                                                    disabled={aiLoading}
+                                                    style={{ padding: '8px 16px', borderRadius: '8px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+                                                >
+                                                    📥 Import All into SmartLedger
+                                                </button>
+                                            </div>
+                                            <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--border-dark)', borderRadius: '12px' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                                            <th style={{ padding: '10px' }}>Date</th>
+                                                            <th style={{ padding: '10px' }}>Ref ID / UTR</th>
+                                                            <th style={{ padding: '10px' }}>Description</th>
+                                                            <th style={{ padding: '10px' }}>Amount</th>
+                                                            <th style={{ padding: '10px' }}>Type</th>
+                                                            <th style={{ padding: '10px' }}>Category</th>
+                                                            <th style={{ padding: '10px' }}>Tax Section</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {extractedTransactions.map((t, idx) => (
+                                                            <tr key={idx} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                <td style={{ padding: '10px' }}>{t.date}</td>
+                                                                <td style={{ padding: '10px', color: '#38bdf8', fontFamily: 'monospace' }}>{t.refId || '-'}</td>
+                                                                <td style={{ padding: '10px' }}>{t.description}</td>
+                                                                <td style={{ padding: '10px', fontWeight: 'bold' }}>₹{t.amount}</td>
+                                                                <td style={{ padding: '10px', color: t.type === 'CREDIT' ? '#34d399' : '#ef4444' }}>{t.type}</td>
+                                                                <td style={{ padding: '10px' }}>{t.category}</td>
+                                                                <td style={{ padding: '10px', color: '#6366f1' }}>{t.taxSection || '-'}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    <div style={{ display: 'flex', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-dark)' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Annual Income (₹)</label>
+                                            <input type="number" value={caMetrics.annualIncome} onChange={(e) => setCaMetrics(p => ({ ...p, annualIncome: Number(e.target.value) }))} style={{ width: '100%', padding: '6px', borderRadius: '6px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', marginTop: '4px' }} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Section 80C Invested (₹)</label>
+                                            <input type="number" value={caMetrics.investments80C} onChange={(e) => setCaMetrics(p => ({ ...p, investments80C: Number(e.target.value) }))} style={{ width: '100%', padding: '6px', borderRadius: '6px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', marginTop: '4px' }} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Section 80D Insurance (₹)</label>
+                                            <input type="number" value={caMetrics.healthInsurance80D} onChange={(e) => setCaMetrics(p => ({ ...p, healthInsurance80D: Number(e.target.value) }))} style={{ width: '100%', padding: '6px', borderRadius: '6px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', marginTop: '4px' }} />
+                                        </div>
+                                    </div>
+
+                                    <form onSubmit={handleCaAdvisorQuery} style={{ display: 'flex', gap: '10px' }}>
+                                        <input
+                                            type="text"
+                                            value={caQuery}
+                                            onChange={(e) => setCaQuery(e.target.value)}
+                                            placeholder="Ask your Virtual CA (e.g., 'How can I optimize my taxes under Section 80C?')"
+                                            style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid var(--border-dark)', outline: 'none' }}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={caLoading || !caQuery.trim()}
+                                            style={{ padding: '10px 20px', borderRadius: '10px', background: '#34d399', color: '#000', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+                                        >
+                                            {caLoading ? 'Analyzing...' : 'Ask CA'}
+                                        </button>
+                                    </form>
+
+                                    {caResponse && (
+                                        <div style={{ background: 'rgba(52, 211, 153, 0.05)', border: '1px solid rgba(52, 211, 153, 0.2)', padding: '20px', borderRadius: '16px', color: 'var(--text-main)', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap', maxHeight: '300px', overflowY: 'auto' }}>
+                                            <div style={{ fontWeight: 'bold', color: '#34d399', marginBottom: '8px' }}>👨‍💼 Virtual CA Advisory:</div>
+                                            {caResponse}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

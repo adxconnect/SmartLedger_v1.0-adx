@@ -19,4 +19,5 @@ public class Transaction {
     private String payee;
     private String accountId;
     private String accountType;
+    private String refId;
 }
