@@ -9,6 +9,10 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Load API Key from Environment
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -231,11 +235,11 @@ def extract_transactions_from_text(text: str) -> List[ExtractedTransaction]:
     return transactions
 
 def enhance_descriptions_with_ai(transactions: List[ExtractedTransaction]) -> List[ExtractedTransaction]:
-    if not GEMINI_API_KEY or not GEMINI_API_KEY.startswith("AIza"):
+    if not GEMINI_API_KEY:
         return transactions
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-flash-latest")
         unique_descs = list(set([t.description for t in transactions]))
         desc_mapping = {}
         
@@ -417,9 +421,9 @@ async def parse_statement(
                 extracted_text = ""
 
             # Try Gemini AI if API key is configured and valid
-            if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIza"):
+            if GEMINI_API_KEY:
                 try:
-                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    model = genai.GenerativeModel("gemini-flash-latest")
                     prompt = f"""
                     You are an expert Chartered Accountant and data extraction assistant.
                     Extract all financial transactions from the following bank statement text into a clean JSON array.
@@ -513,14 +517,17 @@ async def ca_advisor(request: CAAdvisorRequest):
     gap80D = max(0.0, 25000.0 - request.healthInsurance80D)
 
     # 1. Check if Gemini API is available and valid
-    if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIza"):
+    if GEMINI_API_KEY:
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-flash-latest")
             
             system_prompt = f"""
             You are a highly experienced Chartered Accountant (CA) and Personal Financial Advisor in India for SmartLedger.
+            You are CONNECTED TO THE INTERNET. 
             
             CRITICAL MANDATE: Other than financial, tax, investment, expense, budgeting, account, overview, transaction, len-den, loan, and portfolio chat, NO OTHER TYPE OF CHATS ARE ALLOWED. If the user asks a non-financial question (e.g. general trivia, sports, poetry, coding, politics, jokes, etc.), you MUST politely refuse and state: "I am your SmartLedger Virtual Chartered Accountant. I only provide advice on personal finance, taxation, investments, and your financial accounts."
+            
+            When answering general finance, tax, or investment questions, provide the most up-to-date and accurate information from your extensive financial knowledge base. Answer comprehensively in clear paragraphs and use inline markdown where appropriate.
             
             {INDIAN_TAX_KNOWLEDGE_BASE}
             
@@ -546,7 +553,7 @@ async def ca_advisor(request: CAAdvisorRequest):
             3. Provide specific numbers, account names, loan balances, investment totals, or len-den records as requested by the user.
             4. When analyzing transactions, actively track same-value payments made to or received from the same sender/merchant. Identify their frequency by calculating the gaps/intervals between transaction dates (e.g., monthly, quarterly, or irregular) and group these recurring transactions together (e.g., Subscriptions, EMIs, Salaries, or Rent).
             5. For tax queries, calculate remaining gaps under 80C/80D and recommend tax-saving strategies.
-            6. Format your response in clean GitHub Markdown with bullet points, bold highlights, and relevant emojis.
+            6. You MUST always try to provide source links for any general finance/tax claims using your search tool. Format your response in clean GitHub Markdown with bullet points, bold highlights, and relevant emojis.
             """
             
             full_prompt = f"{system_prompt}\n\nUser Question: {request.userQuery}"
@@ -577,6 +584,10 @@ async def ca_advisor(request: CAAdvisorRequest):
     is_loan_q = any(k in q_lower for k in ["loan", "emi", "debt", "principal", "lender", "interest"])
 
     response_sections = []
+    
+    if not GEMINI_API_KEY:
+        response_sections.append("> [!WARNING]\n> **AI Offline Mode:** No valid Google Gemini API Key was found in the backend (`GEMINI_API_KEY`). Ledger AI is currently operating using its offline static fallback engine. To enable intelligent live AI chat and internet web searches, please configure your API key in the terminal before starting the server.")
+        
     response_sections.append(f"### ✨ Ledger AI — Comprehensive Portfolio Answer\n\n**Question:** *\" {request.userQuery} \"*\n")
 
     show_all = not (is_overview_q or is_tx_q or is_inv_q or is_lenden_q or is_loan_q)

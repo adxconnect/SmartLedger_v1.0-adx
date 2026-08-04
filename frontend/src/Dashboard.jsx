@@ -1028,7 +1028,7 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
     const [filterDate, setFilterDate] = useState('');
     const [filterYear, setFilterYear] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const recordsPerPage = 20;
+    const recordsPerPage = 10;
 
     // Smart Category Grouping Engine
     const CATEGORY_GROUPS = [
@@ -1171,12 +1171,12 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
     const totalPages = Math.ceil(displayData.length / recordsPerPage);
 
     const finalTableData = React.useMemo(() => {
-        if (module.id === 'transactions' && !isAnalysing) {
+        if (module.id === 'transactions') {
             const startIndex = (currentPage - 1) * recordsPerPage;
             return displayData.slice(startIndex, startIndex + recordsPerPage);
         }
         return displayData;
-    }, [displayData, currentPage, module.id, isAnalysing]);
+    }, [displayData, currentPage, module.id]);
 
     const totalExpense = React.useMemo(() => {
         return (module.id === 'transactions' && isAnalysing)
@@ -1334,6 +1334,7 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
                         <button
                             onClick={() => {
                                 setIsAnalysing(prev => !prev);
+                                setCurrentPage(1);
                                 if (!isAnalysing) {
                                     setDateFrom('');
                                     setDateTo('');
@@ -1559,17 +1560,17 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
                     <div style={{ fontSize: '14.5px', color: 'var(--dash-text-muted)' }}>Click on <strong style={{color: '#34d399'}}>+ Add {module.label}</strong> to create a new record and see it listed here.</div>
                 </div>
             ) : (
-                <div style={{ overflowX: 'auto', overflowY: module.id === 'transactions' ? 'auto' : 'visible', maxHeight: module.id === 'transactions' ? '600px' : 'none', borderRadius: '16px', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', padding: '0', display: 'flex', flexDirection: 'column' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                        <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
-                            {displayColumns.map(col => (
-                                <th key={col} style={{ textAlign: 'left', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--dash-border)' }}>
+                <div style={{ overflow: 'hidden', isolation: 'isolate', maxHeight: 'none', minHeight: module.id === 'transactions' ? '780px' : 'auto', borderRadius: '16px', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', padding: '0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, borderRadius: '16px 16px 0 0', overflow: 'hidden' }}>
+                    <thead style={{ borderRadius: '16px 16px 0 0', overflow: 'hidden' }}>
+                        <tr style={{ background: 'var(--dash-card)', borderRadius: '16px 16px 0 0' }}>
+                            {displayColumns.map((col, idx) => (
+                                <th key={col} style={{ position: 'relative', background: 'var(--dash-card)', textAlign: 'left', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid var(--dash-border)', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)', borderTopLeftRadius: idx === 0 ? '16px' : '0', borderTopRightRadius: idx === displayColumns.length - 1 && (module.id === 'lendings' && lendingTab === 'Borrowed') ? '16px' : '0' }}>
                                     {getColumnLabel(col)}
                                 </th>
                             ))}
                             {!(module.id === 'lendings' && lendingTab === 'Borrowed') && (
-                                <th style={{ textAlign: 'right', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--dash-border)' }}>Actions</th>
+                                <th style={{ position: 'relative', background: 'var(--dash-card)', textAlign: 'right', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid var(--dash-border)', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)', borderTopRightRadius: '16px' }}>Actions</th>
                             )}
                         </tr>
                     </thead>
@@ -1689,8 +1690,8 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
                         ))}
                     </tbody>
                 </table>
-                {module.id === 'transactions' && !isAnalysing && totalPages > 1 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: 'var(--dash-card)', borderTop: '1px solid var(--dash-border)', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', position: 'sticky', bottom: 0, zIndex: 5 }}>
+                {module.id === 'transactions' && totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: 'var(--dash-card)', borderTop: '1px solid var(--dash-border)', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', position: 'relative', marginTop: 'auto', width: '100%', zIndex: 5 }}>
                         <div style={{ fontSize: '13px', color: 'var(--dash-text-muted)', fontWeight: '500' }}>
                             Showing {((currentPage - 1) * recordsPerPage) + 1} to {Math.min(currentPage * recordsPerPage, displayData.length)} of {displayData.length} records
                         </div>
@@ -1730,6 +1731,12 @@ export default function Dashboard({ onLogout }) {
     const [accountData, setAccountData] = useState([]);
     const [cardData, setCardData] = useState([]);
     const [theme, setTheme] = useState('dark'); // default to dark theme
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        document.body.setAttribute('data-theme', theme);
+    }, [theme]);
+
     const [userName, setUserName] = useState('User');
     const [userUid, setUserUid] = useState('000000');
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -2023,10 +2030,17 @@ export default function Dashboard({ onLogout }) {
     return (
         <div data-theme={theme} style={{
             width: '100vw', height: '100vh',
-            background: 'var(--bg-dark)', color: 'var(--text-main)',
+            background: 'var(--dash-bg)', color: 'var(--dash-text)',
             display: 'flex', position: 'fixed', top: 0, left: 0, zIndex: 100,
             overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif'
         }}>
+            {theme === 'dark' && (
+                <>
+                    <div className="auth-blob auth-blob-1" style={{ zIndex: 0, opacity: 0.15, pointerEvents: 'none' }}></div>
+                    <div className="auth-blob auth-blob-2" style={{ zIndex: 0, opacity: 0.15, pointerEvents: 'none' }}></div>
+                    <div className="auth-blob auth-blob-3" style={{ zIndex: 0, opacity: 0.15, pointerEvents: 'none' }}></div>
+                </>
+            )}
 
             {/* Add Modal */}
             {isAddModalOpen && (
@@ -2398,74 +2412,127 @@ export default function Dashboard({ onLogout }) {
                     ))}
                 </div>
 
-                {/* Ledger AI - Glowing Circular AI Button */}
-                <div style={{ marginTop: 'auto', width: '100%', padding: '0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', paddingBottom: '24px' }}>
+                {/* Ledger AI - Modern Glassmorphic AI Hub Control */}
+                <div 
+                    onClick={() => {
+                        setActiveModule({ id: 'aica_import', label: 'Ledger AI', icon: null, isSummary: false });
+                    }}
+                    className="ai-sidebar-hub"
+                    style={{ 
+                        marginTop: 'auto', width: '100%', padding: '0 8px 24px 8px', 
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', 
+                        justifyContent: 'center', gap: '10px', cursor: 'pointer' 
+                    }}
+                    title="Launch Ledger AI Assistant"
+                >
                     <style>
                         {`
-                        @keyframes aiPulseGlow {
-                            0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4); }
-                            70% { box-shadow: 0 0 0 12px rgba(52, 211, 153, 0); }
-                            100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+                        @keyframes aiHubPulseGlow {
+                            0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45), 0 0 20px rgba(16, 185, 129, 0.3); }
+                            50% { box-shadow: 0 0 0 10px rgba(52, 211, 153, 0), 0 0 32px rgba(6, 182, 212, 0.5); }
+                            100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0), 0 0 20px rgba(16, 185, 129, 0.3); }
                         }
-                        .ai-circular-btn {
-                            animation: aiPulseGlow 2.5s infinite;
+                        @keyframes aiRingSpin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
                         }
-                        .ai-circular-btn:hover {
-                            transform: scale(1.05);
+                        @keyframes aiPingDot {
+                            0%, 100% { transform: scale(1); opacity: 0.9; }
+                            50% { transform: scale(1.6); opacity: 0; }
+                        }
+                        .ai-sidebar-hub {
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                        }
+                        .ai-sidebar-hub:hover .ai-orb-button {
+                            transform: translateY(-3px) scale(1.08);
+                            border-color: #34d399;
+                            box-shadow: 0 0 35px rgba(16, 185, 129, 0.6), 0 0 18px rgba(6, 182, 212, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.6);
+                        }
+                        .ai-sidebar-hub:hover .ai-sidebar-pill {
+                            background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 182, 212, 0.18));
+                            border-color: rgba(52, 211, 153, 0.6);
+                            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
+                            transform: translateY(-1px);
+                        }
+                        .ai-orb-button {
+                            animation: aiHubPulseGlow 3s infinite ease-in-out;
+                            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
                         }
                         `}
                     </style>
-                    <button
-                        onClick={() => {
-                            setActiveModule({ id: 'aica_import', label: 'Ledger AI', icon: null, isSummary: false });
-                        }}
-                        className={`ai-circular-btn ${activeModule.id !== 'aica_import' ? 'ai-modern-btn' : ''}`}
-                        style={{
-                            background: activeModule.id === 'aica_import'
-                                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.1))'
-                                : 'var(--dash-glass-bg)',
-                            backdropFilter: 'blur(10px)',
-                            border: activeModule.id === 'aica_import' ? '2px solid #10b981' : '2px solid rgba(52, 211, 153, 0.4)',
-                            padding: '3px',
+                    
+                    {/* Futuristic Glassmorphic AI Orb */}
+                    <div style={{ position: 'relative', width: '54px', height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {/* Rotating Ambient Gradient Ring */}
+                        <div style={{
+                            position: 'absolute', top: '-3px', left: '-3px', right: '-3px', bottom: '-3px',
                             borderRadius: '50%',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '46px',
-                            height: '46px',
-                            transition: 'all 0.3s ease',
-                            position: 'relative'
-                        }}
-                        title="Ledger AI Assistant"
-                    >
-                        <img 
-                            src="/assets/logo.png" 
-                            alt="AI" 
-                            className="ai-logo-img"
-                            style={{ 
-                                width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%',
-                                filter: activeModule.id === 'aica_import' ? 'drop-shadow(0 0 8px rgba(52,211,153,0.8))' : 'drop-shadow(0 0 4px rgba(52,211,153,0.3))',
-                                transition: 'all 0.3s ease'
-                            }} 
-                        />
-                        {/* Active status indicator dot */}
-                        <div style={{ position: 'absolute', top: -1, right: -1, width: 12, height: 12, background: '#10b981', borderRadius: '50%', border: '2px solid var(--dash-sidebar)', boxShadow: '0 0 8px rgba(16,185,129,0.8)' }}></div>
-                    </button>
-                    <div style={{
-                        fontSize: '11px', fontWeight: '800', background: 'linear-gradient(135deg, #10b981, #059669)',
-                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                        textTransform: 'uppercase', letterSpacing: '0.5px'
-                    }}>
-                        Ledger AI
+                            background: 'conic-gradient(from 0deg, #10b981, #06b6d4, #6366f1, #10b981)',
+                            opacity: activeModule.id === 'aica_import' ? 0.85 : 0.4,
+                            filter: 'blur(4px)',
+                            animation: 'aiRingSpin 8s linear infinite',
+                            transition: 'opacity 0.3s ease'
+                        }}></div>
+
+                        <div
+                            className="ai-orb-button"
+                            style={{
+                                background: activeModule.id === 'aica_import'
+                                    ? 'radial-gradient(circle at 30% 30%, rgba(16, 185, 129, 0.35), rgba(6, 182, 212, 0.25), rgba(15, 23, 42, 0.8))'
+                                    : 'radial-gradient(circle at 30% 30%, rgba(52, 211, 153, 0.2), rgba(6, 182, 212, 0.12), var(--dash-glass-bg))',
+                                backdropFilter: 'blur(14px)',
+                                WebkitBackdropFilter: 'blur(14px)',
+                                border: activeModule.id === 'aica_import' ? '2px solid #34d399' : '1.5px solid rgba(52, 211, 153, 0.45)',
+                                padding: '4px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '54px',
+                                height: '54px',
+                                position: 'relative',
+                                zIndex: 2
+                            }}
+                        >
+                            <img 
+                                src="/assets/logo.png" 
+                                alt="AI" 
+                                className="ai-logo-img"
+                                style={{ 
+                                    width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%',
+                                    filter: activeModule.id === 'aica_import' ? 'drop-shadow(0 0 10px rgba(52,211,153,0.9))' : 'drop-shadow(0 0 5px rgba(52,211,153,0.4))',
+                                    transition: 'all 0.3s ease'
+                                }} 
+                            />
+                            {/* Live AI Status Pulse Dot */}
+                            <div style={{ position: 'absolute', top: '1px', right: '1px', width: '13px', height: '13px', zIndex: 5 }}>
+                                <span style={{ position: 'absolute', top: 0, right: 0, width: '100%', height: '100%', borderRadius: '50%', background: '#10b981', animation: 'aiPingDot 2s cubic-bezier(0, 0, 0.2, 1) infinite' }}></span>
+                                <span style={{ position: 'absolute', top: 0, right: 0, width: '13px', height: '13px', borderRadius: '50%', background: '#10b981', border: '2px solid var(--dash-sidebar)', boxShadow: '0 0 8px #10b981' }}></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Main Content Area */}
-            <div style={{ flex: 1, padding: activeModule.id === 'aica_import' ? '0' : '24px 64px', overflowY: activeModule.id === 'aica_import' ? 'hidden' : 'auto', background: 'var(--dash-bg)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: activeModule.id === 'aica_import' ? '0' : '40px', padding: activeModule.id === 'aica_import' ? '16px 24px 0 24px' : '0', flexShrink: 0 }}>
-                    {activeModule.id !== 'aica_import' ? (
+            <div style={{ flex: 1, padding: activeModule.id === 'aica_import' ? '0' : '24px 64px', overflowY: activeModule.id === 'aica_import' ? 'hidden' : 'auto', background: 'transparent', display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative', zIndex: 1 }}>
+                
+                {activeModule.id === 'aica_import' && (
+                    <div style={{ position: 'absolute', top: '9px', right: '32px', zIndex: 100 }}>
+                        <button onClick={toggleTheme} style={{
+                            width: '38px', height: '38px', borderRadius: '50%',
+                            background: 'var(--dash-glass-bg)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid var(--dash-border)',
+                            color: 'var(--dash-text)', cursor: 'pointer', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', fontSize: '18px',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.05)', transition: 'all 0.3s ease'
+                        }} onMouseOver={(e) => { e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.4)'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.1)'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.05)'; }} title="Toggle Theme">
+                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                    </div>
+                )}
+
+                {activeModule.id !== 'aica_import' && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px', flexShrink: 0 }}>
                         <div>
                             <h2 style={{ fontSize: '28px', fontWeight: '600', color: 'var(--dash-text)', margin: '0 0 4px 0', lineHeight: '1.2', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 {getGreeting()}, {userName} <span style={{ fontSize: '24px' }}>👋</span>
@@ -2476,9 +2543,6 @@ export default function Dashboard({ onLogout }) {
                                 <span>{currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                             </p>
                         </div>
-                    ) : (
-                        <div></div>
-                    )}
 
                     <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
 
@@ -2492,9 +2556,7 @@ export default function Dashboard({ onLogout }) {
                             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                         </button>
 
-                        {activeModule.id !== 'aica_import' && (
-                            <>
-                                <div
+                        <div
                             style={{ position: 'relative' }}
                             onMouseEnter={() => setShowNotificationDropdown(true)}
                             onMouseLeave={() => setShowNotificationDropdown(false)}
@@ -2609,10 +2671,9 @@ export default function Dashboard({ onLogout }) {
                                 <LogOut size={16} />
                             </button>
                         </div>
-                        </>
-                        )}
                     </div>
                 </div>
+                )}
 
                 <div style={{
                     width: '100%',

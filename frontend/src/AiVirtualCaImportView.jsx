@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Calendar, Filter, FileText, Landmark, Shield, Upload, Download, CheckCircle, AlertCircle, TrendingUp, TrendingDown, PieChart, RefreshCw, MessageSquare, DollarSign, ArrowRight, Check, Wallet, Tag, Layers } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Sparkles, Calendar, Filter, FileText, Landmark, Shield, Upload, Download, CheckCircle, AlertCircle, TrendingUp, TrendingDown, PieChart, RefreshCw, MessageSquare, DollarSign, ArrowRight, ArrowUp, Check, Wallet, Tag, Layers, History, Plus, Square } from 'lucide-react';
+import { auth } from './firebase';
 
 // ─── Mini Donut Chart Component ───
 function MiniDonut({ segments, size = 120, label }) {
@@ -112,7 +114,7 @@ function renderMarkdown(text) {
             elements.push(
                 <ul key={`ul-${elements.length}`} style={{ margin: '8px 0', paddingLeft: '20px', listStyle: 'none' }}>
                     {listBuffer.map((li, i) => (
-                        <li key={i} style={{ fontSize: '13.5px', color: '#cbd5e1', lineHeight: '1.8', position: 'relative', paddingLeft: '14px' }}>
+                        <li key={i} style={{ fontSize: '13.5px', color: 'var(--dash-text)', lineHeight: '1.8', position: 'relative', paddingLeft: '14px' }}>
                             <span style={{ position: 'absolute', left: 0, color: '#818cf8' }}>•</span>
                             {formatInline(li)}
                         </li>
@@ -125,22 +127,24 @@ function renderMarkdown(text) {
 
     const formatInline = (str) => {
         const parts = [];
-        // Process bold+italic, bold, italic, and code
-        const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+        // Process links, bold+italic, bold, italic, and code
+        const regex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
         let lastIndex = 0;
         let match;
         while ((match = regex.exec(str)) !== null) {
             if (match.index > lastIndex) {
                 parts.push(str.substring(lastIndex, match.index));
             }
-            if (match[2]) {
-                parts.push(<strong key={match.index} style={{ fontWeight: '700', fontStyle: 'italic', color: '#e2e8f0' }}>{match[2]}</strong>);
-            } else if (match[3]) {
-                parts.push(<strong key={match.index} style={{ fontWeight: '700', color: '#e2e8f0' }}>{match[3]}</strong>);
+            if (match[1] && match[2]) {
+                parts.push(<a key={match.index} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ color: '#818cf8', textDecoration: 'underline' }}>{match[1]}</a>);
             } else if (match[4]) {
-                parts.push(<em key={match.index} style={{ fontStyle: 'italic', color: '#a5b4fc' }}>{match[4]}</em>);
+                parts.push(<strong key={match.index} style={{ fontWeight: '700', fontStyle: 'italic', color: 'var(--dash-text)' }}>{match[4]}</strong>);
             } else if (match[5]) {
-                parts.push(<code key={match.index} style={{ background: 'rgba(99,102,241,0.12)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', color: '#c7d2fe' }}>{match[5]}</code>);
+                parts.push(<strong key={match.index} style={{ fontWeight: '700', color: 'var(--dash-text)' }}>{match[5]}</strong>);
+            } else if (match[6]) {
+                parts.push(<em key={match.index} style={{ fontStyle: 'italic', color: 'var(--dash-text)' }}>{match[6]}</em>);
+            } else if (match[7]) {
+                parts.push(<code key={match.index} style={{ background: 'rgba(99,102,241,0.12)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', color: 'var(--dash-text)' }}>{match[7]}</code>);
             }
             lastIndex = match.index + match[0].length;
         }
@@ -173,18 +177,18 @@ function renderMarkdown(text) {
 
         if (h4Match) {
             flushList();
-            elements.push(<h4 key={`h4-${i}`} style={{ fontSize: '14px', fontWeight: '700', color: '#a5b4fc', margin: '16px 0 6px', letterSpacing: '0.2px' }}>{formatInline(h4Match[1])}</h4>);
+            elements.push(<h4 key={`h4-${i}`} style={{ fontSize: '14px', fontWeight: '700', color: 'var(--dash-text)', margin: '16px 0 6px', letterSpacing: '0.2px' }}>{formatInline(h4Match[1])}</h4>);
             continue;
         }
         if (h3Match) {
             flushList();
-            elements.push(<h3 key={`h3-${i}`} style={{ fontSize: '15px', fontWeight: '700', color: '#c7d2fe', margin: '18px 0 8px' }}>{formatInline(h3Match[1])}</h3>);
+            elements.push(<h3 key={`h3-${i}`} style={{ fontSize: '15px', fontWeight: '700', color: 'var(--dash-text)', margin: '18px 0 8px' }}>{formatInline(h3Match[1])}</h3>);
             continue;
         }
         if (h2Match || h1Match) {
             flushList();
             const text = h2Match ? h2Match[1] : h1Match[1];
-            elements.push(<h3 key={`h2-${i}`} style={{ fontSize: '16px', fontWeight: '700', color: '#e0e7ff', margin: '18px 0 8px' }}>{formatInline(text)}</h3>);
+            elements.push(<h3 key={`h2-${i}`} style={{ fontSize: '16px', fontWeight: '700', color: 'var(--dash-text)', margin: '18px 0 8px' }}>{formatInline(text)}</h3>);
             continue;
         }
 
@@ -195,9 +199,45 @@ function renderMarkdown(text) {
             continue;
         }
 
+        // Blockquotes and Alerts
+        const quoteMatch = trimmed.match(/^>\s*(.*)/);
+        if (quoteMatch) {
+            flushList();
+            let content = quoteMatch[1];
+            let bg = 'rgba(99, 102, 241, 0.1)';
+            let border = '#818cf8';
+            let icon = '';
+            
+            if (content.startsWith('[!WARNING]')) {
+                bg = 'rgba(239, 68, 68, 0.1)';
+                border = '#f87171';
+                content = content.replace('[!WARNING]', '').trim();
+            } else if (content.startsWith('[!TIP]')) {
+                bg = 'rgba(16, 185, 129, 0.1)';
+                border = '#34d399';
+                content = content.replace('[!TIP]', '').trim();
+            } else if (content.startsWith('[!IMPORTANT]')) {
+                bg = 'rgba(139, 92, 246, 0.1)';
+                border = '#a78bfa';
+                content = content.replace('[!IMPORTANT]', '').trim();
+            }
+            
+            elements.push(
+                <blockquote key={`bq-${i}`} style={{
+                    margin: '10px 0', padding: '12px 16px', background: bg,
+                    borderLeft: `4px solid ${border}`, borderRadius: '0 8px 8px 0',
+                    color: 'var(--dash-text)', fontSize: '13px', fontStyle: 'italic',
+                    lineHeight: '1.6'
+                }}>
+                    {formatInline(content)}
+                </blockquote>
+            );
+            continue;
+        }
+
         // Regular paragraph
         flushList();
-        elements.push(<p key={`p-${i}`} style={{ fontSize: '13.5px', color: '#cbd5e1', lineHeight: '1.75', margin: '6px 0' }}>{formatInline(trimmed)}</p>);
+        elements.push(<p key={`p-${i}`} style={{ fontSize: '13.5px', color: 'var(--dash-text)', lineHeight: '1.75', margin: '6px 0' }}>{formatInline(trimmed)}</p>);
     }
     flushList();
     return elements;
@@ -208,6 +248,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
     const [transactions, setTransactions] = useState([]);
     const [bankAccounts, setBankAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const abortControllerRef = React.useRef(null);
 
     // Filter States for "Analyse All Transactions"
     const [fromDate, setFromDate] = useState('');
@@ -225,6 +266,58 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
     const [selectedBankAccountId, setSelectedBankAccountId] = useState('');
     const [savingTransactions, setSavingTransactions] = useState(false);
     const [importSuccessMsg, setImportSuccessMsg] = useState('');
+    const [importCurrentPage, setImportCurrentPage] = useState(1);
+    const importItemsPerPage = 10;
+
+    // Extraction Loading Animation States (Steps & Tips)
+    const EXTRACTION_STEPS = [
+        "Analyzing statement layout & table headers...",
+        "Identifying transaction columns (Date, Description, Debit/Credit)...",
+        "Extracting unique reference IDs & UTR numbers...",
+        "Classifying spending into AI category groups...",
+        "Verifying net balance & detecting recurring patterns...",
+        "Finalizing transaction records for your review..."
+    ];
+
+    const EXTRACTION_TIPS = [
+        "Did you know? Ledger AI detects recurring payments automatically from your statement dates.",
+        "Tip: Save transactions directly to your selected bank account to keep net balances in sync.",
+        "Fact: Categorized statements help Ledger AI give you Section 80C & 80D tax-saving advice.",
+        "Tip: You can change any extracted transaction category before saving it to your ledger.",
+        "Fact: Ledger AI uses layout-aware column alignment to never misclassify Debit as Credit."
+    ];
+
+    const [extractionStepIdx, setExtractionStepIdx] = useState(0);
+    const [extractionTipIdx, setExtractionTipIdx] = useState(0);
+
+    useEffect(() => {
+        if (!aiLoading) {
+            setExtractionStepIdx(0);
+            return;
+        }
+        const stepInterval = setInterval(() => {
+            setExtractionStepIdx((prev) => (prev + 1) % EXTRACTION_STEPS.length);
+        }, 2200);
+        const tipInterval = setInterval(() => {
+            setExtractionTipIdx((prev) => (prev + 1) % EXTRACTION_TIPS.length);
+        }, 5000);
+        return () => {
+            clearInterval(stepInterval);
+            clearInterval(tipInterval);
+        };
+    }, [aiLoading]);
+
+    // Ensure body scroll is locked when full-screen AI loading overlay or extracted modal is open
+    useEffect(() => {
+        if (aiLoading || extractedTransactions.length > 0) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [aiLoading, extractedTransactions.length]);
 
     // Automatically detect if selected PDF file is password-protected (encrypted)
     useEffect(() => {
@@ -344,25 +437,12 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
     const [chatHistory, setChatHistory] = useState([
         {
             sender: 'ai',
-            text: {
-                question: "SmartLedger Ledger AI Connected",
-                isWelcome: true,
-                sections: [
-                    {
-                        title: "👋 Welcome to Ledger AI!",
-                        stats: [
-                            { label: "Ledger AI", value: "Online", color: "#34d399", raw: true },
-                            { label: "Synced Modules", value: "5 / 5", color: "#818cf8", raw: true }
-                        ],
-                        detail: "I am fully synchronized with your Overview, Transactions, Live Investments, Len-Den, and Loans modules. Ask me anything about your balances, spending category breakdown, investment allocation, loans, or tax optimization!"
-                    }
-                ],
-                charts: []
-            }
+            text: "👋 Welcome to Ledger AI! How can I help you today?"
         }
     ]);
 
     const [conversations, setConversations] = useState([]);
+    const [showHistorySidebar, setShowHistorySidebar] = useState(false);
     const [caMetrics, setCaMetrics] = useState({
         annualIncome: 1200000,
         investments80C: 150000,
@@ -626,6 +706,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                 const data = await res.json();
                 if (Array.isArray(data) && data.length > 0) {
                     setExtractedTransactions(data);
+                    setImportCurrentPage(1);
                     setAiLoading(false);
                     return;
                 } else {
@@ -830,6 +911,13 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
         return responseObj;
     };
 
+    const handleStopResponse = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    };
+
     // Handle Virtual CA RAG Advisory Query
     const handleCaAdvisorQuery = async (e, customQueryText = null) => {
         if (e && e.preventDefault) e.preventDefault();
@@ -838,6 +926,10 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
         setCaQuery('');
         setChatHistory(prev => [...prev, { sender: 'user', text: queryText }]);
         setCaLoading(true);
+        
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
+
         try {
             const payload = {
                 userQuery: queryText,
@@ -850,20 +942,30 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
             const res = await fetch("http://localhost:8000/api/ai/ca-advisor", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal
             });
             if (!res.ok) throw new Error("CA Advisor query failed");
             const data = await res.json();
-            const structuredObj = buildCaResponseObject(queryText, portfolioContext, data.advisorResponse);
-            setChatHistory(prev => [...prev, { sender: 'ai', text: structuredObj }]);
-            setCaResponse(JSON.stringify(structuredObj));
+            
+            // Pass the string response directly for paragraph-wise markdown rendering
+            const responseText = data.advisorResponse;
+            setChatHistory(prev => [...prev, { sender: 'ai', text: responseText }]);
+            setCaResponse(responseText);
         } catch (err) {
-            console.error(err);
-            const structuredObj = buildCaResponseObject(queryText, portfolioContext, null);
-            setChatHistory(prev => [...prev, { sender: 'ai', text: structuredObj }]);
-            setCaResponse(JSON.stringify(structuredObj));
+            if (err.name === 'AbortError') {
+                const errorText = "> [!TIP]\n> **Stopped:** The response generation was stopped by the user.";
+                setChatHistory(prev => [...prev, { sender: 'ai', text: errorText }]);
+                setCaResponse(errorText);
+            } else {
+                console.error(err);
+                const errorText = "> [!WARNING]\n> **Connection Error:** Could not connect to the SmartLedger AI backend. Please ensure the server is running on port 8000.";
+                setChatHistory(prev => [...prev, { sender: 'ai', text: errorText }]);
+                setCaResponse(errorText);
+            }
         } finally {
             setCaLoading(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -1275,13 +1377,63 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
 
             {/* TAB 2: IMPORT ACCOUNT STATEMENT & SAVE TO BANK ACCOUNT */}
             {activeTab === 'import' && (
-                <div className="vca-import-container">
+                <div className="vca-import-container" style={{ padding: '0 24px' }}>
+                    {/* Immersive Full-Screen AI Extraction Buffering Overlay */}
+                    {aiLoading && createPortal(
+                        <div className="extraction-overlay">
+                            <div className="extraction-ambient">
+                                <div className="extraction-ambient-dot" style={{ left: '20%', animationDuration: '4s', animationDelay: '0s' }} />
+                                <div className="extraction-ambient-dot" style={{ left: '50%', animationDuration: '6s', animationDelay: '1s' }} />
+                                <div className="extraction-ambient-dot" style={{ left: '80%', animationDuration: '5s', animationDelay: '2s' }} />
+                            </div>
+                            <div className="extraction-card">
+                                <div className="extraction-orb-container">
+                                    <div className="extraction-core">
+                                        <Sparkles size={28} color="#fff" />
+                                    </div>
+                                    <div className="extraction-ring extraction-ring-1">
+                                        <div className="extraction-particle extraction-particle-1" />
+                                    </div>
+                                    <div className="extraction-ring extraction-ring-2">
+                                        <div className="extraction-particle extraction-particle-2" />
+                                    </div>
+                                    <div className="extraction-ring extraction-ring-3">
+                                        <div className="extraction-particle extraction-particle-3" />
+                                    </div>
+                                </div>
+
+                                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+                                    <h3 className="extraction-title">Ledger AI Statement Engine</h3>
+                                    <div className="extraction-status">
+                                        {EXTRACTION_STEPS[extractionStepIdx]}
+                                    </div>
+                                </div>
+
+                                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div className="extraction-progress-track">
+                                        <div className="extraction-progress-fill" />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b', fontWeight: '600' }}>
+                                        <span>AI EXTRACTION IN PROGRESS</span>
+                                        <span>DO NOT CLOSE</span>
+                                    </div>
+                                </div>
+
+                                <div className="extraction-tip">
+                                    <span className="extraction-tip-icon">💡</span>
+                                    <span>{EXTRACTION_TIPS[extractionTipIdx]}</span>
+                                </div>
+                            </div>
+                        </div>,
+                        document.body
+                    )}
+
                     {/* Back Button */}
                     <button
                         onClick={() => setActiveTab('advisor')}
                         style={{
                             display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontWeight: '600', fontSize: '13px',
-                            background: 'rgba(255,255,255,0.03)', color: '#94a3b8', width: 'fit-content', marginBottom: '16px'
+                            background: 'rgba(255,255,255,0.03)', color: '#94a3b8', width: 'fit-content', marginTop: '18px', marginBottom: '16px'
                         }}
                         onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; }}
                         onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#94a3b8'; }}
@@ -1293,7 +1445,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                     <div className="vca-upload-card">
                         <div style={{ textAlign: 'center' }}>
                             <h3 className="vca-upload-title">
-                                📄 Select Account Statement (PDF, CSV, or Excel)
+                                UPLOAD THE ACCOUNT STATEMENT OF YOUR BANK TO GET THE PROPER ANALYSIS.
                             </h3>
                             <p className="vca-upload-sub">
                                 Upload your bank statement to automatically extract reference IDs and categorize transactions with AI.
@@ -1314,10 +1466,10 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                         >
                             <Upload size={36} color="#818cf8" />
                             <div style={{ textAlign: 'center' }}>
-                                <span style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '15px' }}>
+                                <span style={{ color: 'var(--dash-text)', fontWeight: '600', fontSize: '15px' }}>
                                     {aiFile ? aiFile.name : 'Click to select account statement file'}
                                 </span>
-                                <div style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>
+                                <div style={{ color: 'var(--dash-text-muted)', fontSize: '12px', marginTop: '4px' }}>
                                     Supports .pdf, .csv, and .xlsx files
                                 </div>
                             </div>
@@ -1404,12 +1556,24 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                         </div>
                     )}
 
-                    {/* Extracted Transactions List & Saving to Bank Account */}
-                    {extractedTransactions.length > 0 && (
+                    {/* Extracted Transactions List & Saving to Bank Account — Overlay Card */}
+                    {extractedTransactions.length > 0 && createPortal(
+                        <div className="vca-extracted-overlay">
                         <div className="vca-extracted-card">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-                                <div>
-                                    <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--dash-text)' }}>
+                            {/* Close overlay button */}
+                            <button
+                                onClick={() => setExtractedTransactions([])}
+                                className="vca-modal-close-btn"
+                                title="Close"
+                            >×</button>
+
+                            <div style={{
+                                padding: '16px 28px 28px 28px',
+                                display: 'flex', flexDirection: 'column', gap: '20px'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '24px', paddingRight: '80px' }}>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--dash-text)' }}>
                                         Extracted Statement Transactions ({extractedTransactions.length})
                                     </h3>
                                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--dash-text-muted)' }}>
@@ -1418,15 +1582,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                 </div>
 
                                 {/* Bank Account Selector: "selecting bank account whatever is already there" */}
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    background: 'rgba(0,0,0,0.3)',
-                                    padding: '10px 16px',
-                                    borderRadius: '14px',
-                                    border: '1px solid var(--border-dark)'
-                                }}>
+                                <div className="vca-bank-select-box">
                                     <Landmark size={20} color="#34d399" />
                                     <div>
                                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--dash-text-muted)' }}>
@@ -1446,11 +1602,11 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                                 padding: '4px 0 0 0'
                                             }}
                                         >
-                                            <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--dash-text)' }}>
+                                            <option value="" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
                                                 Select Bank Account...
                                             </option>
                                             {bankAccounts.map(acc => (
-                                                <option key={acc.id} value={acc.id} style={{ background: 'var(--bg-dark)', color: 'var(--dash-text)' }}>
+                                                <option key={acc.id} value={acc.id} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
                                                     {acc.name} — {acc.bankName} ({acc.accountNumber || 'N/A'}) • Balance: ₹{parseFloat(acc.balance).toLocaleString('en-IN')}
                                                 </option>
                                             ))}
@@ -1464,8 +1620,8 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                 <button
                                     onClick={() => setExtractedTransactions([])}
                                     style={{
-                                        background: 'rgba(255, 255, 255, 0.05)',
-                                        border: '1px solid var(--border-dark)',
+                                        background: 'rgba(128, 128, 128, 0.1)',
+                                        border: '1px solid var(--dash-border)',
                                         color: 'var(--dash-text)',
                                         padding: '10px 20px',
                                         borderRadius: '12px',
@@ -1500,16 +1656,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
 
                             {/* AI Statement Summary & Cashflow Overview */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-                                <div className="stat-card" style={{
-                                    background: 'var(--surface-dark)',
-                                    border: '1px solid var(--border-dark)',
-                                    borderRadius: '20px',
-                                    padding: '20px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px',
-                                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
-                                }}>
+                                <div className="stat-card vca-modal-stat">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ fontSize: '13px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>Total No. of Transactions</span>
                                         <FileText size={18} color="#a78bfa" />
@@ -1522,16 +1669,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                     </span>
                                 </div>
 
-                                <div className="stat-card" style={{
-                                    background: 'var(--surface-dark)',
-                                    border: '1px solid var(--border-dark)',
-                                    borderRadius: '20px',
-                                    padding: '20px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px',
-                                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
-                                }}>
+                                <div className="stat-card vca-modal-stat">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ fontSize: '13px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>Total Amount Credited</span>
                                         <TrendingUp size={18} color="#34d399" />
@@ -1544,16 +1682,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                     </span>
                                 </div>
 
-                                <div className="stat-card" style={{
-                                    background: 'var(--surface-dark)',
-                                    border: '1px solid var(--border-dark)',
-                                    borderRadius: '20px',
-                                    padding: '20px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px',
-                                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
-                                }}>
+                                <div className="stat-card vca-modal-stat">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ fontSize: '13px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>Total Amount Debited</span>
                                         <TrendingDown size={18} color="#ef4444" />
@@ -1566,16 +1695,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                     </span>
                                 </div>
 
-                                <div className="stat-card" style={{
-                                    background: 'var(--surface-dark)',
-                                    border: '1px solid var(--border-dark)',
-                                    borderRadius: '20px',
-                                    padding: '20px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px',
-                                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
-                                }}>
+                                <div className="stat-card vca-modal-stat">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ fontSize: '13px', color: 'var(--dash-text-muted)', fontWeight: '600' }}>Total Balance Left</span>
                                         <Wallet size={18} color="#38bdf8" />
@@ -1606,15 +1726,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
 
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                                     {statementSummary.groupBreakdown.map((g, idx) => (
-                                        <div key={idx} style={{
-                                            background: 'rgba(0, 0, 0, 0.25)',
-                                            border: '1px solid var(--border-dark)',
-                                            borderRadius: '14px',
-                                            padding: '14px',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '4px'
-                                        }}>
+                                        <div key={idx} className="vca-breakdown-card">
                                             <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--dash-text)' }}>
                                                 {g.groupName}
                                             </span>
@@ -1632,10 +1744,10 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                             </div>
 
                             {/* Table of Extracted Transactions */}
-                            <div style={{ overflowX: 'auto', border: '1px solid var(--border-dark)', borderRadius: '16px' }}>
+                            <div style={{ overflowX: 'auto', border: '1px solid var(--dash-border)', borderRadius: '16px' }}>
                                 <table className="transaction-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                                     <thead>
-                                        <tr style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--dash-text-muted)', fontSize: '13px' }}>
+                                        <tr className="vca-table-header-row">
                                             <th style={{ padding: '14px 12px' }}>Date</th>
                                             <th style={{ padding: '14px 12px' }}>Ref ID / UTR</th>
                                             <th style={{ padding: '14px 12px' }}>Description</th>
@@ -1647,8 +1759,13 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {extractedTransactions.map((t, idx) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        {extractedTransactions.slice(
+                                            (importCurrentPage - 1) * importItemsPerPage,
+                                            importCurrentPage * importItemsPerPage
+                                        ).map((t, mapIdx) => {
+                                            const idx = (importCurrentPage - 1) * importItemsPerPage + mapIdx;
+                                            return (
+                                            <tr key={idx} className="vca-table-row">
                                                 <td style={{ padding: '12px', fontSize: '14px', color: 'var(--dash-text)' }}>
                                                     {t.date}
                                                 </td>
@@ -1672,23 +1789,15 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                                 </td>
                                                 <td style={{ padding: '12px' }}>
                                                     <select
+                                                        className="vca-table-select"
                                                         value={t.category || 'Others'}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
                                                             setExtractedTransactions(prev => prev.map((item, i) => i === idx ? { ...item, category: val } : item));
                                                         }}
-                                                        style={{
-                                                            padding: '6px 10px',
-                                                            borderRadius: '8px',
-                                                            background: 'var(--bg-dark)',
-                                                            color: 'var(--dash-text)',
-                                                            border: '1px solid var(--border-dark)',
-                                                            fontSize: '12px',
-                                                            fontWeight: '600'
-                                                        }}
                                                     >
                                                         {allCategories.filter(c => c !== 'All').map(opt => (
-                                                            <option key={opt} value={opt} style={{ background: 'var(--bg-dark)', color: 'var(--dash-text)' }}>
+                                                            <option key={opt} value={opt} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
                                                                 {opt}
                                                             </option>
                                                         ))}
@@ -1712,19 +1821,87 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                                     {t.taxSection || '-'}
                                                 </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
+
+                            {/* Pagination Controls */}
+                            {Math.ceil(extractedTransactions.length / importItemsPerPage) > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', marginTop: '12px' }}>
+                                    <button
+                                        onClick={() => setImportCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={importCurrentPage === 1}
+                                        className="vca-page-btn"
+                                    >Previous</button>
+                                    <span style={{ fontSize: '14px', color: 'var(--dash-text-muted)', fontWeight: '500' }}>
+                                        Page {importCurrentPage} of {Math.ceil(extractedTransactions.length / importItemsPerPage)}
+                                    </span>
+                                    <button
+                                        onClick={() => setImportCurrentPage(p => Math.min(Math.ceil(extractedTransactions.length / importItemsPerPage), p + 1))}
+                                        disabled={importCurrentPage === Math.ceil(extractedTransactions.length / importItemsPerPage)}
+                                        className="vca-page-btn"
+                                    >Next</button>
+                                </div>
+                            )}
+                            </div>
                         </div>
+                        </div>,
+                        document.body
                     )}
                 </div>
             )}
 
             {activeTab === 'advisor' && (
-                <div className="vca-container">
+                <div className="vca-container" style={{ position: 'relative', overflow: 'hidden' }}>
+                    {/* Conversation History Sidebar Drawer */}
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, bottom: 0, width: '300px',
+                        background: 'var(--dash-glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                        borderRight: '1px solid var(--dash-border)', zIndex: 150,
+                        transform: showHistorySidebar ? 'translateX(0)' : 'translateX(-100%)',
+                        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        display: 'flex', flexDirection: 'column',
+                        boxShadow: showHistorySidebar ? '4px 0 24px rgba(0,0,0,0.1)' : 'none'
+                    }}>
+                        <div style={{ padding: '20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--dash-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <History size={16} color="#818cf8" /> Past Conversations
+                            </h3>
+                            <button onClick={() => setShowHistorySidebar(false)} style={{ background: 'transparent', border: 'none', color: 'var(--dash-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', fontSize: '20px', lineHeight: '1' }} title="Close History">
+                                &times;
+                            </button>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {conversations.length === 0 ? (
+                                <div style={{ color: 'var(--dash-text-muted)', fontSize: '13px', textAlign: 'center', marginTop: '20px', fontStyle: 'italic' }}>
+                                    No past conversations saved yet.
+                                </div>
+                            ) : (
+                                conversations.map((conv, idx) => (
+                                    <div key={conv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--dash-border)', borderRadius: '12px', padding: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onClick={() => { setChatHistory(conv.history); setShowHistorySidebar(false); }} onMouseOver={(e) => { e.currentTarget.style.borderColor = '#818cf8'; e.currentTarget.style.background = 'rgba(129, 140, 248, 0.05)'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; }}>
+                                        <span style={{ fontSize: '14px', color: 'var(--dash-text)', fontWeight: '500' }}>
+                                            Chat Session {idx + 1}
+                                        </span>
+                                        <button 
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setConversations(conversations.filter(c => c.id !== conv.id)); }}
+                                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', fontSize: '18px', lineHeight: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}
+                                            onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                            title="Delete Chat"
+                                        >
+                                            &times;
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
                     {/* Conversations Bar */}
-                    <div style={{ display: 'flex', gap: '10px', padding: '12px 32px', background: 'transparent', alignItems: 'center', overflowX: 'auto', borderBottom: '1px solid var(--dash-border)', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: '12px', padding: '12px 32px', background: 'transparent', alignItems: 'center', overflowX: 'auto', borderBottom: '1px solid var(--dash-border)', flexShrink: 0 }}>
                         <button 
                             type="button"
                             onClick={() => {
@@ -1734,73 +1911,94 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                         return;
                                     }
                                     setConversations([...conversations, { id: Date.now(), history: chatHistory }]);
+                                    setChatHistory([chatHistory[0]]);
+                                } else {
+                                    alert("You are already in a new conversation! Try asking a question below.");
                                 }
-                                setChatHistory([chatHistory[0]]);
                             }}
-                            style={{ padding: '6px 12px', background: '#34d399', color: '#000', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            style={{ 
+                                width: '36px', height: '36px', borderRadius: '50%', 
+                                background: '#34d399', color: '#000', 
+                                border: 'none', cursor: 'pointer', 
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 4px 12px rgba(52, 211, 153, 0.2)', transition: 'all 0.2s ease'
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                            title="New Conversation"
                         >
-                            <span>+</span> New Conversation
+                            <Plus size={18} strokeWidth={3} />
                         </button>
                         
-                        <div style={{ width: '1px', height: '24px', background: 'var(--dash-border)', margin: '0 8px' }}></div>
+                        <div style={{ width: '1px', height: '24px', background: 'var(--dash-border)', margin: '0 4px' }}></div>
                         
-                        {conversations.map((conv, idx) => (
-                            <div key={conv.id} style={{ display: 'flex', alignItems: 'center', background: 'var(--dash-glass-bg, rgba(255,255,255,0.05))', border: '1px solid var(--dash-border)', borderRadius: '8px', padding: '4px 8px', gap: '8px' }}>
-                                <span style={{ fontSize: '13px', color: 'var(--dash-text-muted, #c7d2fe)', cursor: 'pointer' }} onClick={() => setChatHistory(conv.history)}>
-                                    Chat {idx + 1}
-                                </span>
-                                <button 
-                                    type="button"
-                                    onClick={() => setConversations(conversations.filter(c => c.id !== conv.id))}
-                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0 4px', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                >
-                                    &times;
-                                </button>
-                            </div>
-                        ))}
+                        <button 
+                            type="button"
+                            onClick={() => setShowHistorySidebar(!showHistorySidebar)}
+                            style={{ 
+                                width: '36px', height: '36px', borderRadius: '50%', 
+                                background: 'transparent', border: '1px solid var(--dash-border)', 
+                                color: 'var(--dash-text)', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.2s ease', position: 'relative'
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.borderColor = '#818cf8'; e.currentTarget.style.background = 'rgba(129, 140, 248, 0.05)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.background = 'transparent'; }}
+                            title="Conversation History"
+                        >
+                            <History size={16} />
+                            {conversations.length > 0 && (
+                                <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#818cf8', color: '#fff', fontSize: '10px', fontWeight: 'bold', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>
+                                    {conversations.length}
+                                </div>
+                            )}
+                        </button>
                     </div>
 
 
                     {/* Quick Suggestion Pills */}
-                    <div className="vca-suggestions">
-                        <span className="vca-suggest-label">💡 Try asking:</span>
-                        {[
-                            "How can I optimize my taxes under Section 80C & 80D?",
-                            "How should I budget my monthly income using 50-30-20 rule?",
-                            "What is the difference between Old and New Tax Regime?",
-                            "Who won the cricket match yesterday? (Test Guardrail)"
-                        ].map((prompt, index) => (
-                            <button
-                                key={index}
-                                onClick={() => setCaQuery(prompt)}
-                                className="vca-suggest-pill"
-                            >
-                                {prompt}
-                            </button>
-                        ))}
-                    </div>
+                    {chatHistory.length <= 1 && (
+                        <div className="vca-suggestions" style={{ animation: 'vcaFadeIn 0.3s ease' }}>
+                            <span className="vca-suggest-label">💡 Try asking:</span>
+                            {[
+                                "How can I optimize my taxes under Section 80C & 80D?",
+                                "How should I budget my monthly income using 50-30-20 rule?",
+                                "What is the difference between Old and New Tax Regime?"
+                            ].map((prompt, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => setCaQuery(prompt)}
+                                    className="vca-suggest-pill"
+                                >
+                                    {prompt}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Conversation Window */}
                     <div className="vca-chat-area">
                         <div className="vca-chat-scroll">
                             {chatHistory.map((msg, idx) => (
                                 <div key={idx} className={`vca-msg ${msg.sender}`}>
-                                    <div className="vca-msg-avatar" style={msg.sender === 'ai' ? { padding: 0, overflow: 'hidden' } : {}}>
+                                    <div className="vca-msg-avatar" style={{ padding: 0, overflow: 'hidden' }}>
                                         {msg.sender === 'ai' ? (
                                             <img
                                                 src="/assets/logo.png"
                                                 alt="Ledger AI"
                                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                             />
-                                        ) : '👤'}
+                                        ) : auth.currentUser?.photoURL ? (
+                                            <img
+                                                src={auth.currentUser.photoURL}
+                                                alt="User"
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                        ) : (
+                                            '👤'
+                                        )}
                                     </div>
                                     <div className="vca-msg-bubble">
-                                        {msg.sender === 'ai' && (
-                                            <div className="vca-msg-label">
-                                                <Sparkles size={12} />
-                                                <span>Ledger AI</span>
-                                            </div>
-                                        )}
                                         {/* Render AI message: structured object or markdown string */}
                                         {msg.sender === 'ai' && typeof msg.text === 'object' && msg.text.sections ? (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1871,25 +2069,27 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                     </div>
 
                     {/* Quick Portfolio Suggestion Pills */}
-                    <div className="vca-portfolio-pills">
-                        {[
-                            "What is my Overview & Net Balance?",
-                            "How much did I spend on Food & Bills?",
-                            "Summarize my Live Investments",
-                            "Who owes me money in Len-Den?",
-                            "What are my active Loans & EMI?"
-                        ].map((q, idx) => (
-                            <button
-                                key={idx}
-                                type="button"
-                                onClick={() => handleCaAdvisorQuery(null, q)}
-                                disabled={caLoading}
-                                className="vca-portfolio-pill"
-                            >
-                                <span>📊</span> {q}
-                            </button>
-                        ))}
-                    </div>
+                    {chatHistory.length <= 1 && (
+                        <div className="vca-portfolio-pills" style={{ animation: 'vcaFadeIn 0.3s ease' }}>
+                            {[
+                                "What is my Overview & Net Balance?",
+                                "How much did I spend on Food & Bills?",
+                                "Summarize my Live Investments",
+                                "Who owes me money in Len-Den?",
+                                "What are my active Loans & EMI?"
+                            ].map((q, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => handleCaAdvisorQuery(null, q)}
+                                    disabled={caLoading}
+                                    className="vca-portfolio-pill"
+                                >
+                                    <span>📊</span> {q}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Ask CA Chat Form */}
                     <form onSubmit={handleCaAdvisorQuery} className="vca-input-bar">
@@ -1918,14 +2118,35 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                             placeholder="Ask Ledger AI anything about finance & taxes..."
                             className="vca-chat-input"
                         />
-                        <button
-                            type="submit"
-                            disabled={caLoading || !caQuery.trim()}
-                            className="vca-send-btn"
-                        >
-                            <Sparkles size={18} />
-                            <span>{caLoading ? 'Consulting...' : 'Send Query'}</span>
-                        </button>
+                        {caLoading ? (
+                            <button
+                                type="button"
+                                onClick={handleStopResponse}
+                                style={{
+                                    width: '42px', height: '42px', borderRadius: '50%', flexShrink: 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer',
+                                    transition: 'all 0.3s ease', padding: 0, boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)'
+                                }}
+                            >
+                                <Square size={16} fill="currentColor" />
+                            </button>
+                        ) : (
+                            <button
+                                type="submit"
+                                disabled={!caQuery.trim()}
+                                style={{
+                                    width: '42px', height: '42px', borderRadius: '50%', flexShrink: 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    background: caQuery.trim() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--dash-glass-bg, rgba(255,255,255,0.05))',
+                                    color: caQuery.trim() ? '#fff' : 'var(--dash-text-muted, rgba(255,255,255,0.3))', border: 'none',
+                                    cursor: caQuery.trim() ? 'pointer' : 'not-allowed', transition: 'all 0.3s ease',
+                                    padding: 0, boxShadow: caQuery.trim() ? '0 4px 14px rgba(99, 102, 241, 0.3)' : 'none'
+                                }}
+                            >
+                                <ArrowUp size={22} strokeWidth={2.5} />
+                            </button>
+                        )}
                     </form>
                 </div>
             )}

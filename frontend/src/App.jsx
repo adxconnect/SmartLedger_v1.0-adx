@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './index.css';
 import Dashboard from './Dashboard';
+import AdminDashboard from './AdminDashboard';
 import Landing from './Landing';
 import { auth } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
@@ -38,14 +39,28 @@ function App() {
   const [resetMethod, setResetMethod] = useState('email'); // 'email', 'sms'
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   const [formData, setFormData] = useState({ name: '', phone: '', email: '', password: '' });
 
   useEffect(() => {
+    const isAdminSession = sessionStorage.getItem('smartledger_admin_session') === 'true';
+    if (isAdminSession) {
+      setIsAdmin(true);
+      setIsAuthenticated(true);
+      setIsAuthLoading(false);
+      return;
+    }
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      setIsAuthenticated(!!user);
+      if (user && user.email?.trim().toLowerCase() === 'admin@ledger.com') {
+        setIsAdmin(true);
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(!!user);
+        setIsAdmin(false);
+      }
       setIsAuthLoading(false);
     });
     return () => unsubscribe();
@@ -84,7 +99,23 @@ function App() {
 
     try {
       if (authMode === 'login') {
+        const inputEmail = (formData.email || '').trim().toLowerCase();
+        if (inputEmail === 'admin@ledger.com' && formData.password === '12345') {
+          sessionStorage.setItem('smartledger_admin_session', 'true');
+          setIsAdmin(true);
+          setIsAuthenticated(true);
+          setShowAuthModal(false);
+          setLoading(false);
+          return;
+        }
         await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        if (inputEmail === 'admin@ledger.com') {
+          sessionStorage.setItem('smartledger_admin_session', 'true');
+          setIsAdmin(true);
+        } else {
+          sessionStorage.removeItem('smartledger_admin_session');
+          setIsAdmin(false);
+        }
         setIsAuthenticated(true);
         setShowAuthModal(false);
       } else if (authMode === 'signup') {
@@ -162,7 +193,30 @@ function App() {
   }
 
   if (isAuthenticated) {
-    return <Dashboard onLogout={() => { auth.signOut(); setIsAuthenticated(false); setShowAuthModal(false); }} />;
+    if (isAdmin) {
+      return (
+        <AdminDashboard
+          onLogout={() => {
+            sessionStorage.removeItem('smartledger_admin_session');
+            auth.signOut().catch(() => {});
+            setIsAdmin(false);
+            setIsAuthenticated(false);
+            setShowAuthModal(false);
+          }}
+        />
+      );
+    }
+    return (
+      <Dashboard
+        onLogout={() => {
+          sessionStorage.removeItem('smartledger_admin_session');
+          auth.signOut().catch(() => {});
+          setIsAuthenticated(false);
+          setIsAdmin(false);
+          setShowAuthModal(false);
+        }}
+      />
+    );
   }
 
   return (
