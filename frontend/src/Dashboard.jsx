@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from './cropImage';
 import { auth, storage, db } from './firebase';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, doc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
-import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft, MoreHorizontal, Edit2, Trash2 } from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft, MoreHorizontal, Edit2, Trash2, MessageSquare } from 'lucide-react';
 import AiVirtualCaImportView from './AiVirtualCaImportView';
 
 const LiveTracker = ({ principalAmount, interestRate, dateOfAccountOpening, interestType, dateOfMaturity, isRD }) => {
@@ -521,7 +521,14 @@ const countryOptions = [
     { code: 'NP', dial: '+977', name: 'Nepal' }
 ];
 
-function SummaryView({ onNavigate }) {
+function SummaryView({ onNavigate, isSubscribed }) {
+    const [invIndex, setInvIndex] = useState(0);
+    const investmentTypes = [
+        { name: 'Gold (24K)', amount: '₹1,24,500', profit: '1,250', percent: '+2.4%', isLoss: false, data: [40, 45, 43, 60, 55, 65, 80] },
+        { name: 'Mutual Funds', amount: '₹45,000', profit: '450', percent: '-1.2%', isLoss: true, data: [80, 75, 60, 65, 55, 45, 30] },
+        { name: 'Stocks (AAPL)', amount: '₹89,000', profit: '4,900', percent: '+5.6%', isLoss: false, data: [20, 30, 25, 45, 40, 65, 90] },
+    ];
+    const currentInv = investmentTypes[invIndex];
     const [stats, setStats] = useState({
         balance: 0, income: 0, expenses: 0,
         weeklyChartHeights: [0, 0, 0, 0, 0, 0, 0],
@@ -560,7 +567,7 @@ function SummaryView({ onNavigate }) {
                 setIsGullakModalOpen(false);
                 setDenominations({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
                 fetchStats();
-                alert('Gullak Cash Hold saved successfully!');
+                showToast('Gullak Cash Hold saved successfully!', 'success');
             }
         }).catch(err => console.error(err));
     };
@@ -576,7 +583,7 @@ function SummaryView({ onNavigate }) {
                             .then(() => {
                                 setDenominations({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
                                 fetchStats();
-                                alert('Cash holds reset successfully!');
+                                showToast('Cash holds reset successfully!', 'success');
                             })
                             .catch(err => console.error(err));
                     }
@@ -868,31 +875,72 @@ function SummaryView({ onNavigate }) {
                     </div>
                 </div>
 
-                {/* Goal Progress */}
+                {/* Compact Goal Progress & Investment UI */}
                 <div style={{
                     background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-                    padding: '28px', borderRadius: '28px',
+                    padding: '24px', borderRadius: '28px',
                     border: '1px solid var(--dash-border)', boxShadow: '0 10px 40px rgba(0,0,0,0.04)',
-                    display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden'
+                    display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', gap: '20px'
                 }}>
                     <div style={{ position: 'absolute', bottom: -100, left: -100, width: 250, height: 250, background: 'radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 0 }}></div>
-                    <div style={{ position: 'relative', zIndex: 1 }}>
-                        <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px', fontWeight: '700', marginBottom: '16px', letterSpacing: '-0.3px' }}>Goal Progress</h3>
-                        <p style={{ margin: 0, color: 'var(--dash-text-muted)', fontSize: '13.5px', marginBottom: '12px', fontWeight: '500' }}>Save ₹1,00,000</p>
-                        
-                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', marginBottom: '20px' }}>
-                            <div style={{ fontSize: '42px', fontWeight: '800', color: 'var(--dash-text)', letterSpacing: '-1.5px', lineHeight: '1' }}>{stats.savedPercentage}%</div>
-                            <div style={{ fontSize: '14px', color: '#0ea5e9', fontWeight: '600', paddingBottom: '6px' }}>On track</div>
+                    
+                    {/* Compact Goal */}
+                    <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '16px', fontWeight: '700', letterSpacing: '-0.3px' }}>Goal Progress</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--dash-text)' }}>{stats.savedPercentage}%</span>
+                                <span style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: '600' }}>Save ₹1L</span>
+                            </div>
+                        </div>
+                        <div style={{ width: '100px', height: '6px', background: 'var(--dash-border-strong)', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${stats.savedPercentage}%`, height: '100%', background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)', borderRadius: '4px' }}></div>
+                        </div>
+                    </div>
+
+                    <div style={{ height: '1px', background: 'var(--dash-border)', width: '100%', position: 'relative', zIndex: 1 }}></div>
+
+                    {/* Investment UI */}
+                    <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '16px', fontWeight: '700', letterSpacing: '-0.3px' }}>Investments</h3>
+                            {isSubscribed ? (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => setInvIndex(prev => prev === 0 ? investmentTypes.length - 1 : prev - 1)} style={{ background: 'var(--dash-card)', border: '1px solid var(--dash-border)', color: 'var(--dash-text)', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&larr;</button>
+                                    <button onClick={() => setInvIndex(prev => (prev + 1) % investmentTypes.length)} style={{ background: 'var(--dash-card)', border: '1px solid var(--dash-border)', color: 'var(--dash-text)', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&rarr;</button>
+                                </div>
+                            ) : null}
                         </div>
 
-                        <div style={{ width: '100%', height: '8px', background: 'var(--dash-border-strong)', borderRadius: '4px', marginBottom: '20px', overflow: 'hidden' }}>
-                            <div style={{ width: `${stats.savedPercentage}%`, height: '100%', background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)', borderRadius: '4px', boxShadow: '0 0 15px rgba(14,165,233,0.5)', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }}></div>
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <p style={{ margin: 0, color: '#38bdf8', fontSize: '14px', fontWeight: '700' }}>₹{Math.max(0, stats.balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Saved</p>
-                            <button style={{ background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(14, 165, 233, 0.2)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(14, 165, 233, 0.1)'; }}>Manage Goal</button>
-                        </div>
+                        {!isSubscribed ? (
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '16px', background: 'rgba(52, 211, 153, 0.05)', borderRadius: '16px', border: '1px dashed rgba(52, 211, 153, 0.3)' }}>
+                                <Lock size={24} color="#34d399" style={{ marginBottom: '8px' }} />
+                                <span style={{ color: 'var(--dash-text)', fontSize: '14px', fontWeight: '600' }}>Premium Feature</span>
+                                <span style={{ color: 'var(--dash-text-muted)', fontSize: '12px', marginTop: '4px' }}>Subscribe to unlock daily tracking.</span>
+                            </div>
+                        ) : (
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div>
+                                        <div style={{ color: 'var(--dash-text-muted)', fontSize: '13px', fontWeight: '600' }}>{currentInv.name}</div>
+                                        <div style={{ color: 'var(--dash-text)', fontSize: '20px', fontWeight: '800', marginTop: '2px' }}>{currentInv.amount}</div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ color: currentInv.isLoss ? '#ef4444' : '#34d399', fontSize: '14px', fontWeight: '700' }}>
+                                            {currentInv.isLoss ? '-' : '+'}₹{currentInv.profit}
+                                        </div>
+                                        <div style={{ color: currentInv.isLoss ? '#ef4444' : '#34d399', fontSize: '12px', fontWeight: '600', background: currentInv.isLoss ? 'rgba(239, 68, 68, 0.1)' : 'rgba(52, 211, 153, 0.1)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' }}>
+                                            {currentInv.percent}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ height: '60px', marginTop: '16px', display: 'flex', alignItems: 'flex-end', gap: '4px' }}>
+                                    {currentInv.data.map((h, i) => (
+                                        <div key={i} style={{ flex: 1, background: currentInv.isLoss ? 'linear-gradient(180deg, #ef4444 0%, rgba(239,68,68,0.1) 100%)' : 'linear-gradient(180deg, #34d399 0%, rgba(52,211,153,0.1) 100%)', height: `${h}%`, borderRadius: '4px 4px 0 0', transition: 'all 0.3s' }}></div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1010,7 +1058,7 @@ function SummaryView({ onNavigate }) {
     );
 }
 
-function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) {
+function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd, isSubscribed, onSubscribe }) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [lendingTab, setLendingTab] = useState('Lent'); // 'Lent' or 'Borrowed'
@@ -1370,6 +1418,41 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
 
             {/* AI TRANSACTIONS ANALYSIS VIEW (Only shown when Analyse option is selected) */}
             {module.id === 'transactions' && isAnalysing && (
+                !isSubscribed ? (
+                    <div style={{ marginBottom: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        <div style={{ background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(52, 211, 153, 0.3)', borderRadius: '24px', padding: '48px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(52, 211, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 0 20px rgba(52, 211, 153, 0.2)' }}>
+                                <Lock size={32} color="#34d399" />
+                            </div>
+                            <h3 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--dash-text)', marginBottom: '12px' }}>AI Analysis Locked</h3>
+                            <p style={{ color: 'var(--dash-text-muted)', fontSize: '14px', lineHeight: '1.6', maxWidth: '400px', margin: '0 auto 24px' }}>
+                                Smart AI Category Clustering and Deep Insight Analysis are premium features. Subscribe to unlock AI-powered transaction analysis.
+                            </p>
+                            <button 
+                                onClick={onSubscribe} 
+                                style={{ 
+                                    padding: '12px 24px', 
+                                    borderRadius: '10px', 
+                                    background: 'linear-gradient(135deg, #34d399, #10b981)', 
+                                    color: '#022c22', 
+                                    border: 'none', 
+                                    fontWeight: '800', 
+                                    fontSize: '14px', 
+                                    cursor: 'pointer', 
+                                    boxShadow: '0 8px 20px rgba(52, 211, 153, 0.4)', 
+                                    transition: 'all 0.3s ease',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}
+                                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 25px rgba(52, 211, 153, 0.5)'; }}
+                                onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(52, 211, 153, 0.4)'; }}
+                            >
+                                <Lock size={16} /> Subscribe Now
+                            </button>
+                        </div>
+                    </div>
+                ) : (
                 <div style={{ marginBottom: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
                     {/* Filter Container */}
                     <div style={{
@@ -1506,6 +1589,7 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
                         </div>
                     </div>
                 </div>
+                )
             )}
 
             {/* General Filters for Transactions */}
@@ -1633,7 +1717,7 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd }) 
                                         ) : col === 'cvv' ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <span>***</span>
-                                                <button onClick={() => alert('OTP sent to your registered email to view CVV.')} style={{ background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}>Verify to View</button>
+                                                <button onClick={() => showToast('OTP sent to your registered email to view CVV.', 'success')} style={{ background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}>Verify to View</button>
                                             </div>
                                         ) : col === 'tenure' || col === 'tenureMonths' ? (
                                             `${row[col]} ${row.interestType ? row.interestType + '(s)' : 'Month(s)'}`
@@ -1732,6 +1816,7 @@ export default function Dashboard({ onLogout }) {
     const [accountData, setAccountData] = useState([]);
     const [cardData, setCardData] = useState([]);
     const [theme, setTheme] = useState('dark'); // default to dark theme
+    const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -1745,10 +1830,29 @@ export default function Dashboard({ onLogout }) {
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
     const [activeSettingsModal, setActiveSettingsModal] = useState(null);
     const [accountAction, setAccountAction] = useState(null);
+    const [deactivateDays, setDeactivateDays] = useState('7');
+    const [factoryResetReason, setFactoryResetReason] = useState('');
+    const [contactUsMessage, setContactUsMessage] = useState('');
+    const [pendingGrievance, setPendingGrievance] = useState(null);
+    const [toast, setToast] = useState({ message: '', type: '', visible: false });
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type, visible: true });
+        setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 4000);
+    };
     const [profilePicture, setProfilePicture] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [userSubscription, setUserSubscription] = useState(null);
     const [subLoading, setSubLoading] = useState(false);
+    
+    const [userProfileData, setUserProfileData] = useState({
+        displayName: '',
+        phoneCode: '+91',
+        phoneNumber: '',
+        dob: '',
+        gender: ''
+    });
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     // Checkout Modal States
     const [checkoutPlan, setCheckoutPlan] = useState(null);
@@ -1806,6 +1910,21 @@ export default function Dashboard({ onLogout }) {
             }
         } catch (e) {
             console.error("Failed to fetch available subscriptions", e);
+        }
+    };
+
+    const fetchPendingGrievance = async (uid) => {
+        try {
+            const q = query(collection(db, 'grievances'), where('userId', '==', uid));
+            const querySnapshot = await getDocs(q);
+            const pendingDoc = querySnapshot.docs.find(doc => doc.data().status === 'Pending');
+            if (pendingDoc) {
+                setPendingGrievance(pendingDoc.data());
+            } else {
+                setPendingGrievance(null);
+            }
+        } catch (e) {
+            console.error("Failed to fetch pending grievances", e);
         }
     };
 
@@ -1884,7 +2003,7 @@ export default function Dashboard({ onLogout }) {
     const handleSubscribe = async (plan) => {
         const res = await loadRazorpay();
         if (!res) {
-            alert('Razorpay SDK failed to load. Are you online?');
+            showToast('Razorpay SDK failed to load. Are you online?', 'error');
             return;
         }
 
@@ -1903,7 +2022,7 @@ export default function Dashboard({ onLogout }) {
             const order = await orderRes.json();
 
             if (!order || !order.id) {
-                alert('Failed to create Razorpay order. Is backend online?');
+                showToast('Failed to create Razorpay order. Is backend online?', 'error');
                 return;
             }
 
@@ -1927,7 +2046,7 @@ export default function Dashboard({ onLogout }) {
                         });
                         
                         if (verifyRes.ok) {
-                            alert('Payment successful! Subscription Activated.');
+                            showToast('Payment successful! Subscription Activated.', 'success');
                             
                             const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
                             const newSub = {
@@ -1955,11 +2074,11 @@ export default function Dashboard({ onLogout }) {
                             });
                             fetchUserSubscription(auth.currentUser?.uid);
                         } else {
-                            alert('Payment verification failed.');
+                            showToast('Payment verification failed.', 'error');
                         }
                     } catch (e) {
                         console.error(e);
-                        alert('Error verifying payment.');
+                        showToast('Error verifying payment.', 'error');
                     }
                 },
                 prefill: {
@@ -1972,12 +2091,108 @@ export default function Dashboard({ onLogout }) {
             };
             const rzp = new window.Razorpay(options);
             rzp.on('payment.failed', function (response){
-                alert('Payment failed: ' + response.error.description);
+                showToast('Payment failed: ' + response.error.description, 'error');
             });
             rzp.open();
         } catch (error) {
             console.error('Subscription error', error);
-            alert('Failed to initiate subscription process.');
+            showToast('Failed to initiate subscription process.', 'error');
+        }
+    };
+
+    const fetchUserProfile = async (uid) => {
+        try {
+            const userDocRef = doc(db, 'users', uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const data = userDocSnap.data();
+                setUserProfileData({
+                    displayName: data.displayName || '',
+                    phoneCode: data.phoneCode || '+91',
+                    phoneNumber: data.phoneNumber || '',
+                    dob: data.dob || '',
+                    gender: data.gender || ''
+                });
+                if (data.displayName) {
+                    setUserName(data.displayName);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching user profile data:', error);
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        if (!auth.currentUser) return;
+        setIsSavingProfile(true);
+        try {
+            // Also update Auth profile display name if changed
+            if (userProfileData.displayName && userProfileData.displayName !== auth.currentUser.displayName) {
+                await updateProfile(auth.currentUser, { displayName: userProfileData.displayName });
+                setUserName(userProfileData.displayName);
+            }
+            
+            const userDocRef = doc(db, 'users', auth.currentUser.uid);
+            await setDoc(userDocRef, {
+                displayName: userProfileData.displayName || userName,
+                email: auth.currentUser.email,
+                phoneCode: userProfileData.phoneCode,
+                phoneNumber: userProfileData.phoneNumber,
+                dob: userProfileData.dob,
+                gender: userProfileData.gender,
+                updatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            setActiveSettingsModal(null);
+        } catch (error) {
+            console.error('Error saving profile:', error);
+            showToast('Failed to save profile changes.', 'error');
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
+
+    const handleSubmitDangerAction = async (type) => {
+        if (!auth.currentUser) return;
+        try {
+            let details = '';
+            if (type === 'deactivate') {
+                details = `User requested temporary account deactivation for ${deactivateDays} days.`;
+            } else if (type === 'delete') {
+                details = `User requested permanent account deletion.`;
+            } else if (type === 'factory_reset') {
+                if (!factoryResetReason.trim()) {
+                    showToast('Please provide a reason for the factory reset.', 'warning');
+                    return;
+                }
+                details = `User requested factory reset (deletion of all financial data). Reason: ${factoryResetReason}`;
+            } else if (type === 'contact_us') {
+                if (!contactUsMessage.trim()) {
+                    showToast('Please enter a message to send.', 'warning');
+                    return;
+                }
+                details = `Contact Us Message: ${contactUsMessage}`;
+            }
+            
+            await addDoc(collection(db, 'grievances'), {
+                userId: auth.currentUser.uid,
+                name: userName,
+                email: auth.currentUser.email,
+                type: 'danger_action',
+                actionType: type,
+                details: details,
+                status: 'Pending',
+                createdAt: new Date().toISOString()
+            });
+            
+            showToast(`Your request for ${type.replace('_', ' ')} has been submitted successfully to the admin support. Action will be taken within 48 hours.`);
+            setAccountAction(null);
+            setFactoryResetReason('');
+            setContactUsMessage('');
+            fetchPendingGrievance(auth.currentUser.uid);
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to submit request.', 'error');
         }
     };
 
@@ -1987,7 +2202,10 @@ export default function Dashboard({ onLogout }) {
                 setUserName(user.displayName || 'User');
                 setProfilePicture(user.photoURL || null);
                 setUserUid(user.uid.substring(0, 6).toUpperCase());
+                setUserProfileData(prev => ({ ...prev, displayName: user.displayName || '' }));
                 fetchUserSubscription(user.uid);
+                fetchUserProfile(user.uid);
+                fetchPendingGrievance(user.uid);
             }
         });
 
@@ -1995,16 +2213,45 @@ export default function Dashboard({ onLogout }) {
             setUserName(auth.currentUser.displayName || 'User');
             setProfilePicture(auth.currentUser.photoURL || null);
             setUserUid(auth.currentUser.uid.substring(0, 6).toUpperCase());
+            setUserProfileData(prev => ({ ...prev, displayName: auth.currentUser.displayName || '' }));
             fetchUserSubscription(auth.currentUser.uid);
+            fetchUserProfile(auth.currentUser.uid);
+            fetchPendingGrievance(auth.currentUser.uid);
         }
 
         fetchAvailableSubscriptions();
+
+        const fetchSystemSettings = async () => {
+            try {
+                const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ collection_name: 'settings' })
+                });
+                if (response.ok) {
+                    const result = await response.json();
+                    const settings = result.data || [];
+                    const systemSettings = settings.find(s => s.id === 'system');
+                    if (systemSettings && systemSettings.maintenanceMode) {
+                        setIsMaintenanceMode(true);
+                    } else {
+                        setIsMaintenanceMode(false);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch settings", e);
+            }
+        };
+        fetchSystemSettings();
+        // optionally refresh settings periodically
+        const settingsTimer = setInterval(fetchSystemSettings, 30000);
 
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
         return () => {
             unsubscribe();
             clearInterval(timer);
+            clearInterval(settingsTimer);
         };
     }, []);
 
@@ -2136,10 +2383,10 @@ export default function Dashboard({ onLogout }) {
 
             setIsCropping(false);
             setImageSrc(null);
-            alert("Profile picture updated successfully!");
+            showToast("Profile picture updated successfully!", 'success');
         } catch (error) {
             console.error("Error uploading profile picture:", error);
-            alert("Failed to upload profile picture. Please try again.");
+            showToast("Failed to upload profile picture. Please try again.", 'error');
         } finally {
             setIsUploading(false);
         }
@@ -2198,7 +2445,7 @@ export default function Dashboard({ onLogout }) {
                         // Find the bank account connected to this card
                         targetBankAccount = accountData.find(a => a.accountType !== undefined && a.connectedCardId === formData.accountId);
                         if (!targetBankAccount) {
-                            alert("Warning: No Bank Account is connected to this Card. Balance will not be updated automatically.");
+                            showToast("Warning: No Bank Account is connected to this Card. Balance will not be updated automatically.", 'warning');
                         }
                     } else {
                         const selectedAcc = accountData.find(a => a.id === formData.accountId);
@@ -2257,6 +2504,80 @@ export default function Dashboard({ onLogout }) {
     };
 
     const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
+    if (isMaintenanceMode) {
+        return (
+            <div data-theme={theme} style={{
+                width: '100vw', height: '100vh',
+                background: 'var(--dash-bg)', color: 'var(--dash-text)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                position: 'fixed', top: 0, left: 0, zIndex: 9999
+            }}>
+                {theme === 'dark' && (
+                    <>
+                        <div className="auth-blob auth-blob-1" style={{ zIndex: 0, opacity: 0.15, pointerEvents: 'none' }}></div>
+                        <div className="auth-blob auth-blob-2" style={{ zIndex: 0, opacity: 0.15, pointerEvents: 'none' }}></div>
+                    </>
+                )}
+                <div style={{
+                    zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    background: 'var(--dash-glass-bg)', padding: '50px', borderRadius: '24px',
+                    border: '1px solid var(--dash-border)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.1)', textAlign: 'center', maxWidth: '500px'
+                }}>
+                    <div style={{ position: 'relative', marginBottom: '30px' }}>
+                        <div style={{
+                            position: 'absolute', top: '-10px', left: '-10px', right: '-10px', bottom: '-10px',
+                            background: 'radial-gradient(circle, rgba(52,211,153,0.3) 0%, transparent 70%)',
+                            borderRadius: '50%', animation: 'spinPulse 4s infinite linear'
+                        }}></div>
+                        <img 
+                            src="/assets/logo.png" 
+                            alt="SmartLedger Logo" 
+                            style={{ 
+                                width: '120px', height: '120px', objectFit: 'cover', borderRadius: '20px',
+                                border: '2px solid rgba(52,211,153,0.5)', position: 'relative', zIndex: 2,
+                                animation: 'float 3s ease-in-out infinite'
+                            }} 
+                        />
+                    </div>
+                    
+                    <h1 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '16px', background: 'linear-gradient(135deg, #34d399, #38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                        System Maintenance
+                    </h1>
+                    
+                    <p style={{ fontSize: '16px', color: 'var(--dash-text-muted)', lineHeight: '1.6', marginBottom: '24px' }}>
+                        We are currently performing scheduled maintenance to upgrade SmartLedger's infrastructure. 
+                        Our systems will be back online shortly.
+                    </p>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(52,211,153,0.1)', padding: '12px 20px', borderRadius: '12px', border: '1px solid rgba(52,211,153,0.2)' }}>
+                        <div style={{ width: '10px', height: '10px', background: '#34d399', borderRadius: '50%', animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite' }}></div>
+                        <span style={{ color: '#34d399', fontWeight: '600', fontSize: '14px', letterSpacing: '0.5px' }}>Upgrading Systems...</span>
+                    </div>
+                </div>
+
+                <style>
+                    {`
+                    @keyframes float {
+                        0% { transform: translateY(0px); }
+                        50% { transform: translateY(-10px); }
+                        100% { transform: translateY(0px); }
+                    }
+                    @keyframes spinPulse {
+                        0% { transform: rotate(0deg) scale(1); opacity: 0.5; }
+                        50% { transform: rotate(180deg) scale(1.1); opacity: 0.8; }
+                        100% { transform: rotate(360deg) scale(1); opacity: 0.5; }
+                    }
+                    @keyframes ping {
+                        75%, 100% { transform: scale(2); opacity: 0; }
+                    }
+                    `}
+                </style>
+            </div>
+        );
+    }
 
     return (
         <div data-theme={theme} style={{
@@ -2449,103 +2770,119 @@ export default function Dashboard({ onLogout }) {
                     background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
                     display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200
                 }}>
-                    <div className="glass-card" style={{ width: '400px', padding: '32px', background: 'var(--surface-dark)', border: '1px solid var(--border-dark)', borderRadius: '24px', display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden' }}>
-                        <h2 style={{ marginBottom: '24px', color: 'var(--text-main)', fontSize: '24px', fontWeight: '600', flexShrink: 0 }}>
+                    <div className="glass-card" style={{ width: activeSettingsModal === 'editProfile' ? '480px' : '400px', padding: '32px', background: theme === 'dark' ? 'var(--dash-glass-bg)' : 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--dash-border)', borderRadius: '24px', display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden', boxShadow: theme === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.3)' : '0 25px 50px -12px rgba(0,0,0,0.1)' }}>
+                        <h2 style={{ marginBottom: '24px', color: 'var(--dash-text)', fontSize: '24px', fontWeight: '800', flexShrink: 0, letterSpacing: '-0.5px' }}>
                             {activeSettingsModal === 'editProfile' && 'Edit Profile'}
                             {activeSettingsModal === 'privacyPolicy' && 'Privacy Policy'}
                             {activeSettingsModal === 'enable2FA' && 'Two-Factor Authentication'}
                             {activeSettingsModal === 'subscriptions' && 'Your Subscriptions'}
+                            {activeSettingsModal === 'contactUs' && 'Contact Us'}
                         </h2>
 
                         <div style={{ color: 'var(--text-muted)', lineHeight: '1.6', flex: 1, overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
                             {activeSettingsModal === 'editProfile' && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-                                        <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', background: '#34d399', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '24px', overflow: 'hidden' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '20px', background: 'rgba(52, 211, 153, 0.05)', borderRadius: '16px', border: '1px solid rgba(52, 211, 153, 0.1)' }}>
+                                        <div style={{ position: 'relative', width: '72px', height: '72px', borderRadius: '50%', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '28px', overflow: 'hidden', boxShadow: '0 8px 16px rgba(52, 211, 153, 0.2)' }}>
                                             {profilePicture ? (
                                                 <img src={profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             ) : (
                                                 userName.charAt(0).toUpperCase()
                                             )}
                                             {isUploading && (
-                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '12px' }}>...</div>
+                                                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: '700' }}>WAIT..</div>
                                             )}
-                                            <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--bg-dark)', borderRadius: '50%', padding: '4px', border: '2px solid var(--surface-dark)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                                                <Camera size={12} color="var(--text-main)" />
+                                            <div style={{ position: 'absolute', bottom: '0px', right: '0px', background: 'var(--dash-bg)', borderRadius: '50%', padding: '6px', border: '2px solid rgba(52, 211, 153, 0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                                                <Camera size={12} color="#34d399" />
                                             </div>
-                                            <input type="file" accept="image/*" onChange={handleFileSelect} disabled={isUploading} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 20 }} />
+                                            <input type="file" accept="image/*" onChange={handleFileSelect} disabled={isUploading} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 20 }} title="Change Profile Picture" />
                                         </div>
-                                        <div>
-                                            <div style={{ color: 'var(--text-main)', fontWeight: '500' }}>Profile Picture</div>
-                                            <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Click icon to upload</div>
-                                        </div>
-                                    </div>
-
-                                    <div className="input-group">
-                                        <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Display Name</label>
-                                        <input type="text" defaultValue={userName} style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
-                                    </div>
-                                    <div className="input-group">
-                                        <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Email Address</label>
-                                        <input type="email" placeholder="your@email.com" style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
-                                    </div>
-                                    <div className="input-group">
-                                        <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Phone Number</label>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <select defaultValue="+91" style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', width: '90px', outline: 'none', transition: 'all 0.2s', appearance: 'none', cursor: 'pointer' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'}>
-                                                {countryOptions.map(country => (
-                                                    <option key={country.code} value={country.dial} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>
-                                                        {country.dial}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input type="tel" placeholder="00000 00000" style={{ flex: 1, padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ color: 'var(--dash-text)', fontWeight: '700', fontSize: '16px', marginBottom: '4px' }}>Profile Picture</div>
+                                            <div style={{ color: 'var(--dash-text-muted)', fontSize: '12.5px', lineHeight: '1.4' }}>Upload a new avatar. Larger images will be resized automatically.</div>
                                         </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', gap: '16px' }}>
-                                        <div className="input-group" style={{ flex: 1 }}>
-                                            <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Date of Birth</label>
-                                            <input type="date" style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s', colorScheme: theme === 'dark' ? 'dark' : 'light' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} />
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                                        <div className="input-group">
+                                            <label style={{ color: 'var(--dash-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                                                <User size={14} color="#34d399" /> Display Name
+                                            </label>
+                                            <input type="text" value={userProfileData.displayName} onChange={(e) => setUserProfileData({...userProfileData, displayName: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', transition: 'all 0.2s', fontSize: '14px', fontWeight: '500' }} onFocus={(e) => { e.target.style.borderColor = '#34d399'; e.target.style.boxShadow = '0 0 0 3px rgba(52, 211, 153, 0.1)'; }} onBlur={(e) => { e.target.style.borderColor = 'var(--dash-border)'; e.target.style.boxShadow = 'none'; }} />
                                         </div>
-                                        <div className="input-group" style={{ flex: 1 }}>
-                                            <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Gender</label>
-                                            <select style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.08)', outline: 'none', transition: 'all 0.2s', appearance: 'none', cursor: 'pointer' }} onFocus={(e) => e.target.style.borderColor = '#34d399'} onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'} defaultValue="">
-                                                <option value="" disabled style={{ background: 'var(--bg-dark)', color: 'var(--text-muted)' }}>Select Gender</option>
-                                                <option value="male" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Male</option>
-                                                <option value="female" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Female</option>
-                                                <option value="others" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Others</option>
-                                            </select>
+                                        
+                                        <div className="input-group">
+                                            <label style={{ color: 'var(--dash-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Email Address
+                                            </label>
+                                            <input type="email" defaultValue={auth.currentUser?.email || ''} readOnly style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.3)', color: 'var(--dash-text-muted)', border: '1px solid var(--dash-border)', outline: 'none', fontSize: '14px', fontWeight: '500', opacity: 0.7, cursor: 'not-allowed' }} title="Email address cannot be changed here" />
+                                        </div>
+
+                                        <div className="input-group">
+                                            <label style={{ color: 'var(--dash-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Phone Number
+                                            </label>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <select value={userProfileData.phoneCode} onChange={(e) => setUserProfileData({...userProfileData, phoneCode: e.target.value})} style={{ padding: '14px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', width: '100px', outline: 'none', transition: 'all 0.2s', appearance: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }} onFocus={(e) => { e.target.style.borderColor = '#34d399'; e.target.style.boxShadow = '0 0 0 3px rgba(52, 211, 153, 0.1)'; }} onBlur={(e) => { e.target.style.borderColor = 'var(--dash-border)'; e.target.style.boxShadow = 'none'; }}>
+                                                    {countryOptions.map(country => (
+                                                        <option key={country.code} value={country.dial} style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>
+                                                            {country.dial}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <input type="tel" value={userProfileData.phoneNumber} onChange={(e) => setUserProfileData({...userProfileData, phoneNumber: e.target.value})} placeholder="00000 00000" style={{ flex: 1, padding: '14px 16px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', transition: 'all 0.2s', fontSize: '14px', fontWeight: '500' }} onFocus={(e) => { e.target.style.borderColor = '#34d399'; e.target.style.boxShadow = '0 0 0 3px rgba(52, 211, 153, 0.1)'; }} onBlur={(e) => { e.target.style.borderColor = 'var(--dash-border)'; e.target.style.boxShadow = 'none'; }} />
+                                            </div>
+                                        </div>
+                                        
+                                        <div style={{ display: 'flex', gap: '16px' }}>
+                                            <div className="input-group" style={{ flex: 1 }}>
+                                                <label style={{ color: 'var(--dash-text)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Date of Birth</label>
+                                                <input type="date" value={userProfileData.dob} onChange={(e) => setUserProfileData({...userProfileData, dob: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', transition: 'all 0.2s', colorScheme: theme === 'dark' ? 'dark' : 'light', fontSize: '14px', fontWeight: '500' }} onFocus={(e) => { e.target.style.borderColor = '#34d399'; e.target.style.boxShadow = '0 0 0 2px rgba(52, 211, 153, 0.1)'; }} onBlur={(e) => { e.target.style.borderColor = 'var(--dash-border)'; e.target.style.boxShadow = 'none'; }} />
+                                            </div>
+                                            <div className="input-group" style={{ flex: 1 }}>
+                                                <label style={{ color: 'var(--dash-text)', display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Gender</label>
+                                                <select value={userProfileData.gender} onChange={(e) => setUserProfileData({...userProfileData, gender: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', transition: 'all 0.2s', appearance: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }} onFocus={(e) => { e.target.style.borderColor = '#34d399'; e.target.style.boxShadow = '0 0 0 2px rgba(52, 211, 153, 0.1)'; }} onBlur={(e) => { e.target.style.borderColor = 'var(--dash-border)'; e.target.style.boxShadow = 'none'; }}>
+                                                    <option value="" disabled style={{ background: 'var(--dash-bg)', color: 'var(--dash-text-muted)' }}>Select Gender</option>
+                                                    <option value="male" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>Male</option>
+                                                    <option value="female" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>Female</option>
+                                                    <option value="others" style={{ background: 'var(--dash-bg)', color: 'var(--dash-text)' }}>Others</option>
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', gap: '12px', background: 'rgba(52, 211, 153, 0.05)', border: '1px solid rgba(52, 211, 153, 0.2)', padding: '12px', borderRadius: '12px', marginTop: '8px' }}>
-                                        <Shield size={24} color="#34d399" style={{ flexShrink: 0 }} />
-                                        <div style={{ fontSize: '12px', color: '#34d399', lineHeight: '1.4' }}>
-                                            <strong>Your Banking Informations</strong> including transactions, bank account, and investments are <strong>END-TO-END Encrypted</strong> (only you can see those transactions). You are secured.
+                                    <div style={{ display: 'flex', gap: '16px', background: theme === 'dark' ? 'rgba(52, 211, 153, 0.05)' : 'rgba(52, 211, 153, 0.15)', border: theme === 'dark' ? '1px solid rgba(52, 211, 153, 0.15)' : '1px solid rgba(52, 211, 153, 0.3)', padding: '16px', borderRadius: '16px', marginTop: '4px' }}>
+                                        <Shield size={24} color={theme === 'dark' ? '#34d399' : '#059669'} style={{ flexShrink: 0 }} />
+                                        <div style={{ fontSize: '12.5px', color: 'var(--dash-text)', lineHeight: '1.5' }}>
+                                            <strong style={{ color: theme === 'dark' ? '#e2e8f0' : '#064e3b' }}>Bank-grade Security.</strong> Your personal data and financial transactions are end-to-end encrypted. We never share your data.
                                         </div>
                                     </div>
-
                                 </div>
                             )}
                             {activeSettingsModal === 'privacyPolicy' && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                                     <p style={{ margin: 0 }}>We take your privacy seriously. Your financial data is encrypted and securely stored. We never share your personal information with third parties without your explicit consent. Read our full policy on our website.</p>
 
-                                    <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '24px' }}>
+                                    <div style={{ borderTop: '1px solid var(--dash-border)', paddingTop: '24px' }}>
                                         <h3 style={{ color: '#ef4444', fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
                                             Danger Zone
                                         </h3>
-                                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
                                             <button
-                                                style={{ flex: 1, padding: '10px', borderRadius: '10px', background: accountAction === 'deactivate' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255, 255, 255, 0.05)', color: accountAction === 'deactivate' ? '#f59e0b' : 'var(--text-main)', border: `1px solid ${accountAction === 'deactivate' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }}
+                                                style={{ flex: '1 1 auto', padding: '10px 14px', borderRadius: '10px', background: accountAction === 'deactivate' ? 'rgba(245, 158, 11, 0.1)' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'), color: accountAction === 'deactivate' ? '#f59e0b' : 'var(--dash-text)', border: `1px solid ${accountAction === 'deactivate' ? 'rgba(245, 158, 11, 0.3)' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)')}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }}
                                                 onClick={() => setAccountAction('deactivate')}
                                             >
-                                                Deactivate Account
+                                                Deactivate
                                             </button>
                                             <button
-                                                style={{ flex: 1, padding: '10px', borderRadius: '10px', background: accountAction === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.05)', color: accountAction === 'delete' ? '#ef4444' : 'var(--text-main)', border: `1px solid ${accountAction === 'delete' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }}
+                                                style={{ flex: '1 1 auto', padding: '10px 14px', borderRadius: '10px', background: accountAction === 'factory_reset' ? 'rgba(168, 85, 247, 0.1)' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'), color: accountAction === 'factory_reset' ? '#a855f7' : 'var(--dash-text)', border: `1px solid ${accountAction === 'factory_reset' ? 'rgba(168, 85, 247, 0.3)' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)')}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }}
+                                                onClick={() => setAccountAction('factory_reset')}
+                                            >
+                                                Factory Reset
+                                            </button>
+                                            <button
+                                                style={{ flex: '1 1 auto', padding: '10px 14px', borderRadius: '10px', background: accountAction === 'delete' ? 'rgba(239, 68, 68, 0.1)' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'), color: accountAction === 'delete' ? '#ef4444' : 'var(--dash-text)', border: `1px solid ${accountAction === 'delete' ? 'rgba(239, 68, 68, 0.3)' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)')}`, cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px', fontWeight: '500' }}
                                                 onClick={() => setAccountAction('delete')}
                                             >
                                                 Delete Account
@@ -2553,22 +2890,50 @@ export default function Dashboard({ onLogout }) {
                                         </div>
 
                                         {accountAction === 'deactivate' && (
-                                            <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '16px', borderRadius: '12px', animation: 'slideUp 0.2s ease forwards' }}>
-                                                <label style={{ display: 'block', color: '#f59e0b', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>Deactivate for how many days?</label>
-                                                <select style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', background: 'var(--bg-dark)', color: 'var(--text-main)', border: '1px solid rgba(245, 158, 11, 0.4)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
-                                                    <option value="7" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>7 Days</option>
-                                                    <option value="14" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>14 Days</option>
-                                                    <option value="30" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>30 Days</option>
-                                                    <option value="90" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>90 Days</option>
-                                                </select>
-                                                <button style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f59e0b', color: '#000', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Confirm Deactivation</button>
+                                            <div style={{ background: theme === 'dark' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '16px', borderRadius: '12px', animation: 'slideUp 0.2s ease forwards' }}>
+                                                {pendingGrievance ? (
+                                                    <div style={{ color: '#f59e0b', fontSize: '14px', fontWeight: 'bold', textAlign: 'center', padding: '10px' }}>You already have an active grievance request in progress. Please wait for it to be resolved.</div>
+                                                ) : (
+                                                    <>
+                                                        <label style={{ display: 'block', color: '#f59e0b', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Deactivate for how many days?</label>
+                                                        <select value={deactivateDays} onChange={(e) => setDeactivateDays(e.target.value)} style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', background: theme === 'dark' ? 'var(--dash-glass-bg)' : '#fff', color: 'var(--dash-text)', border: '1px solid rgba(245, 158, 11, 0.4)', outline: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                                                            <option value="7" style={{ background: 'var(--dash-bg)' }}>7 Days</option>
+                                                            <option value="14" style={{ background: 'var(--dash-bg)' }}>14 Days</option>
+                                                            <option value="30" style={{ background: 'var(--dash-bg)' }}>30 Days</option>
+                                                            <option value="90" style={{ background: 'var(--dash-bg)' }}>90 Days</option>
+                                                        </select>
+                                                        <p style={{ fontSize: '12px', color: 'var(--dash-text-muted)', marginTop: '12px', lineHeight: '1.4' }}>Your account will be temporarily deactivated. You can log back in anytime to reconfirm and restore access.</p>
+                                                        <button onClick={() => handleSubmitDangerAction('deactivate')} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f59e0b', color: '#fff', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Submit Deactivation Request</button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {accountAction === 'factory_reset' && (
+                                            <div style={{ background: theme === 'dark' ? 'rgba(168, 85, 247, 0.05)' : 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)', padding: '16px', borderRadius: '12px', animation: 'slideUp 0.2s ease forwards' }}>
+                                                {pendingGrievance ? (
+                                                    <div style={{ color: '#a855f7', fontSize: '14px', fontWeight: 'bold', textAlign: 'center', padding: '10px' }}>You already have an active grievance request in progress. Please wait for it to be resolved.</div>
+                                                ) : (
+                                                    <>
+                                                        <label style={{ display: 'block', color: '#a855f7', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Reason for Factory Reset</label>
+                                                        <textarea value={factoryResetReason} onChange={(e) => setFactoryResetReason(e.target.value)} placeholder="Explain why you want to delete all financial data..." style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', background: theme === 'dark' ? 'var(--dash-glass-bg)' : '#fff', color: 'var(--dash-text)', border: '1px solid rgba(168, 85, 247, 0.4)', outline: 'none', resize: 'vertical', minHeight: '80px', fontSize: '13px', fontFamily: 'inherit' }}></textarea>
+                                                        <p style={{ fontSize: '12px', color: '#a855f7', marginTop: '12px', lineHeight: '1.4' }}><strong>Warning:</strong> This will permanently wipe all your transactions, budgets, and financial records. Support will resolve this within 48 hours.</p>
+                                                        <button onClick={() => handleSubmitDangerAction('factory_reset')} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#a855f7', color: '#fff', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Submit Reset Request</button>
+                                                    </>
+                                                )}
                                             </div>
                                         )}
 
                                         {accountAction === 'delete' && (
-                                            <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '16px', borderRadius: '12px', color: '#ef4444', fontSize: '13px', lineHeight: '1.5', animation: 'slideUp 0.2s ease forwards' }}>
-                                                <strong>Warning:</strong> If you proceed, your account will be permanently scheduled for deletion. <br /><br /><strong>It will take 30 days</strong> to fully delete your data, during which you can cancel the request by logging back in.
-                                                <button style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#ef4444', color: '#fff', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Confirm Deletion</button>
+                                            <div style={{ background: theme === 'dark' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '16px', borderRadius: '12px', color: '#ef4444', fontSize: '13px', lineHeight: '1.5', animation: 'slideUp 0.2s ease forwards' }}>
+                                                {pendingGrievance ? (
+                                                    <div style={{ fontSize: '14px', fontWeight: 'bold', textAlign: 'center', padding: '10px' }}>You already have an active grievance request in progress. Please wait for it to be resolved.</div>
+                                                ) : (
+                                                    <>
+                                                        <strong>Warning:</strong> If you proceed, your account will be permanently scheduled for deletion. <br /><br /><strong>It will take 30 days</strong> to fully delete your data, during which you can cancel the request by logging back in. Admin support will process this request.
+                                                        <button onClick={() => handleSubmitDangerAction('delete')} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#ef4444', color: '#fff', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>Submit Deletion Request</button>
+                                                    </>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -2625,12 +2990,46 @@ export default function Dashboard({ onLogout }) {
                                     </div>
                                 </div>
                             )}
+
+                            {activeSettingsModal === 'contactUs' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    {pendingGrievance ? (
+                                        <div style={{ background: theme === 'dark' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(52, 211, 153, 0.2)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(52, 211, 153, 0.3)', textAlign: 'center' }}>
+                                            <div style={{ color: '#34d399', fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>Your request is In Progress ⏳</div>
+                                            <p style={{ margin: 0, color: 'var(--dash-text)', fontSize: '14px', lineHeight: '1.5' }}>
+                                                You already have an active ticket open (<strong>{(pendingGrievance.actionType || pendingGrievance.type || 'request').replace('_', ' ').toUpperCase()}</strong>).<br/>
+                                                Our support team will resolve it within 48 hours. You can submit another request once this one is closed.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p style={{ margin: 0, color: 'var(--dash-text)' }}>We are here to help. Describe your issue or grievance below, and our support team will get back to you.</p>
+                                            <textarea 
+                                                value={contactUsMessage} 
+                                                onChange={(e) => setContactUsMessage(e.target.value)} 
+                                                placeholder="Type your message here..." 
+                                                style={{ width: '100%', padding: '16px', borderRadius: '12px', background: theme === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none', transition: 'all 0.2s', resize: 'vertical', minHeight: '120px', fontSize: '14px', fontFamily: 'inherit' }} 
+                                                onFocus={(e) => { e.target.style.borderColor = '#34d399'; e.target.style.boxShadow = '0 0 0 3px rgba(52, 211, 153, 0.1)'; }} 
+                                                onBlur={(e) => { e.target.style.borderColor = 'var(--dash-border)'; e.target.style.boxShadow = 'none'; }}
+                                            ></textarea>
+                                            <button 
+                                                onClick={() => handleSubmitDangerAction('contact_us')} 
+                                                style={{ width: '100%', padding: '14px', borderRadius: '14px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: '700', boxShadow: '0 6px 20px rgba(52, 211, 153, 0.3)', transition: 'all 0.3s ease' }} 
+                                                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(52, 211, 153, 0.45)'; }} 
+                                                onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.3)'; }}
+                                            >
+                                                Submit Ticket
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', flexShrink: 0 }}>
-                            <button className="btn-secondary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'transparent', color: 'var(--text-main)', border: '1px solid rgba(255, 255, 255, 0.1)', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: '500' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'; }} onClick={() => setActiveSettingsModal(null)}>Close</button>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid var(--dash-border)', flexShrink: 0 }}>
+                            <button className="btn-secondary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'transparent', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: '600' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }} onClick={() => setActiveSettingsModal(null)}>Close</button>
                             {(activeSettingsModal === 'editProfile' || activeSettingsModal === 'enable2FA') && (
-                                <button className="btn-primary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: '600', boxShadow: '0 4px 15px rgba(52, 211, 153, 0.3)', transition: 'all 0.2s ease' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(52, 211, 153, 0.3)'; }} onClick={() => setActiveSettingsModal(null)}>Save Changes</button>
+                                <button className="btn-primary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#022c22', border: 'none', cursor: isSavingProfile ? 'wait' : 'pointer', fontWeight: '700', boxShadow: '0 4px 15px rgba(52, 211, 153, 0.3)', transition: 'all 0.2s ease', opacity: isSavingProfile ? 0.7 : 1 }} onMouseOver={(e) => { if(!isSavingProfile) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.4)'; } }} onMouseOut={(e) => { if(!isSavingProfile) { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(52, 211, 153, 0.3)'; } }} onClick={activeSettingsModal === 'editProfile' ? handleSaveProfile : () => setActiveSettingsModal(null)} disabled={isSavingProfile}>{isSavingProfile ? 'Saving...' : 'Save Changes'}</button>
                             )}
                         </div>
                     </div>
@@ -2980,7 +3379,8 @@ export default function Dashboard({ onLogout }) {
                                             { id: 'editProfile', label: 'Edit Profile', icon: <User size={16} /> },
                                             { id: 'privacyPolicy', label: 'Privacy Policy', icon: <Shield size={16} /> },
                                             { id: 'enable2FA', label: 'Enable 2FA', icon: <Lock size={16} /> },
-                                            { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard size={16} /> }
+                                            { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard size={16} /> },
+                                            { id: 'contactUs', label: 'Contact Us', icon: <MessageSquare size={16} /> }
                                         ].map((item, idx) => (
                                             <button key={idx} onClick={() => { setActiveSettingsModal(item.id); setShowProfileDropdown(false); }} style={{
                                                 display: 'flex', alignItems: 'center', gap: '12px',
@@ -3023,32 +3423,89 @@ export default function Dashboard({ onLogout }) {
                     width: '100%',
                     ...(activeModule.id === 'aica_import' ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {})
                 }}>
-                    {activeModule.isSummary ? (
-                        <SummaryView onNavigate={(id) => setActiveModule(MODULES.find(m => m.id === id))} />
-                    ) : activeModule.id === 'aica_import' ? (
-                        <AiVirtualCaImportView
-                            userUid={userUid}
-                            refreshTrigger={refreshTrigger}
-                            onTransactionsSaved={() => setRefreshTrigger(prev => prev + 1)}
-                        />
-                    ) : (
-                        <ModuleView
-                            module={activeModule}
-                            refreshTrigger={refreshTrigger}
-                            userUid={userUid}
-                            onBack={() => setActiveModule(MODULES[0])}
-                            onAdd={() => { setFormData({}); setIsAddModalOpen(true); }}
-                            onEdit={(row) => {
-                                if (row._originalItem && row._endpoint === '/api/bankaccounts') {
-                                    setFormData(row._originalItem);
-                                    setActiveModule(MODULES.find(m => m.id === 'bankaccounts'));
-                                } else {
-                                    setFormData(row._originalItem || row);
-                                }
-                                setIsAddModalOpen(true);
-                            }}
-                        />
-                    )}
+                    {(() => {
+                        const isPremiumModule = ['aica_import', 'investments', 'goldsilverinvestments', 'mutualfunds'].includes(activeModule.id);
+                        const isSubscribed = userSubscription?.status?.toLowerCase() === 'active';
+
+                        if (isPremiumModule && !isSubscribed) {
+                            return (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px', textAlign: 'center', animation: 'fadeIn 0.4s ease-out', flex: 1 }}>
+                                    <div style={{ background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(52, 211, 153, 0.3)', borderRadius: '24px', padding: '48px', maxWidth: '500px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1)' }}>
+                                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(52, 211, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 0 30px rgba(52, 211, 153, 0.2)' }}>
+                                            <Lock size={40} color="#34d399" />
+                                        </div>
+                                        <h2 style={{ fontSize: '28px', fontWeight: '800', color: 'var(--dash-text)', marginBottom: '16px', letterSpacing: '-0.5px' }}>Premium Feature Locked</h2>
+                                        <p style={{ color: 'var(--dash-text-muted)', fontSize: '15px', lineHeight: '1.6', marginBottom: '32px' }}>
+                                            Unlock the full potential of SmartLedger! Get exclusive access to AI-powered insights, advanced investment tracking, and much more. Elevate your financial journey today.
+                                        </p>
+                                        <button 
+                                            onClick={() => {
+                                                setActiveSettingsModal('subscriptions');
+                                            }} 
+                                            style={{ 
+                                                padding: '16px 32px', 
+                                                borderRadius: '12px', 
+                                                background: 'linear-gradient(135deg, #34d399, #10b981)', 
+                                                color: '#022c22', 
+                                                border: 'none', 
+                                                fontWeight: '800', 
+                                                fontSize: '16px', 
+                                                cursor: 'pointer', 
+                                                boxShadow: '0 10px 25px rgba(52, 211, 153, 0.4)', 
+                                                transition: 'all 0.3s ease',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                width: '100%'
+                                            }}
+                                            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 15px 30px rgba(52, 211, 153, 0.5)'; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(52, 211, 153, 0.4)'; }}
+                                        >
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                            Subscribe Now
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        if (activeModule.isSummary) {
+                            return <SummaryView onNavigate={(id) => setActiveModule(MODULES.find(m => m.id === id))} isSubscribed={isSubscribed} />;
+                        } else if (activeModule.id === 'aica_import') {
+                            return (
+                                <AiVirtualCaImportView
+                                    userUid={userUid}
+                                    refreshTrigger={refreshTrigger}
+                                    onTransactionsSaved={() => setRefreshTrigger(prev => prev + 1)}
+                                />
+                            );
+                        } else {
+                            return (
+                                <ModuleView
+                                    module={activeModule}
+                                    refreshTrigger={refreshTrigger}
+                                    userUid={userUid}
+                                    isSubscribed={isSubscribed}
+                                    onSubscribe={() => {
+                                        setShowProfileDropdown(true);
+                                        setActiveSettingsModal('subscriptions');
+                                    }}
+                                    onBack={() => setActiveModule(MODULES[0])}
+                                    onAdd={() => { setFormData({}); setIsAddModalOpen(true); }}
+                                    onEdit={(row) => {
+                                        if (row._originalItem && row._endpoint === '/api/bankaccounts') {
+                                            setFormData(row._originalItem);
+                                            setActiveModule(MODULES.find(m => m.id === 'bankaccounts'));
+                                        } else {
+                                            setFormData(row._originalItem || row);
+                                        }
+                                        setIsAddModalOpen(true);
+                                    }}
+                                />
+                            );
+                        }
+                    })()}
                 </div>
             </div>
 
@@ -3247,6 +3704,38 @@ export default function Dashboard({ onLogout }) {
                             )}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Custom Toast UI */}
+            {toast.visible && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '40px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: theme === 'dark' ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)',
+                    border: `1px solid ${toast.type === 'error' ? '#ef4444' : toast.type === 'warning' ? '#f59e0b' : '#34d399'}`,
+                    color: 'var(--dash-text)',
+                    padding: '14px 28px',
+                    borderRadius: '50px',
+                    boxShadow: `0 10px 40px ${toast.type === 'error' ? 'rgba(239,68,68,0.2)' : toast.type === 'warning' ? 'rgba(245,158,11,0.2)' : 'rgba(52,211,153,0.2)'}`,
+                    zIndex: 10000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    animation: 'slideUp 0.3s ease forwards',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)'
+                }}>
+                    <div style={{
+                        width: '10px', height: '10px', borderRadius: '50%',
+                        background: toast.type === 'error' ? '#ef4444' : toast.type === 'warning' ? '#f59e0b' : '#34d399',
+                        boxShadow: `0 0 10px ${toast.type === 'error' ? '#ef4444' : toast.type === 'warning' ? '#f59e0b' : '#34d399'}`
+                    }}></div>
+                    {toast.message}
                 </div>
             )}
         </div>

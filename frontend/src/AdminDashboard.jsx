@@ -11,7 +11,26 @@ import { auth, db } from './firebase';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
+import 'react-quill-new/dist/quill.snow.css';
 
+const ExpandableMessage = ({ text }) => {
+    const [expanded, setExpanded] = useState(false);
+    const isLong = text && text.length > 60;
+    
+    return (
+        <div>
+            <span>{expanded ? text : (isLong ? text.substring(0, 60) + '...' : text)}</span>
+            {isLong && (
+                <span 
+                    onClick={() => setExpanded(!expanded)} 
+                    style={{ color: '#10b981', cursor: 'pointer', marginLeft: '8px', fontSize: '11px', fontWeight: 'bold', display: 'inline-block' }}
+                >
+                    {expanded ? 'Show Less' : 'View Full'}
+                </span>
+            )}
+        </div>
+    );
+};
 export default function AdminDashboard({ onLogout }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState('dark');
@@ -87,6 +106,23 @@ export default function AdminDashboard({ onLogout }) {
     } catch (error) {
       console.error(`Admin Firestore Read Error (${collectionName}):`, error);
       return [];
+    }
+  };
+
+  const adminFirestoreDelete = async (collectionName, documentId) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/admin/firestore-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collection_name: collectionName, document_id: documentId })
+      });
+      if (!response.ok) {
+         const errText = await response.text();
+         throw new Error(errText);
+      }
+    } catch (error) {
+      console.error("Admin Firestore Delete Error:", error);
+      throw error;
     }
   };
 
@@ -265,6 +301,17 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
+  const handleDeleteSubscription = async (subId) => {
+    if (!window.confirm("Are you sure you want to delete this subscription tier?")) return;
+    try {
+      await adminFirestoreDelete('subscriptions', subId);
+      setSubscriptionsList(subscriptionsList.filter(s => s.id !== subId));
+      alert("Subscription Tier Deleted Successfully!");
+    } catch (error) {
+      alert("Failed to delete subscription tier.");
+    }
+  };
+
   // Fetch billing data from backend (subscriptions, coupons, grievances)
   const fetchBillingData = async () => {
     try {
@@ -277,10 +324,12 @@ export default function AdminDashboard({ onLogout }) {
       const grievs = await adminFirestoreRead('grievances');
       if (grievs.length > 0) {
         setGrievancesList(grievs);
-      } else {
-        setGrievancesList([
-          { id: 'g_1', uid: '109245', name: 'Standard User', email: 'user@ledger.com', phone: '+1234567890', message: 'I am unable to export my ledger to CSV.', status: 'Pending', createdAt: new Date().toISOString() }
-        ]);
+      }
+
+      const settings = await adminFirestoreRead('settings');
+      const systemSettings = settings.find(s => s.id === 'system');
+      if (systemSettings && systemSettings.maintenanceMode !== undefined) {
+        setIsMaintenanceMode(systemSettings.maintenanceMode);
       }
     } catch (e) {
       console.error("Firebase fetch error", e);
@@ -444,6 +493,50 @@ export default function AdminDashboard({ onLogout }) {
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLogPage, setAuditLogPage] = useState(1);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+
+  const notifications = useMemo(() => {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const activeGrievances = grievancesList
+      .filter(g => g.status !== 'Resolved')
+      .map(g => {
+        let date = new Date(g.createdAt || g.timestamp);
+        if (isNaN(date.getTime())) date = now;
+        return {
+          id: g.id,
+          type: 'grievance',
+          title: `New Grievance from ${g.name || g.userName || 'User'}`,
+          message: g.message || g.details || 'No message provided.',
+          date: date,
+          isNew: true
+        };
+      });
+
+    const importantLogs = auditLogs
+      .filter(log => log.severity === 'CRITICAL' || log.severity === 'WARNING')
+      .map(log => {
+        let dateStr = log.timestamp.replace(/ (AM|PM)/i, ' $1');
+        let date = new Date(dateStr);
+        if (isNaN(date.getTime())) date = now;
+        return {
+          id: log.id,
+          type: 'system',
+          title: `System ${log.severity}`,
+          message: log.event,
+          date: date,
+          severity: log.severity,
+          isNew: true
+        };
+      });
+
+    let allNotifs = [...activeGrievances, ...importantLogs];
+    allNotifs = allNotifs.filter(n => n.date >= sevenDaysAgo);
+    allNotifs.sort((a, b) => b.date - a.date);
+    return allNotifs;
+  }, [grievancesList, auditLogs]);
   const [auditLogStartDate, setAuditLogStartDate] = useState('');
   const [auditLogEndDate, setAuditLogEndDate] = useState('');
   const logsPerPage = 10;
@@ -677,6 +770,9 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
+  const [usersCurrentPage, setUsersCurrentPage] = useState(1);
+  const usersPerPage = 10;
+
   const filteredUsers = usersList.filter(u => {
     const matchesSearch =
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -685,6 +781,9 @@ export default function AdminDashboard({ onLogout }) {
     const matchesFilter = userFilter === 'ALL' || u.status.toUpperCase() === userFilter;
     return matchesSearch && matchesFilter;
   });
+
+  const totalUserPages = Math.ceil(filteredUsers.length / usersPerPage) || 1;
+  const currentUsers = filteredUsers.slice((usersCurrentPage - 1) * usersPerPage, usersCurrentPage * usersPerPage);
   const handleExportAuditLogs = () => {
     let filteredLogs = auditLogs;
     if (auditLogStartDate) {
@@ -904,7 +1003,15 @@ export default function AdminDashboard({ onLogout }) {
                 cursor: 'pointer',
                 transition: 'all 0.3s ease'
               }}
-              onClick={() => setIsMaintenanceMode(!isMaintenanceMode)}
+              onClick={async () => {
+                const newValue = !isMaintenanceMode;
+                setIsMaintenanceMode(newValue);
+                try {
+                  await adminFirestoreWrite('settings', 'system', { maintenanceMode: newValue });
+                } catch (e) {
+                  console.error("Failed to update maintenance mode", e);
+                }
+              }}
               title="Toggle System Maintenance Mode"
             >
               <div
@@ -948,9 +1055,86 @@ export default function AdminDashboard({ onLogout }) {
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            <button className="admin-header-btn" title="Notifications">
-              <Bell size={18} />
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button 
+                className="admin-header-btn" 
+                title="Notifications"
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              >
+                <Bell size={18} />
+                {notifications.length > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '4px', right: '4px',
+                    width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%'
+                  }} />
+                )}
+              </button>
+
+              {isNotificationsOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: '0',
+                  marginTop: '10px', width: '350px', background: 'var(--dash-bg)',
+                  border: '1px solid var(--dash-border)', borderRadius: '12px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 100,
+                  display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '16px', borderBottom: '1px solid var(--dash-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700' }}>Notifications</h3>
+                    <span className="admin-badge admin-badge-warning">{notifications.length} New</span>
+                  </div>
+                  
+                  <div style={{ maxHeight: showAllNotifications ? '400px' : '300px', overflowY: 'auto' }}>
+                    {notifications.length > 0 ? (
+                      (showAllNotifications ? notifications : notifications.slice(0, 4)).map(n => (
+                        <div key={n.id} style={{ 
+                          padding: '14px 16px', borderBottom: '1px solid var(--dash-border)',
+                          cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start'
+                        }}
+                        onClick={() => {
+                          setIsNotificationsOpen(false);
+                          setActiveTab(n.type === 'grievance' ? 'grievances' : 'audit_logs');
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--dash-glass-bg)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <div style={{ 
+                            padding: '8px', borderRadius: '8px',
+                            background: n.type === 'grievance' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            color: n.type === 'grievance' ? '#3b82f6' : '#ef4444'
+                          }}>
+                            {n.type === 'grievance' ? <MessageSquare size={16} /> : <ShieldAlert size={16} />}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--dash-text)', marginBottom: '4px' }}>
+                              {n.title}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--dash-text-muted)', lineHeight: '1.4' }}>
+                              {n.message.length > 80 ? n.message.substring(0, 80) + '...' : n.message}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', marginTop: '6px', opacity: 0.7 }}>
+                              {n.date.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '24px', textAlign: 'center', color: 'var(--dash-text-muted)', fontSize: '13px' }}>
+                        No new notifications
+                      </div>
+                    )}
+                  </div>
+                  
+                  {notifications.length > 4 && !showAllNotifications && (
+                    <div 
+                      style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid var(--dash-border)', background: 'var(--dash-glass-bg)', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#10b981' }}
+                      onClick={() => setShowAllNotifications(true)}
+                    >
+                      View All Notifications
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="admin-profile-pill" title="Admin Profile">
               {currentUser?.photoURL ? (
@@ -1191,9 +1375,9 @@ export default function AdminDashboard({ onLogout }) {
                 </div>
               </div>
 
-              <div className="admin-table-wrapper">
+              <div className="admin-table-wrapper" style={{ maxHeight: '600px', overflowY: 'auto' }}>
                 <table className="admin-table">
-                  <thead>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--dash-bg)' }}>
                     <tr>
                       <th>USER PROFILE</th>
                       <th>UID</th>
@@ -1205,7 +1389,7 @@ export default function AdminDashboard({ onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map(user => (
+                    {currentUsers.map(user => (
                       <tr key={user.id}>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1292,6 +1476,30 @@ export default function AdminDashboard({ onLogout }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--dash-text-muted)' }}>
+                  Showing {filteredUsers.length === 0 ? 0 : (usersCurrentPage - 1) * usersPerPage + 1} to {Math.min(usersCurrentPage * usersPerPage, filteredUsers.length)} of {filteredUsers.length} Users
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    disabled={usersCurrentPage === 1}
+                    onClick={() => setUsersCurrentPage(prev => Math.max(prev - 1, 1))}
+                    style={{ padding: '6px 14px', borderRadius: '8px', background: usersCurrentPage === 1 ? 'transparent' : 'var(--dash-glass-bg)', color: usersCurrentPage === 1 ? 'var(--dash-text-muted)' : 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: usersCurrentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: '600', transition: 'all 0.2s' }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: '13px', fontWeight: '600', color: 'var(--dash-text)' }}>
+                    Page {usersCurrentPage} of {totalUserPages}
+                  </span>
+                  <button
+                    disabled={usersCurrentPage === totalUserPages}
+                    onClick={() => setUsersCurrentPage(prev => Math.min(prev + 1, totalUserPages))}
+                    style={{ padding: '6px 14px', borderRadius: '8px', background: usersCurrentPage === totalUserPages ? 'transparent' : 'var(--dash-glass-bg)', color: usersCurrentPage === totalUserPages ? 'var(--dash-text-muted)' : 'var(--dash-text)', border: '1px solid var(--dash-border)', cursor: usersCurrentPage === totalUserPages ? 'not-allowed' : 'pointer', fontWeight: '600', transition: 'all 0.2s' }}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1700,18 +1908,19 @@ export default function AdminDashboard({ onLogout }) {
                   <tbody>
                     {grievancesList.length > 0 ? grievancesList.map(g => (
                       <tr key={g.id}>
-                        <td style={{ fontWeight: '600', color: 'var(--dash-text-muted)', fontSize: '12px' }}>{g.uid}</td>
+                        <td style={{ fontWeight: '600', color: 'var(--dash-text-muted)', fontSize: '12px' }}>{(g.uid || g.userId || '000000').substring(0, 6).toUpperCase()}</td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: '700', color: 'var(--dash-text)' }}>{g.name}</span>
-                            <span style={{ fontSize: '12px', color: 'var(--dash-text-muted)' }}>{g.email}</span>
-                            <span style={{ fontSize: '12px', color: 'var(--dash-text-muted)' }}>{g.phone || 'N/A'}</span>
+                            <span style={{ fontWeight: '700', color: 'var(--dash-text)' }}>{g.name || g.userName || 'Unknown'}</span>
+                            {(g.email) && <span style={{ fontSize: '12px', color: 'var(--dash-text-muted)' }}>{g.email}</span>}
+                            {(g.phone) && <span style={{ fontSize: '12px', color: 'var(--dash-text-muted)' }}>{g.phone}</span>}
                           </div>
                         </td>
                         <td style={{ maxWidth: '300px' }}>
-                          <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.4', color: 'var(--dash-text)', wordWrap: 'break-word' }}>
-                            {g.message}
-                          </p>
+                          <div style={{ margin: 0, fontSize: '13px', lineHeight: '1.4', color: 'var(--dash-text)', wordWrap: 'break-word' }}>
+                            {g.type && <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#10b981', marginBottom: '4px' }}>{(g.actionType || g.type).replace('_', ' ').toUpperCase()}</div>}
+                            <ExpandableMessage text={g.message || g.details || 'No message provided.'} />
+                          </div>
                         </td>
                         <td>
                           <span className={`admin-badge ${g.status === 'Resolved' ? 'admin-badge-success' : 'admin-badge-warning'}`}>
@@ -1801,6 +2010,14 @@ export default function AdminDashboard({ onLogout }) {
                               onClick={() => openEditModal(sub)}
                             >
                               <Edit2 size={14} />
+                            </button>
+                            <button
+                              className="admin-action-btn"
+                              title="Delete Tier"
+                              style={{ color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                              onClick={() => handleDeleteSubscription(sub.id)}
+                            >
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>

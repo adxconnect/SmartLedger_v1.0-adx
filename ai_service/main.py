@@ -156,6 +156,10 @@ class AdminFirestoreWriteRequest(BaseModel):
 class AdminFirestoreReadRequest(BaseModel):
     collection_name: str
 
+class AdminFirestoreDeleteRequest(BaseModel):
+    collection_name: str
+    document_id: str
+
 # --- Static CA Tax Knowledge Base (Built-in RAG Rules for Zero Cost) ---
 INDIAN_TAX_KNOWLEDGE_BASE = """
 ### CHARTERED ACCOUNTANT STATUTORY TAX RULES (INDIA):
@@ -674,6 +678,18 @@ def admin_firestore_read(req: AdminFirestoreReadRequest):
         return {"status": "success", "data": results}
     except Exception as e:
         print(f"Firestore Read Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/firestore-delete")
+def admin_firestore_delete(req: AdminFirestoreDeleteRequest):
+    try:
+        from firebase_admin import firestore
+        db = firestore.client()
+        db.collection(req.collection_name).document(req.document_id).delete()
+        audit_logger.add_log('SYSTEM', f'Admin Firestore Delete from {req.collection_name}/{req.document_id}', 'admin@ledger.com', 'INFO')
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Firestore Delete Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
