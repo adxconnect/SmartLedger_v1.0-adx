@@ -441,7 +441,98 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
         }
     ]);
 
-    const [conversations, setConversations] = useState([]);
+    const initialConversations = [
+        {
+            id: '791208b9-dc61-4431-834f-acf0030474fa',
+            title: 'Starting AI Service And Frontend',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Fixing SmartLedger Backend Startup\n\nUSER Objective: Successfully launch the Spring Boot backend service to enable full-stack application functionality.\nGoals:\n1. Identify and resolve the Maven build errors occurring within the `backend` directory.\n2. Ensure the Spring Boot application initializes correctly by addressing dependency or resource configuration issues.\n3. Validate that the backend, AI service, and frontend are all running and communicating as expected for a complete SmartLedger deployment.' }
+            ]
+        },
+        {
+            id: '048457f4-27d1-4f07-a77c-15697b0c30dc',
+            title: 'Configuring Dynamic Machine Pricing',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Implementing Dynamic Product Variants\nObjective: Enable multi-specification product variants with tiered pricing.\nGoals:\n1. Extend `AdminAddProductModal` and `AdminEditProductModal` to allow administrators to define and manage multiple product variants (name, price, MRP).\n2. Update the backend schema interaction to store these variants within a new `_variants` JSON field in the product features.\n3. Update `ProductDetailModal` to dynamically render these variants, allowing customers to select specific configurations and update the displayed price accordingly.\n4. Refactor the `addToCart` logic to ensure that variant-specific names, IDs, and prices are accurately reflected when items are added to the cart.\n5. Maintain consistent glassmorphic styling and ensure the component state correctly synchronizes when the modal opens and closes.' }
+            ]
+        },
+        {
+            id: 'de6031cc-a3f0-45f9-9e31-dd80b3673e00',
+            title: 'Fixing Subscription Verification Status',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'The user\'s objective is to resolve a data inconsistency where business subscriptions remain stuck in "Verification in Progress" even after approval.\n\nGoals:\n1. Update the `updateAdminTransactionStatus` server action to automatically sync the associated `business_subscriptions` status when a transaction is approved or declined.\n2. Execute a one-time data fix script to update existing, already approved subscriptions that were previously left in a "pending" state.\n3. Ensure future consistency between transaction approvals and subscription activation.' }
+            ]
+        },
+        {
+            id: '295bcb14-1e44-4fef-9f47-5f6999bc6750',
+            title: 'Fetching Real Dashboard Data',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Professionalizing Ledger Admin Metrics\n\nObjective: Clean up and professionalize the Admin Dashboard by removing hardcoded legacy dummy data and replacing it with accurate, live system information.\n\nGoals:\n1. Replace the placeholder user list (which erroneously contained 5 dummy accounts) with the actual, verified count of 2 users (1 User + 1 Admin).\n2. Clean the System Overview KPIs to display accurate, live metrics instead of static hardcoded figures.\n3. Ensure all dashboard UI elements (Asset values, User counts, and AI performance telemetry) are correctly tethered to the actual backend source of truth to reflect the current state of the platform accurately.' }
+            ]
+        },
+        {
+            id: '289b6778-58ad-4ca7-9537-8c1eaafb6b04',
+            title: 'Updating Frontend API Port',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Updating Frontend API Port\n\nMain Objective:\nUpdate the frontend application to communicate with the backend service on port 8000 instead of 8080.\n\nGoals:\n1. Identify all occurrences of `localhost:8080` in the frontend source code.\n2. Replace the hardcoded `8080` port references with `8000` to align with the currently running Uvicorn server.\n3. Validate that the frontend successfully connects and fetches data from the backend after the port adjustment.' }
+            ]
+        },
+        {
+            id: '0e8fac37-f7ab-46aa-8de2-3a34446842b5',
+            title: 'Fixing AiVirtualCaImportView Component Errors',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Fixing AiVirtualCaImportView Component Errors\n\nUSER Objective:\nIdentify and resolve the critical error currently affecting the `AiVirtualCaImportView.jsx` file to restore the functionality of the AI Virtual CA import interface.\n\nGoals:\n1. Examine the contents of `AiVirtualCaImportView.jsx` to pinpoint the cause of the syntax or runtime error.\n2. Analyze the terminal output or browser console logs to diagnose the specific nature of the failure.\n3. Apply necessary code fixes to ensure the component renders correctly and integrates seamlessly with the existing AI parsing flow.\n4. Verify the fix by confirming that the `AiVirtualCaImportView` interface stabilizes and functions as expected within the dashboard.' }
+            ]
+        },
+        {
+            id: 'c26f8a17-9972-40c3-9904-6a5a7b27b12f',
+            title: 'Updating Admin Dashboard Branding',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Refining Admin Dashboard Interface\n\nUSER Objective: Optimize the Admin Dashboard visual layout and navigation for a premium, professional user experience.\nGoals:\n1. Increase the height and vertical presence of the `admin-header` to improve its visual weight and accessibility.\n2. Finalize branding aesthetics by ensuring consistent spacing and professional text sizing for the "Enterprise Admin" sub-brand.\n3. Validate overall layout responsiveness, ensuring that header and sidebar adjustments maintain the project\'s signature glassmorphic design and seamless interactions.' }
+            ]
+        },
+        {
+            id: '275ea658-80d7-442c-920b-aa22df5a2b5c',
+            title: 'Creating Admin Login Credentials',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Refining Admin Dashboard UI\n\nUSER Objective:\nFinalize the visual consistency of the Admin and user dashboards by rounding component edges and maintaining layout stability.\n\nGoals:\n1. Update UI components in `AdminDashboard.jsx` to apply rounded corners to tables and buttons, replacing sharp, pointed edges with a modern, polished aesthetic.\n2. Ensure all UI containers maintain a cohesive glassmorphic design language.\n3. Validate that structural changes to tables do not introduce layout regressions or scroll-induced UI shifting.' }
+            ]
+        },
+        {
+            id: '5d462342-9d45-47b9-bd27-474bd1515fb5',
+            title: 'Fixing Loading Overlay Alignment',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Optimizing Ledger Transaction Table\n\nUSER Objective: \nModernize the Ledger transaction interface for professional data management.\n\nGoals:\n1. Fix the table header so it remains sticky at the top while scrolling through the transaction list.\n2. Ensure the sticky header maintains visual consistency with the existing table structure and glassmorphic aesthetic.\n3. Verify that the scrolling behavior remains smooth and responsive for the transaction dashboard, ensuring readability when working with the 10-records-per-page limit.' }
+            ]
+        },
+        {
+            id: '9e21d66b-47db-4632-b196-44094b2a5252',
+            title: 'Fixing Ledger AI UI Layout',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Implementing Ledger AI Buffering UI\n\nObjective: Enhance the Ledger AI transaction extraction process by replacing the static loading text with a premium, animated buffering overlay to improve the user experience.\n\nGoals:\n1. Integrate the `extraction-overlay` components into the `AiVirtualCaImportView.jsx` component within the `handleAiParseStatement` execution block.\n2. Ensure the overlay is conditionally rendered based on the `aiLoading` state.\n3. Configure the loading animation with a visually consistent, glassmorphism-themed design that uses the orbital rings, shimmer progress bars, and floating particles created in the CSS.\n4. Maintain a responsive, full-screen interaction that provides clear, non-distracting user feedback during the AI processing phase.' }
+            ]
+        },
+        {
+            id: '782f6486-166a-4b37-b4e8-4ce8476260b9',
+            title: 'Debugging Console Errors',
+            history: [
+                { sender: 'ai', text: '👋 Welcome to Ledger AI! How can I help you today?' },
+                { sender: 'user', text: 'Refining Ledger AI Interface\n\nUSER Objective:\nFinalize the Ledger AI conversational experience by implementing a distraction-free, high-fidelity interface.\n\nGoals:\n1. Optimize UI layout and padding to eliminate excessive vertical whitespace and provide a compact, professional chat view.\n2. Enhance visual consistency by ensuring glassmorphism effects are accurately rendered and theme-aware across both Light and Dark mode states.\n3. Maintain focus by removing redundant brand text and refining component interactions to prioritize screen real estate for financial advisory content.' }
+            ]
+        }
+    ];
+
+    const [conversations, setConversations] = useState(initialConversations);
     const [showHistorySidebar, setShowHistorySidebar] = useState(false);
     const [caMetrics, setCaMetrics] = useState({
         annualIncome: 1200000,
@@ -1881,9 +1972,14 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                             ) : (
                                 conversations.map((conv, idx) => (
                                     <div key={conv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--dash-border)', borderRadius: '12px', padding: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onClick={() => { setChatHistory(conv.history); setShowHistorySidebar(false); }} onMouseOver={(e) => { e.currentTarget.style.borderColor = '#818cf8'; e.currentTarget.style.background = 'rgba(129, 140, 248, 0.05)'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--dash-border)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; }}>
-                                        <span style={{ fontSize: '14px', color: 'var(--dash-text)', fontWeight: '500' }}>
-                                            Chat Session {idx + 1}
-                                        </span>
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingRight: '12px' }}>
+                                            <span style={{ fontSize: '14px', color: 'var(--dash-text)', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {conv.title || (conv.history.find(m => m.sender === 'user') ? conv.history.find(m => m.sender === 'user').text.substring(0, 30) + '...' : `Chat Session ${idx + 1}`)}
+                                            </span>
+                                            <span style={{ fontSize: '11px', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
+                                                {conv.date || (typeof conv.id === 'number' ? new Date(conv.id).toLocaleString() : new Date().toLocaleString())}
+                                            </span>
+                                        </div>
                                         <button 
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); setConversations(conversations.filter(c => c.id !== conv.id)); }}
@@ -1906,11 +2002,18 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                             type="button"
                             onClick={() => {
                                 if (chatHistory.length > 1) {
-                                    if (conversations.length >= 5) {
-                                        alert("You must delete an old conversation before starting a new one (maximum 5 saved conversations).");
+                                    if (conversations.length >= 25) {
+                                        alert("You must delete an old conversation before starting a new one (maximum 25 saved conversations).");
                                         return;
                                     }
-                                    setConversations([...conversations, { id: Date.now(), history: chatHistory }]);
+                                    const firstUserMsg = chatHistory.find(m => m.sender === 'user');
+                                    const dynamicTitle = firstUserMsg ? firstUserMsg.text.substring(0, 30) + '...' : 'New Conversation';
+                                    setConversations([{ 
+                                        id: Date.now(), 
+                                        history: chatHistory,
+                                        title: dynamicTitle,
+                                        date: new Date().toLocaleString()
+                                    }, ...conversations]);
                                     setChatHistory([chatHistory[0]]);
                                 } else {
                                     alert("You are already in a new conversation! Try asking a question below.");

@@ -3,3 +3,6 @@
 
 # 2. Start the AI microservice
 python -m uvicorn main:app --reload --port 8000
+
+
+mvnw.cmd spring-boot:run

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from './cropImage';
-import { auth, storage } from './firebase';
+import { auth, storage, db } from './firebase';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
 import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft, MoreHorizontal, Edit2, Trash2 } from 'lucide-react';
@@ -1746,6 +1747,15 @@ export default function Dashboard({ onLogout }) {
     const [accountAction, setAccountAction] = useState(null);
     const [profilePicture, setProfilePicture] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [userSubscription, setUserSubscription] = useState(null);
+    const [subLoading, setSubLoading] = useState(false);
+
+    // Checkout Modal States
+    const [checkoutPlan, setCheckoutPlan] = useState(null);
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
+    const [couponError, setCouponError] = useState('');
+    const [couponSuccess, setCouponSuccess] = useState('');
 
     // Cropper States
     const [imageSrc, setImageSrc] = useState(null);
@@ -1754,12 +1764,230 @@ export default function Dashboard({ onLogout }) {
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
     const [isCropping, setIsCropping] = useState(false);
 
+    const fetchUserSubscription = async (uid) => {
+        setSubLoading(true);
+        try {
+            const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_name: 'business_subscriptions' })
+            });
+            if (response.ok) {
+                const result = await response.json();
+                const allSubs = result.data || [];
+                const userSubs = allSubs.filter(d => d.userId === uid);
+                if (userSubs.length > 0) {
+                    const activeSub = userSubs.find(d => d.status === 'Active' || d.status === 'active') || userSubs[0];
+                    setUserSubscription(activeSub);
+                } else {
+                    setUserSubscription(null);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch user subscription", e);
+        } finally {
+            setSubLoading(false);
+        }
+    };
+
+    const [availableSubscriptions, setAvailableSubscriptions] = useState([]);
+    
+    const fetchAvailableSubscriptions = async () => {
+        try {
+            const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_name: 'subscriptions' })
+            });
+            if (response.ok) {
+                const result = await response.json();
+                const docs = result.data || [];
+                setAvailableSubscriptions(docs.filter(d => d.status?.toLowerCase() === 'active' || !d.status));
+            }
+        } catch (e) {
+            console.error("Failed to fetch available subscriptions", e);
+        }
+    };
+
+    const applyCoupon = async () => {
+        setCouponError('');
+        setCouponSuccess('');
+        if (!couponCode.trim()) {
+            setCouponError('Please enter a coupon code.');
+            return;
+        }
+
+        try {
+            const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_name: 'coupons' })
+            });
+            if (response.ok) {
+                const result = await response.json();
+                const coupons = result.data || [];
+                const validCoupon = coupons.find(c => c.code === couponCode.trim().toUpperCase());
+
+                if (!validCoupon) {
+                    setCouponError('Invalid coupon code.');
+                    return;
+                }
+
+                if (new Date(validCoupon.expiryDate) < new Date()) {
+                    setCouponError('This coupon has expired.');
+                    return;
+                }
+
+                if (validCoupon.targetType === 'Individual' && validCoupon.targetUser && validCoupon.targetUser !== (auth.currentUser?.email || '')) {
+                    setCouponError('This coupon is not valid for your account.');
+                    return;
+                }
+
+                setAppliedCoupon(validCoupon);
+                setCouponSuccess('Coupon applied successfully!');
+            }
+        } catch (e) {
+            console.error(e);
+            setCouponError('Failed to validate coupon.');
+        }
+    };
+
+    const calculateDiscountedAmount = () => {
+        if (!checkoutPlan) return 0;
+        let amount = parseFloat(checkoutPlan.amount);
+        if (appliedCoupon) {
+            if (appliedCoupon.discountType === 'Percentage') {
+                const discount = (amount * parseFloat(appliedCoupon.discountValue)) / 100;
+                amount = amount - discount;
+            } else {
+                amount = amount - parseFloat(appliedCoupon.discountValue);
+            }
+            if (amount < 0) amount = 0;
+        }
+        return amount.toFixed(2);
+    };
+
+    const loadRazorpay = () => {
+        return new Promise((resolve) => {
+            if (window.Razorpay) {
+                resolve(true);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+    };
+
+    const handleSubscribe = async (plan) => {
+        const res = await loadRazorpay();
+        if (!res) {
+            alert('Razorpay SDK failed to load. Are you online?');
+            return;
+        }
+
+        try {
+            // Convert amount to paise (smallest currency unit) for Razorpay
+            const amountInPaise = Math.round(parseFloat(plan.amount) * 100);
+
+            const orderRes = await fetch('http://localhost:8000/api/billing/create-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: amountInPaise,
+                    planName: plan.title
+                })
+            });
+            const order = await orderRes.json();
+
+            if (!order || !order.id) {
+                alert('Failed to create Razorpay order. Is backend online?');
+                return;
+            }
+
+            const options = {
+                key: 'rzp_test_TQ8tC5YEQHqehG',
+                amount: order.amount,
+                currency: order.currency || 'INR',
+                name: 'SmartLedger',
+                description: `Subscription to ${plan.title}`,
+                order_id: order.id,
+                handler: async function (response) {
+                    try {
+                        const verifyRes = await fetch('http://localhost:8000/api/billing/verify-payment', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature
+                            })
+                        });
+                        
+                        if (verifyRes.ok) {
+                            alert('Payment successful! Subscription Activated.');
+                            
+                            const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+                            const newSub = {
+                                id: subId,
+                                userId: auth.currentUser?.uid || userUid,
+                                planName: plan.title,
+                                planId: plan.id,
+                                amount: plan.amount,
+                                currency: plan.currency || 'INR',
+                                duration: plan.duration,
+                                status: 'Active',
+                                startDate: new Date().toISOString(),
+                                paymentId: response.razorpay_payment_id,
+                                orderId: response.razorpay_order_id
+                            };
+                            
+                            await fetch('http://localhost:8000/api/admin/firestore-write', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    collection_name: 'business_subscriptions',
+                                    document_id: subId,
+                                    data: newSub
+                                })
+                            });
+                            fetchUserSubscription(auth.currentUser?.uid);
+                        } else {
+                            alert('Payment verification failed.');
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        alert('Error verifying payment.');
+                    }
+                },
+                prefill: {
+                    name: userName,
+                    email: auth.currentUser?.email || '',
+                },
+                theme: {
+                    color: '#34d399'
+                }
+            };
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', function (response){
+                alert('Payment failed: ' + response.error.description);
+            });
+            rzp.open();
+        } catch (error) {
+            console.error('Subscription error', error);
+            alert('Failed to initiate subscription process.');
+        }
+    };
+
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged((user) => {
             if (user) {
                 setUserName(user.displayName || 'User');
                 setProfilePicture(user.photoURL || null);
                 setUserUid(user.uid.substring(0, 6).toUpperCase());
+                fetchUserSubscription(user.uid);
             }
         });
 
@@ -1767,7 +1995,10 @@ export default function Dashboard({ onLogout }) {
             setUserName(auth.currentUser.displayName || 'User');
             setProfilePicture(auth.currentUser.photoURL || null);
             setUserUid(auth.currentUser.uid.substring(0, 6).toUpperCase());
+            fetchUserSubscription(auth.currentUser.uid);
         }
+
+        fetchAvailableSubscriptions();
 
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
@@ -2351,12 +2582,46 @@ export default function Dashboard({ onLogout }) {
                             )}
                             {activeSettingsModal === 'subscriptions' && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <div style={{ background: 'var(--bg-dark)', padding: '16px', borderRadius: '12px', border: '1px solid #34d399' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                            <strong style={{ color: 'var(--text-main)' }}>Pro Plan</strong>
-                                            <span style={{ color: '#34d399', fontSize: '12px', fontWeight: 'bold', background: 'rgba(52, 211, 153, 0.1)', padding: '4px 8px', borderRadius: '20px' }}>ACTIVE</span>
+                                    {subLoading ? (
+                                        <div style={{ color: 'var(--text-muted)' }}>Loading subscriptions...</div>
+                                    ) : userSubscription ? (
+                                        <div style={{ background: 'var(--bg-dark)', padding: '16px', borderRadius: '12px', border: `1px solid ${userSubscription.status?.toLowerCase() === 'active' ? '#34d399' : '#f59e0b'}` }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <strong style={{ color: 'var(--text-main)' }}>{userSubscription.planName || 'SmartLedger Plan'}</strong>
+                                                <span style={{ color: userSubscription.status?.toLowerCase() === 'active' ? '#34d399' : '#f59e0b', fontSize: '12px', fontWeight: 'bold', background: userSubscription.status?.toLowerCase() === 'active' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(245, 158, 11, 0.1)', padding: '4px 8px', borderRadius: '20px' }}>{userSubscription.status ? userSubscription.status.toUpperCase() : 'PENDING'}</span>
+                                            </div>
+                                            <div style={{ fontSize: '14px' }}>
+                                                {userSubscription.currency === 'INR' ? '₹' : (userSubscription.currency === 'GBP' ? '£' : (userSubscription.currency === 'EUR' ? '€' : '$'))}{userSubscription.amount || '0'} / {userSubscription.duration || 'period'} • {userSubscription.status?.toLowerCase() === 'active' ? 'Active Subscription' : 'Awaiting verification or activation'}
+                                            </div>
                                         </div>
-                                        <div style={{ fontSize: '14px' }}>₹999 / year • Auto-renews next month</div>
+                                    ) : (
+                                        <div style={{ color: 'var(--text-muted)', marginBottom: '16px' }}>No active subscriptions found.</div>
+                                    )}
+                                    
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        <h4 style={{ margin: '0 0 8px 0', color: 'var(--text-main)', fontSize: '15px' }}>Available Plans</h4>
+                                        {availableSubscriptions.map(plan => (
+                                            <div key={plan.id} style={{ background: 'var(--dash-card)', border: '1px solid var(--dash-border)', padding: '16px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 'bold', color: 'var(--text-main)', fontSize: '15px' }}>{plan.title}</div>
+                                                    <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                                                        {plan.currency === 'INR' ? '₹' : '$'}{plan.amount} / {plan.duration}
+                                                        {plan.trialEnabled ? ` • ${plan.trialDays} Days Trial` : ''}
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={() => setCheckoutPlan(plan)}
+                                                    style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'transform 0.2s', boxShadow: '0 4px 15px rgba(52, 211, 153, 0.3)' }}
+                                                    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                                >
+                                                    Subscribe
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {availableSubscriptions.length === 0 && (
+                                            <div style={{ color: 'var(--dash-text-muted)', fontSize: '13px' }}>No plans available currently.</div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -2367,6 +2632,85 @@ export default function Dashboard({ onLogout }) {
                             {(activeSettingsModal === 'editProfile' || activeSettingsModal === 'enable2FA') && (
                                 <button className="btn-primary" style={{ width: 'auto', padding: '8px 20px', fontSize: '13px', borderRadius: '10px', background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: '600', boxShadow: '0 4px 15px rgba(52, 211, 153, 0.3)', transition: 'all 0.2s ease' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 211, 153, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(52, 211, 153, 0.3)'; }} onClick={() => setActiveSettingsModal(null)}>Save Changes</button>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Checkout Modal */}
+            {checkoutPlan && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', animation: 'fadeIn 0.3s ease' }} onClick={() => { setCheckoutPlan(null); setAppliedCoupon(null); setCouponCode(''); setCouponError(''); setCouponSuccess(''); }}>
+                    <div style={{ background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9))', padding: '32px', borderRadius: '24px', width: '90%', maxWidth: '420px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 30px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>Complete Purchase</h3>
+                                <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '14px' }}>Secure checkout via Razorpay</p>
+                            </div>
+                            <button onClick={() => { setCheckoutPlan(null); setAppliedCoupon(null); setCouponCode(''); setCouponError(''); setCouponSuccess(''); }} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', cursor: 'pointer', fontSize: '18px', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }} onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#94a3b8'; }}>&times;</button>
+                        </div>
+                        
+                        <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '20px', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', marginBottom: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span style={{ color: '#f8fafc', fontWeight: '700', fontSize: '16px' }}>{checkoutPlan.title}</span>
+                                    <span style={{ color: '#94a3b8', fontSize: '13px' }}>Billed {checkoutPlan.duration.toLowerCase()}</span>
+                                </div>
+                                <span style={{ fontWeight: '800', color: '#fff', fontSize: '18px' }}>{checkoutPlan.currency === 'INR' ? '₹' : '$'}{checkoutPlan.amount}</span>
+                            </div>
+                            
+                            <div>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#94a3b8', marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                                    Discount Code
+                                </label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input
+                                        type="text"
+                                        value={couponCode}
+                                        onChange={(e) => setCouponCode(e.target.value)}
+                                        placeholder="Enter code"
+                                        disabled={!!appliedCoupon}
+                                        style={{ flex: 1, padding: '12px 14px', borderRadius: '10px', background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', outline: 'none', textTransform: 'uppercase', fontSize: '14px', fontWeight: '600', transition: 'border 0.2s' }}
+                                        onFocus={(e) => e.target.style.borderColor = 'rgba(52, 211, 153, 0.5)'}
+                                        onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                                    />
+                                    {!appliedCoupon ? (
+                                        <button onClick={applyCoupon} style={{ padding: '0 20px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', transition: 'all 0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'} onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}>Apply</button>
+                                    ) : (
+                                        <button onClick={() => { setAppliedCoupon(null); setCouponCode(''); setCouponSuccess(''); }} style={{ padding: '0 20px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', transition: 'all 0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'} onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}>Remove</button>
+                                    )}
+                                </div>
+                                {couponError && <div style={{ color: '#ef4444', fontSize: '13px', marginTop: '8px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>{couponError}</div>}
+                                {couponSuccess && <div style={{ color: '#34d399', fontSize: '13px', marginTop: '8px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>{couponSuccess}</div>}
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '0 8px' }}>
+                            <span style={{ fontWeight: '600', color: '#94a3b8', fontSize: '16px' }}>Total to Pay</span>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                <span style={{ color: '#34d399', fontSize: '20px', fontWeight: '800' }}>{checkoutPlan.currency === 'INR' ? '₹' : '$'}</span>
+                                <span style={{ fontWeight: '900', fontSize: '36px', color: '#34d399', letterSpacing: '-1px' }}>{calculateDiscountedAmount()}</span>
+                            </div>
+                        </div>
+
+                        <button
+                            style={{ width: '100%', padding: '16px', borderRadius: '14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontWeight: '800', fontSize: '16px', letterSpacing: '0.5px', cursor: 'pointer', boxShadow: '0 8px 25px rgba(16, 185, 129, 0.4), inset 0 1px 1px rgba(255,255,255,0.3)', transition: 'all 0.2s ease', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(16, 185, 129, 0.5), inset 0 1px 1px rgba(255,255,255,0.3)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.4), inset 0 1px 1px rgba(255,255,255,0.3)'; }}
+                            onClick={() => {
+                                const finalAmount = calculateDiscountedAmount();
+                                const discountedPlan = { ...checkoutPlan, amount: finalAmount };
+                                handleSubscribe(discountedPlan);
+                                setCheckoutPlan(null);
+                            }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            Proceed to Secure Payment
+                        </button>
+                        
+                        <div style={{ textAlign: 'center', marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: '#64748b', fontSize: '12px', fontWeight: '500' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            Secured by Razorpay • 256-bit Encryption
                         </div>
                     </div>
                 </div>
