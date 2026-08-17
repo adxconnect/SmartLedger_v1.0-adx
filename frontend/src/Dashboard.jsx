@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from './cropImage';
-import { auth, storage, db } from './firebase';
+import { auth, db } from './firebase';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { collection, query, where, getDocs, addDoc, doc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
-import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft, MoreHorizontal, Edit2, Trash2, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, Landmark, CreditCard, PiggyBank, Coins, TrendingUp, Handshake, ReceiptText, PieChart, FileText, LogOut, Sun, Moon, User, Shield, Lock, Settings, Camera, Bell, ArrowLeft, MoreHorizontal, Edit2, Trash2, MessageSquare, List, BarChart3 } from 'lucide-react';
 import AiVirtualCaImportView from './AiVirtualCaImportView';
+import { API_BASE_URL_PYTHON, API_BASE_URL_JAVA } from './config';
 
 const LiveTracker = ({ principalAmount, interestRate, dateOfAccountOpening, interestType, dateOfMaturity, isRD }) => {
     const [income, setIncome] = useState(0);
@@ -183,7 +186,7 @@ const LiveAssetTracker = ({ assetType, assetSymbol, quantity, amountInvested }) 
                     }
                 } else if (assetType === 'Metal - Resource') {
                     const baseSymbol = assetSymbol.split('-')[0];
-                    const res = await fetch(`http://localhost:8080/api/market/metal/${baseSymbol}`);
+                    const res = await fetch(`${API_BASE_URL_JAVA}/api/market/metal/${baseSymbol}`);
                     const data = await res.json();
                     
                     if (assetSymbol === 'XAU-22K' && data.price_gram_22k) {
@@ -536,7 +539,8 @@ function SummaryView({ onNavigate, isSubscribed }) {
         weeklyExpensesRaw: [0, 0, 0, 0, 0, 0, 0],
         weeklyDates: ['', '', '', '', '', '', ''],
         savedPercentage: 0,
-        breakdown: { bank: { total: 0, count: 0 }, fd: { total: 0, count: 0 }, rd: { total: 0, count: 0 }, cash: { total: 0, count: 0 } }
+        breakdown: { bank: { total: 0, count: 0 }, fd: { total: 0, count: 0 }, rd: { total: 0, count: 0 }, cash: { total: 0, count: 0 } },
+        allTransactions: []
     });
     const [selectedBar, setSelectedBar] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -547,6 +551,7 @@ function SummaryView({ onNavigate, isSubscribed }) {
         500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
     });
     const [weekOffset, setWeekOffset] = useState(0);
+    const [showTopSpends, setShowTopSpends] = useState(false);
 
     const totalGullak = Object.entries(denominations).reduce((sum, [den, qty]) => sum + (Number(den) * (Number(qty) || 0)), 0);
 
@@ -558,7 +563,7 @@ function SummaryView({ onNavigate, isSubscribed }) {
             principalAmount: totalGullak,
             interestRate: 0
         };
-        fetch('http://localhost:8080/api/deposits', {
+        fetch(`${API_BASE_URL_JAVA}/api/deposits`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -574,12 +579,12 @@ function SummaryView({ onNavigate, isSubscribed }) {
 
     const handleDeleteGullak = () => {
         if(window.confirm("Are you sure you want to delete all Cash Holds? This will permanently reset your Gullak to ₹0.")) {
-            fetch('http://localhost:8080/api/deposits')
+            fetch(`${API_BASE_URL_JAVA}/api/deposits`)
                 .then(r => r.json())
                 .then(deposits => {
                     if (Array.isArray(deposits)) {
                         const gullaks = deposits.filter(d => d.depositType === 'Gullak');
-                        Promise.all(gullaks.map(g => fetch(`http://localhost:8080/api/deposits/${g.id}`, { method: 'DELETE' })))
+                        Promise.all(gullaks.map(g => fetch(`${API_BASE_URL_JAVA}/api/deposits/${g.id}`, { method: 'DELETE' })))
                             .then(() => {
                                 setDenominations({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
                                 fetchStats();
@@ -593,9 +598,9 @@ function SummaryView({ onNavigate, isSubscribed }) {
 
     const fetchStats = () => {
         Promise.all([
-            fetch('http://localhost:8080/api/bankaccounts').then(r => r.ok ? r.json() : []),
-            fetch('http://localhost:8080/api/transactions').then(r => r.ok ? r.json() : []),
-            fetch('http://localhost:8080/api/deposits').then(r => r.ok ? r.json() : [])
+            fetch(`${API_BASE_URL_JAVA}/api/bankaccounts`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE_URL_JAVA}/api/transactions`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE_URL_JAVA}/api/deposits`).then(r => r.ok ? r.json() : [])
         ]).then(([accounts, transactions, deposits]) => {
             let bankTotal = 0, bankCount = 0;
             let fdTotal = 0, fdCount = 0;
@@ -678,7 +683,7 @@ function SummaryView({ onNavigate, isSubscribed }) {
             const goalAmount = 100000;
             const savedPercentage = Math.max(0, Math.min(100, Math.round((totalBalance / goalAmount) * 100)));
 
-            setStats({ balance: totalBalance, income: totalIncome, expenses: totalExpenses, weeklyChartHeights, weeklyLabels, weeklyExpensesRaw: weeklyExpenses, weeklyDates: last7Days, savedPercentage, breakdown: { bank: { total: bankTotal, count: bankCount }, fd: { total: fdTotal, count: fdCount }, rd: { total: rdTotal, count: rdCount }, cash: { total: cashTotal, count: cashCount } } });
+            setStats({ balance: totalBalance, income: totalIncome, expenses: totalExpenses, weeklyChartHeights, weeklyLabels, weeklyExpensesRaw: weeklyExpenses, weeklyDates: last7Days, savedPercentage, breakdown: { bank: { total: bankTotal, count: bankCount }, fd: { total: fdTotal, count: fdCount }, rd: { total: rdTotal, count: rdCount }, cash: { total: cashTotal, count: cashCount } }, allTransactions: transactions });
             setLoading(false);
         }).catch(err => {
             console.error("Failed to load summary stats", err);
@@ -689,6 +694,36 @@ function SummaryView({ onNavigate, isSubscribed }) {
     useEffect(() => {
         fetchStats();
     }, [weekOffset]);
+
+    let topSpends = [];
+    if (showTopSpends && stats.allTransactions) {
+        const targetDates = selectedBar !== null ? [stats.weeklyDates[selectedBar]] : stats.weeklyDates;
+        const spends = stats.allTransactions.filter(t => {
+            const typeStr = String(t.transactionType || t.type || '').toUpperCase();
+            if (!['EXPENSE', 'DEBIT', 'WITHDRAWAL', 'WITHDRAW'].includes(typeStr)) return false;
+            if (t.date) {
+                try {
+                    let d = new Date(t.date);
+                    if (typeof t.date === 'string' && t.date.includes('/')) {
+                        const parts = t.date.split('/');
+                        if (parts.length === 3) {
+                            let day = parseInt(parts[0], 10);
+                            let month = parseInt(parts[1], 10) - 1;
+                            let year = parseInt(parts[2], 10);
+                            if (year < 100) year += 2000;
+                            d = new Date(year, month, day);
+                        }
+                    }
+                    if (!isNaN(d.getTime())) {
+                        const localDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                        return targetDates.includes(localDate);
+                    }
+                } catch(e) {}
+            }
+            return false;
+        });
+        topSpends = spends.sort((a, b) => (parseFloat(b.amount) || 0) - (parseFloat(a.amount) || 0)).slice(0, 4);
+    }
 
     if (loading) return <div className="loading-spinner">Loading Financial Summary...</div>;
 
@@ -735,9 +770,14 @@ function SummaryView({ onNavigate, isSubscribed }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
                         <div>
                             <h3 style={{ margin: 0, color: 'var(--dash-text)', fontSize: '18px', fontWeight: '700', letterSpacing: '-0.3px' }}>Weekly Overview</h3>
-                            <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px', fontWeight: '500' }}>{weekOffset === 0 ? 'Spending for this week' : weekOffset === 1 ? 'Spending for last week' : `Spending for ${weekOffset} weeks ago`}</p>
+                            <p style={{ margin: '4px 0 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px', fontWeight: '500' }}>
+                                {showTopSpends ? (selectedBar !== null ? `Top spends for ${stats.weeklyLabels[selectedBar]}` : (weekOffset === 0 ? 'Top spends this week' : `Top spends ${weekOffset} weeks ago`)) : (weekOffset === 0 ? 'Spending for this week' : weekOffset === 1 ? 'Spending for last week' : `Spending for ${weekOffset} weeks ago`)}
+                            </p>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <button onClick={() => setShowTopSpends(!showTopSpends)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--dash-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid var(--dash-border)', color: showTopSpends ? '#34d399' : 'var(--dash-text-muted)', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--dash-border)'} onMouseOut={(e) => e.currentTarget.style.background = 'var(--dash-card)'} title={showTopSpends ? "Show Chart" : "Top 5 Spends"}>
+                                {showTopSpends ? <BarChart3 size={16} /> : <List size={16} />}
+                            </button>
                             <button onClick={() => setWeekOffset(prev => prev + 1)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--dash-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--dash-border)'} onMouseOut={(e) => e.currentTarget.style.background = 'var(--dash-card)'}>
                                 &larr;
                             </button>
@@ -747,39 +787,66 @@ function SummaryView({ onNavigate, isSubscribed }) {
                         </div>
                     </div>
 
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '14px', marginTop: '30px', paddingBottom: '12px', position: 'relative', zIndex: 1 }}>
-                        {stats.weeklyChartHeights.map((h, i) => (
-                            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', position: 'relative', group: 'true' }} className="bar-group">
-                                <div style={{ 
-                                    width: '100%', height: `${Math.max(h, 4)}%`, 
-                                    background: h === 100 && h > 0 ? 'linear-gradient(180deg, #34d399 0%, #10b981 100%)' : 'linear-gradient(180deg, rgba(99,102,241,0.6) 0%, rgba(99,102,241,0.1) 100%)', 
-                                    borderRadius: '6px 6px 4px 4px', 
-                                    boxShadow: h === 100 && h > 0 ? '0 0 20px rgba(52, 211, 153, 0.4)' : 'none',
-                                    transition: 'all 0.3s ease', cursor: 'pointer'
-                                }} onClick={() => setSelectedBar(selectedBar === i ? null : i)} onMouseOver={(e) => { e.currentTarget.style.transform = 'scaleY(1.05)'; e.currentTarget.style.filter = 'brightness(1.2)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scaleY(1)'; e.currentTarget.style.filter = 'brightness(1)'; }}></div>
+                    {!showTopSpends ? (
+                        <>
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '14px', marginTop: '30px', paddingBottom: '12px', position: 'relative', zIndex: 1 }}>
+                                {stats.weeklyChartHeights.map((h, i) => (
+                                    <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', position: 'relative', group: 'true' }} className="bar-group">
+                                        <div style={{ 
+                                            width: '100%', height: `${Math.max(h, 4)}%`, 
+                                            background: h === 100 && h > 0 ? 'linear-gradient(180deg, #34d399 0%, #10b981 100%)' : (selectedBar === i ? 'linear-gradient(180deg, #60a5fa 0%, rgba(96,165,250,0.2) 100%)' : 'linear-gradient(180deg, rgba(99,102,241,0.6) 0%, rgba(99,102,241,0.1) 100%)'), 
+                                            borderRadius: '6px 6px 4px 4px', 
+                                            boxShadow: h === 100 && h > 0 ? '0 0 20px rgba(52, 211, 153, 0.4)' : (selectedBar === i ? '0 0 15px rgba(96,165,250,0.3)' : 'none'),
+                                            transition: 'all 0.3s ease', cursor: 'pointer'
+                                        }} onClick={() => setSelectedBar(selectedBar === i ? null : i)} onMouseOver={(e) => { e.currentTarget.style.transform = 'scaleY(1.05)'; e.currentTarget.style.filter = 'brightness(1.2)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scaleY(1)'; e.currentTarget.style.filter = 'brightness(1)'; }}></div>
 
-                                {selectedBar === i && (
-                                    <div style={{ 
-                                        position: 'absolute', bottom: `calc(${Math.max(h, 4)}% + 12px)`, left: '50%', transform: 'translateX(-50%)', 
-                                        background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', border: '1px solid var(--dash-border)', 
-                                        padding: '10px 14px', borderRadius: '12px', zIndex: 50, whiteSpace: 'nowrap', 
-                                        boxShadow: '0 8px 30px rgba(0,0,0,0.2)', pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' 
-                                    }}>
-                                        <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600', letterSpacing: '0.5px' }}>
-                                            {stats.weeklyDates[i] ? new Date(stats.weeklyDates[i]).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : ''}
-                                        </div>
-                                        <div style={{ fontSize: '15px', color: 'var(--dash-text)', fontWeight: '800' }}>
-                                            ₹{(stats.weeklyExpensesRaw[i] || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </div>
-                                        <div style={{ position: 'absolute', bottom: '-6px', left: '50%', transform: 'translateX(-50%) rotate(45deg)', width: '10px', height: '10px', background: 'var(--dash-card)', borderRight: '1px solid var(--dash-border)', borderBottom: '1px solid var(--dash-border)', pointerEvents: 'none' }}></div>
+                                        {selectedBar === i && (
+                                            <div style={{ 
+                                                position: 'absolute', bottom: `calc(${Math.max(h, 4)}% + 12px)`, left: '50%', transform: 'translateX(-50%)', 
+                                                background: 'var(--dash-glass-bg)', backdropFilter: 'blur(16px)', border: '1px solid var(--dash-border)', 
+                                                padding: '10px 14px', borderRadius: '12px', zIndex: 50, whiteSpace: 'nowrap', 
+                                                boxShadow: '0 8px 30px rgba(0,0,0,0.2)', pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' 
+                                            }}>
+                                                <div style={{ fontSize: '11px', color: 'var(--dash-text-muted)', fontWeight: '600', letterSpacing: '0.5px' }}>
+                                                    {stats.weeklyDates[i] ? new Date(stats.weeklyDates[i]).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                                                </div>
+                                                <div style={{ fontSize: '15px', color: 'var(--dash-text)', fontWeight: '800' }}>
+                                                    ₹{(stats.weeklyExpensesRaw[i] || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </div>
+                                                <div style={{ position: 'absolute', bottom: '-6px', left: '50%', transform: 'translateX(-50%) rotate(45deg)', width: '10px', height: '10px', background: 'var(--dash-card)', borderRight: '1px solid var(--dash-border)', borderBottom: '1px solid var(--dash-border)', pointerEvents: 'none' }}></div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--dash-text-muted)', fontSize: '12px', marginTop: '4px', fontWeight: '600', position: 'relative', zIndex: 1 }}>
-                        {stats.weeklyLabels.map((l, i) => <span key={i} style={{ flex: 1, textAlign: 'center' }}>{l}</span>)}
-                    </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--dash-text-muted)', fontSize: '12px', marginTop: '4px', fontWeight: '600', position: 'relative', zIndex: 1 }}>
+                                {stats.weeklyLabels.map((l, i) => <span key={i} style={{ flex: 1, textAlign: 'center', color: selectedBar === i ? '#60a5fa' : 'var(--dash-text-muted)' }}>{l}</span>)}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="custom-scrollbar" style={{ flex: 1, marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', zIndex: 1, maxHeight: '180px', paddingRight: '4px' }}>
+                            {topSpends.length > 0 ? topSpends.map((ts, idx) => (
+                                <div key={ts.id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(145deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.05) 100%)', padding: '14px 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', animation: `vcaFadeIn 0.4s ease-out ${idx * 0.1}s forwards`, opacity: 0, boxShadow: '0 4px 15px rgba(0,0,0,0.1)', transition: 'transform 0.2s ease, background 0.2s ease', gap: '12px' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.08) 100%)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.05) 100%)'; }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '15px', border: '1px solid rgba(239, 68, 68, 0.2)', flexShrink: 0 }}>
+                                            {idx + 1}
+                                        </div>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <div style={{ color: 'var(--dash-text)', fontSize: '14.5px', fontWeight: '700', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ts.description || ts.category || 'Unknown Spend'}</div>
+                                            <div style={{ color: 'var(--dash-text-muted)', fontSize: '11px', marginTop: '3px', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ts.date ? (ts.date.includes('/') ? ts.date : new Date(ts.date).toLocaleDateString()) : ''} • {ts.category || 'General'}</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ color: '#ef4444', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                        ₹{parseFloat(ts.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                </div>
+                            )) : (
+                                <div style={{ flex: 1, minHeight: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dash-text-muted)', fontSize: '14px', fontWeight: '600' }}>
+                                    No spending found for this {selectedBar !== null ? 'day' : 'week'}.
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Current Budget */}
@@ -1116,8 +1183,8 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd, is
         setLoading(true);
         if (module.id === 'deposits') {
             Promise.all([
-                fetch(`http://localhost:8080/api/deposits`).then(res => res.ok ? res.json() : []),
-                fetch(`http://localhost:8080/api/bankaccounts`).then(res => res.ok ? res.json() : [])
+                fetch(`${API_BASE_URL_JAVA}/api/deposits`).then(res => res.ok ? res.json() : []),
+                fetch(`${API_BASE_URL_JAVA}/api/bankaccounts`).then(res => res.ok ? res.json() : [])
             ]).then(([depositsData, bankAccountsData]) => {
                 const mappedBankAccounts = bankAccountsData
                     .filter(acc => acc.accountType === 'Fixed Deposit' || acc.accountType === 'Recurring Deposit' || acc.accountType === 'Gullak' || acc.accountType === 'Cash')
@@ -1146,7 +1213,7 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd, is
                 setLoading(false);
             });
         } else {
-            fetch(`http://localhost:8080${module.endpoint}`)
+            fetch(`${API_BASE_URL_JAVA}${module.endpoint}`)
                 .then(res => {
                     if (!res.ok) {
                         throw new Error(`HTTP error! status: ${res.status}`);
@@ -1276,7 +1343,7 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd, is
     const handleDelete = (row) => {
         if (window.confirm("Are you sure you want to delete this record?")) {
             const endpoint = row._endpoint || module.endpoint;
-            fetch(`http://localhost:8080${endpoint}/${row.id}`, { method: 'DELETE' })
+            fetch(`${API_BASE_URL_JAVA}${endpoint}/${row.id}`, { method: 'DELETE' })
                 .then(res => {
                     if (res.ok) {
                         setData(prev => prev.filter(item => item.id !== row.id));
@@ -1645,9 +1712,9 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd, is
                     <div style={{ fontSize: '14.5px', color: 'var(--dash-text-muted)' }}>Click on <strong style={{color: '#34d399'}}>+ Add {module.label}</strong> to create a new record and see it listed here.</div>
                 </div>
             ) : (
-                <div style={{ overflow: 'hidden', isolation: 'isolate', maxHeight: 'none', minHeight: module.id === 'transactions' ? '780px' : 'auto', borderRadius: '16px', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', padding: '0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, borderRadius: '16px 16px 0 0', overflow: 'hidden' }}>
-                    <thead style={{ borderRadius: '16px 16px 0 0', overflow: 'hidden' }}>
+                <div style={{ overflow: 'visible', isolation: 'isolate', maxHeight: 'none', minHeight: module.id === 'transactions' ? '780px' : 'auto', borderRadius: '16px', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', padding: '0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, borderRadius: '16px 16px 0 0', overflow: 'visible' }}>
+                    <thead style={{ borderRadius: '16px 16px 0 0', overflow: 'visible' }}>
                         <tr style={{ background: 'var(--dash-card)', borderRadius: '16px 16px 0 0' }}>
                             {displayColumns.map((col, idx) => (
                                 <th key={col} style={{ position: 'relative', background: 'var(--dash-card)', textAlign: 'left', padding: '16px 20px', color: 'var(--dash-text-muted)', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid var(--dash-border)', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)', borderTopLeftRadius: idx === 0 ? '16px' : '0', borderTopRightRadius: idx === displayColumns.length - 1 && (module.id === 'lendings' && lendingTab === 'Borrowed') ? '16px' : '0' }}>
@@ -1735,36 +1802,52 @@ function ModuleView({ module, refreshTrigger, onEdit, userUid, onBack, onAdd, is
                                         <div style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end' }}>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setOpenDropdownId(openDropdownId === (row.id || index) ? null : (row.id || index)); }}
-                                                style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--dash-card)', border: '1px solid var(--dash-border)', color: 'var(--dash-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                                                onMouseOver={(e) => { e.currentTarget.style.background = 'var(--dash-bg)'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                                onMouseOut={(e) => { e.currentTarget.style.background = 'var(--dash-card)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                                style={{ 
+                                                    width: '36px', height: '36px', borderRadius: '50%', 
+                                                    background: 'rgba(128, 128, 128, 0.15)', 
+                                                    border: '1px solid rgba(128, 128, 128, 0.25)', 
+                                                    color: 'var(--dash-text)', cursor: 'pointer', 
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                    transition: 'all 0.2s', backdropFilter: 'blur(4px)',
+                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                                                }}
+                                                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(128, 128, 128, 0.25)'; e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.borderColor = 'rgba(128, 128, 128, 0.4)'; }}
+                                                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(128, 128, 128, 0.15)'; e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.borderColor = 'rgba(128, 128, 128, 0.25)'; }}
                                                 title="Actions"
                                             >
-                                                <MoreHorizontal size={16} />
+                                                <MoreHorizontal size={18} strokeWidth={2.5} />
                                             </button>
                                             
                                             {openDropdownId === (row.id || index) && (
                                                 <div style={{
-                                                    position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                                    background: 'var(--dash-card)', border: '1px solid var(--dash-border)',
-                                                    borderRadius: '12px', padding: '6px', zIndex: 10,
-                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '130px'
+                                                    position: 'absolute', 
+                                                    top: index >= finalTableData.length - 2 && index > 0 ? 'auto' : '100%', 
+                                                    bottom: index >= finalTableData.length - 2 && index > 0 ? '100%' : 'auto', 
+                                                    right: 0, 
+                                                    marginTop: index >= finalTableData.length - 2 && index > 0 ? '0' : '8px',
+                                                    marginBottom: index >= finalTableData.length - 2 && index > 0 ? '8px' : '0',
+                                                    background: 'var(--dash-glass-bg, rgba(30, 41, 59, 0.95))', 
+                                                    backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                    borderRadius: '16px', padding: '8px', zIndex: 100,
+                                                    boxShadow: '0 15px 35px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05)', 
+                                                    display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '150px'
                                                 }}>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); onEdit && onEdit(row); }}
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'transparent', border: 'none', color: 'var(--dash-text)', cursor: 'pointer', fontSize: '13px', padding: '10px 12px', borderRadius: '8px', fontWeight: '500', transition: 'background 0.2s', width: '100%', textAlign: 'left' }}
-                                                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.1)'; e.currentTarget.style.color = '#34d399'; }}
-                                                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dash-text)'; }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', color: 'var(--dash-text)', cursor: 'pointer', fontSize: '13.5px', padding: '10px 14px', borderRadius: '10px', fontWeight: '600', transition: 'all 0.2s', width: '100%', textAlign: 'left' }}
+                                                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.15)'; e.currentTarget.style.color = '#34d399'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dash-text)'; e.currentTarget.style.transform = 'translateY(0)'; }}
                                                     >
-                                                        <Edit2 size={14} /> Edit
+                                                        <Edit2 size={15} /> Edit
                                                     </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); handleDelete(row); }}
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: '10px 12px', borderRadius: '8px', fontWeight: '500', transition: 'background 0.2s', width: '100%', textAlign: 'left' }}
-                                                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
-                                                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13.5px', padding: '10px 14px', borderRadius: '10px', fontWeight: '600', transition: 'all 0.2s', width: '100%', textAlign: 'left' }}
+                                                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; }}
                                                     >
-                                                        <Trash2 size={14} /> Delete
+                                                        <Trash2 size={15} /> Delete
                                                     </button>
                                                 </div>
                                             )}
@@ -1871,7 +1954,7 @@ export default function Dashboard({ onLogout }) {
     const fetchUserSubscription = async (uid) => {
         setSubLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+            const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-read`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ collection_name: 'business_subscriptions' })
@@ -1898,7 +1981,7 @@ export default function Dashboard({ onLogout }) {
     
     const fetchAvailableSubscriptions = async () => {
         try {
-            const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+            const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-read`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ collection_name: 'subscriptions' })
@@ -1937,7 +2020,7 @@ export default function Dashboard({ onLogout }) {
         }
 
         try {
-            const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+            const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-read`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ collection_name: 'coupons' })
@@ -2011,7 +2094,7 @@ export default function Dashboard({ onLogout }) {
             // Convert amount to paise (smallest currency unit) for Razorpay
             const amountInPaise = Math.round(parseFloat(plan.amount) * 100);
 
-            const orderRes = await fetch('http://localhost:8000/api/billing/create-order', {
+            const orderRes = await fetch(`${API_BASE_URL_PYTHON}/api/billing/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2019,15 +2102,23 @@ export default function Dashboard({ onLogout }) {
                     planName: plan.title
                 })
             });
+
+            if (!orderRes.ok) {
+                const errData = await orderRes.json().catch(() => ({}));
+                console.error("Razorpay Order Error:", errData);
+                showToast(`Checkout failed: ${errData.detail || 'Internal Server Error'}. Please try again.`, 'error');
+                return;
+            }
+
             const order = await orderRes.json();
 
             if (!order || !order.id) {
-                showToast('Failed to create Razorpay order. Is backend online?', 'error');
+                showToast('Invalid order received from server.', 'error');
                 return;
             }
 
             const options = {
-                key: 'rzp_test_TQ8tC5YEQHqehG',
+                key: 'rzp_test_TQoEVoA414qbUS',
                 amount: order.amount,
                 currency: order.currency || 'INR',
                 name: 'SmartLedger',
@@ -2035,7 +2126,7 @@ export default function Dashboard({ onLogout }) {
                 order_id: order.id,
                 handler: async function (response) {
                     try {
-                        const verifyRes = await fetch('http://localhost:8000/api/billing/verify-payment', {
+                        const verifyRes = await fetch(`${API_BASE_URL_PYTHON}/api/billing/verify-payment`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -2063,7 +2154,7 @@ export default function Dashboard({ onLogout }) {
                                 orderId: response.razorpay_order_id
                             };
                             
-                            await fetch('http://localhost:8000/api/admin/firestore-write', {
+                            await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-write`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -2100,8 +2191,88 @@ export default function Dashboard({ onLogout }) {
         }
     };
 
+    const generateInvoice = (subscriptionData) => {
+        const amount = parseFloat(subscriptionData.amount || 0);
+        
+        const doc = new jsPDF();
+        const logoUrl = '/assets/logo.png';
+        
+        const generatePdfContent = (img = null) => {
+            if (img) {
+                doc.addImage(img, 'PNG', 14, 15, 20, 20);
+            }
+            
+            doc.setFontSize(22);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(33, 33, 33);
+            doc.text("INVOICE", 150, 25);
+            
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(100, 100, 100);
+            doc.text("Smart Ledger V2", 14, 45);
+            doc.text("Kaliganj Durgapur, Pin 713212", 14, 50);
+
+            const invoiceNo = `INV-${new Date().getTime().toString().slice(-6)}`;
+            const date = new Date().toLocaleDateString('en-IN');
+            doc.text(`Invoice Number: ${invoiceNo}`, 140, 45);
+            doc.text(`Date of Issue: ${date}`, 140, 50);
+            
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(33, 33, 33);
+            doc.text("Billed To:", 14, 75);
+            
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.text(userProfileData.displayName || userName || "Customer", 14, 82);
+            doc.text(auth.currentUser?.email || "customer@example.com", 14, 87);
+            doc.text(`UID: ${userUid}`, 14, 92);
+
+            const totalAmount = amount;
+            const baseAmount = (totalAmount / 1.18).toFixed(2);
+            const gstAmount = (totalAmount - parseFloat(baseAmount)).toFixed(2);
+
+            const tableColumn = ["Description", `Amount (${subscriptionData.currency || 'INR'})`];
+            const tableRows = [
+                [`SmartLedger ${subscriptionData.planName} Subscription - ${subscriptionData.duration}`, `${baseAmount}`],
+                ["IGST @ 18%", `${gstAmount}`]
+            ];
+
+            autoTable(doc, {
+                startY: 105,
+                head: [tableColumn],
+                body: tableRows,
+                theme: 'grid',
+                headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
+                styles: { fontSize: 10, cellPadding: 5 },
+                columnStyles: { 1: { halign: 'right' } }
+            });
+
+            const finalY = doc.lastAutoTable.finalY || 130;
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.text("Total Amount (Incl. GST):", 155, finalY + 10, { align: 'right' });
+            doc.text(`${subscriptionData.currency === 'INR' ? 'Rs.' : subscriptionData.currency} ${totalAmount.toFixed(2)}`, 196, finalY + 10, { align: 'right' });
+
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(150, 150, 150);
+            doc.text("Thank you for your business!", 105, 280, { align: 'center' });
+            doc.text("This is a computer-generated invoice and does not require a signature.", 105, 285, { align: 'center' });
+
+            doc.save(`Invoice_${invoiceNo}.pdf`);
+        };
+
+        const img = new window.Image();
+        img.src = logoUrl;
+        img.onload = () => { generatePdfContent(img); };
+        img.onerror = () => { generatePdfContent(null); };
+    };
+
     const fetchUserProfile = async (uid) => {
         try {
+            const shortUid = uid.substring(0, 6).toUpperCase();
             const userDocRef = doc(db, 'users', uid);
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
@@ -2116,6 +2287,19 @@ export default function Dashboard({ onLogout }) {
                 if (data.displayName) {
                     setUserName(data.displayName);
                 }
+                
+                // Ensure shortUid is stored for lookup
+                if (data.shortUid !== shortUid) {
+                    await setDoc(userDocRef, { shortUid: shortUid }, { merge: true });
+                }
+            } else {
+                // Initialize profile with shortUid if it doesn't exist
+                await setDoc(userDocRef, {
+                    displayName: auth.currentUser?.displayName || '',
+                    email: auth.currentUser?.email || '',
+                    shortUid: shortUid,
+                    createdAt: new Date().toISOString()
+                });
             }
         } catch (error) {
             console.error('Error fetching user profile data:', error);
@@ -2140,7 +2324,16 @@ export default function Dashboard({ onLogout }) {
                 phoneNumber: userProfileData.phoneNumber,
                 dob: userProfileData.dob,
                 gender: userProfileData.gender,
+                shortUid: auth.currentUser.uid.substring(0, 6).toUpperCase(),
                 updatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            const accountDocRef = doc(db, 'accounts', auth.currentUser.uid);
+            await setDoc(accountDocRef, {
+                accountName: userProfileData.displayName || userName,
+                email: auth.currentUser.email,
+                id: auth.currentUser.uid,
+                shortUid: auth.currentUser.uid.substring(0, 6).toUpperCase()
             }, { merge: true });
 
             setActiveSettingsModal(null);
@@ -2223,7 +2416,7 @@ export default function Dashboard({ onLogout }) {
 
         const fetchSystemSettings = async () => {
             try {
-                const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+                const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-read`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ collection_name: 'settings' })
@@ -2258,16 +2451,16 @@ export default function Dashboard({ onLogout }) {
     useEffect(() => {
         if (isAddModalOpen && activeModule.id === 'transactions') {
             Promise.all([
-                fetch('http://localhost:8080/api/bankaccounts').then(r => r.ok ? r.json() : []),
-                fetch('http://localhost:8080/api/deposits').then(r => r.ok ? r.json() : []),
-                fetch('http://localhost:8080/api/cards').then(r => r.ok ? r.json() : [])
+                fetch(`${API_BASE_URL_JAVA}/api/bankaccounts`).then(r => r.ok ? r.json() : []),
+                fetch(`${API_BASE_URL_JAVA}/api/deposits`).then(r => r.ok ? r.json() : []),
+                fetch(`${API_BASE_URL_JAVA}/api/cards`).then(r => r.ok ? r.json() : [])
             ]).then(([banks, deps, cards]) => {
                 setAccountData([...banks, ...deps]);
                 setCardData(cards);
             }).catch(err => console.error("Error fetching accounts for transactions modal:", err));
         }
         if (isAddModalOpen && activeModule.id === 'bankaccounts') {
-            fetch('http://localhost:8080/api/cards').then(r => r.ok ? r.json() : [])
+            fetch(`${API_BASE_URL_JAVA}/api/cards`).then(r => r.ok ? r.json() : [])
                 .then(cards => setCardData(cards))
                 .catch(err => console.error("Error fetching cards for bank accounts modal:", err));
         }
@@ -2313,18 +2506,88 @@ export default function Dashboard({ onLogout }) {
 
     // Fetch Borrower Name by UID
     useEffect(() => {
+        let isCurrent = true;
+
         if (isAddModalOpen && activeModule?.id === 'lendings' && formData.borrowerUid) {
-            if (formData.borrowerUid.length >= 3) {
-                fetch(`http://localhost:8080/api/auth/user/${formData.borrowerUid}`)
-                    .then(res => res.ok ? res.json() : null)
-                    .then(data => {
-                        if (data && data.name && formData.borrowerName !== data.name) {
-                            setFormData(prev => ({ ...prev, borrowerName: data.name }));
+            const uidStr = formData.borrowerUid.trim();
+            if (uidStr.length >= 3) {
+                console.log(`[UID Fetch] Attempting to fetch name for UID: "${uidStr}"`);
+                
+                const fallbackToBackend = () => {
+                    console.log(`[UID Fetch] Falling back to backend API for "${uidStr}"...`);
+                    fetch(`${API_BASE_URL_JAVA}/api/auth/user/${uidStr}`)
+                        .then(res => {
+                            console.log(`[UID Fetch] Backend API response status for "${uidStr}":`, res.status);
+                            return res.ok ? res.json() : null;
+                        })
+                        .then(data => {
+                            if (!isCurrent) return;
+                            if (data && data.name) {
+                                console.log(`[UID Fetch] Found user "${uidStr}" in backend API 'accounts' collection:`, data);
+                                if (formData.borrowerName !== data.name) setFormData(prev => ({ ...prev, borrowerName: data.name }));
+                            } else {
+                                console.warn(`[UID Fetch] User "${uidStr}" NOT found in backend API.`);
+                                if (formData.borrowerName) setFormData(prev => ({ ...prev, borrowerName: '' }));
+                            }
+                        })
+                        .catch(err => {
+                            if (!isCurrent) return;
+                            console.error("[UID Fetch] Error fetching borrower name from backend:", err);
+                            if (formData.borrowerName) setFormData(prev => ({ ...prev, borrowerName: '' }));
+                        });
+                };
+
+                const processFirestoreData = (data) => {
+                    if (!isCurrent) return;
+                    console.log(`[UID Fetch] Found user "${uidStr}" in Firestore 'users' collection:`, data);
+                    const name = data.displayName || data.name || data.accountName;
+                    if (name && formData.borrowerName !== name) {
+                        setFormData(prev => ({ ...prev, borrowerName: name }));
+                    }
+                };
+
+                // First try direct Document ID lookup
+                getDoc(doc(db, 'users', uidStr))
+                    .then(userDoc => {
+                        if (!isCurrent) return;
+                        if (userDoc.exists()) {
+                            processFirestoreData(userDoc.data());
+                        } else if (uidStr.length === 6) {
+                            // If Document ID fails and it's a 6-character ID, try searching by shortUid field
+                            console.log(`[UID Fetch] Searching for shortUid "${uidStr}" in Firestore...`);
+                            const q = query(collection(db, 'users'), where('shortUid', '==', uidStr));
+                            getDocs(q).then(snapshot => {
+                                if (!isCurrent) return;
+                                if (!snapshot.empty) {
+                                    processFirestoreData(snapshot.docs[0].data());
+                                } else {
+                                    fallbackToBackend();
+                                }
+                            }).catch(err => {
+                                if (!isCurrent) return;
+                                console.error("[UID Fetch] Error querying shortUid:", err);
+                                fallbackToBackend();
+                            });
+                        } else {
+                            fallbackToBackend();
                         }
                     })
-                    .catch(err => console.error("Error fetching borrower name:", err));
+                    .catch(err => {
+                        if (!isCurrent) return;
+                        console.error("[UID Fetch] Error fetching borrower name from Firestore:", err);
+                        fallbackToBackend();
+                    });
+            } else {
+                // Clear name if UID is less than 3 characters
+                if (formData.borrowerName) {
+                    setFormData(prev => ({ ...prev, borrowerName: '' }));
+                }
             }
         }
+
+        return () => {
+            isCurrent = false;
+        };
     }, [formData.borrowerUid, isAddModalOpen, activeModule]);
 
     // Auto-calculate Date of Closing
@@ -2457,14 +2720,14 @@ export default function Dashboard({ onLogout }) {
 
                     if (targetBankAccount) {
                         const updatedAcc = { ...targetBankAccount, balance: (targetBankAccount.balance || 0) + amountToChange };
-                        await fetch(`http://localhost:8080/api/bankaccounts`, {
+                        await fetch(`${API_BASE_URL_JAVA}/api/bankaccounts`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(updatedAcc)
                         });
                     } else if (targetDeposit) {
                         const updatedAcc = { ...targetDeposit, principalAmount: (targetDeposit.principalAmount || 0) + amountToChange };
-                        await fetch(`http://localhost:8080/api/deposits`, {
+                        await fetch(`${API_BASE_URL_JAVA}/api/deposits`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(updatedAcc)
@@ -2488,7 +2751,7 @@ export default function Dashboard({ onLogout }) {
                 };
             }
 
-            const res = await fetch(`http://localhost:8080${activeModule.endpoint}`, {
+            const res = await fetch(`${API_BASE_URL_JAVA}${activeModule.endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -2955,9 +3218,20 @@ export default function Dashboard({ onLogout }) {
                                                 <strong style={{ color: 'var(--text-main)' }}>{userSubscription.planName || 'SmartLedger Plan'}</strong>
                                                 <span style={{ color: userSubscription.status?.toLowerCase() === 'active' ? '#34d399' : '#f59e0b', fontSize: '12px', fontWeight: 'bold', background: userSubscription.status?.toLowerCase() === 'active' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(245, 158, 11, 0.1)', padding: '4px 8px', borderRadius: '20px' }}>{userSubscription.status ? userSubscription.status.toUpperCase() : 'PENDING'}</span>
                                             </div>
-                                            <div style={{ fontSize: '14px' }}>
+                                            <div style={{ fontSize: '14px', marginBottom: '16px' }}>
                                                 {userSubscription.currency === 'INR' ? '₹' : (userSubscription.currency === 'GBP' ? '£' : (userSubscription.currency === 'EUR' ? '€' : '$'))}{userSubscription.amount || '0'} / {userSubscription.duration || 'period'} • {userSubscription.status?.toLowerCase() === 'active' ? 'Active Subscription' : 'Awaiting verification or activation'}
                                             </div>
+                                            {userSubscription.status?.toLowerCase() === 'active' && userSubscription.planName?.toLowerCase() !== 'standard' && (
+                                                <button 
+                                                    onClick={() => generateInvoice(userSubscription)}
+                                                    style={{ width: '100%', padding: '10px 16px', background: 'transparent', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.5)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                                                    onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(52, 211, 153, 0.1)'; e.currentTarget.style.borderColor = '#34d399'; }}
+                                                    onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.5)'; }}
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                                    Download Invoice (PDF)
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
                                         <div style={{ color: 'var(--text-muted)', marginBottom: '16px' }}>No active subscriptions found.</div>

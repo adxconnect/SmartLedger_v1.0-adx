@@ -3,8 +3,10 @@ import './index.css';
 import Dashboard from './Dashboard';
 import AdminDashboard from './AdminDashboard';
 import Landing from './Landing';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { API_BASE_URL_PYTHON, API_BASE_URL_JAVA } from './config';
 
 const countryOptions = [
   { code: 'IN', dial: '+91', name: 'India' },
@@ -123,12 +125,35 @@ function App() {
         await updateProfile(userCredential.user, { displayName: formData.name });
         
         try {
-          await fetch('http://localhost:8080/api/auth/signup', {
+          // Explicitly save the user to 'users' collection to ensure UI consistency
+          await setDoc(doc(db, 'users', userCredential.user.uid), {
+              displayName: formData.name,
+              email: formData.email,
+              phoneCode: selectedCountry.dial,
+              phoneNumber: formData.phone,
+              shortUid: userCredential.user.uid.substring(0, 6).toUpperCase(),
+              createdAt: new Date().toISOString()
+          });
+          
+          // Also save to 'accounts' collection with matching UID to synchronize across backend
+          await setDoc(doc(db, 'accounts', userCredential.user.uid), {
+              accountName: formData.name,
+              email: formData.email,
+              id: userCredential.user.uid,
+              shortUid: userCredential.user.uid.substring(0, 6).toUpperCase(),
+              phoneCode: selectedCountry.dial,
+              phoneNumber: formData.phone
+          });
+
+          // Optional: still inform backend if needed, but the db writes are handled above
+          await fetch(`${API_BASE_URL_JAVA}/api/auth/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(formData)
           });
-        } catch (err) {}
+        } catch (err) {
+          console.error("Failed to write initial user records:", err);
+        }
         
         setIsAuthenticated(true);
         setShowAuthModal(false);
@@ -159,7 +184,31 @@ function App() {
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const userCredential = await signInWithPopup(auth, provider);
+      
+      try {
+          const userDocRef = doc(db, 'users', userCredential.user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          
+          if (!userDocSnap.exists()) {
+              await setDoc(userDocRef, {
+                  displayName: userCredential.user.displayName || '',
+                  email: userCredential.user.email || '',
+                  shortUid: userCredential.user.uid.substring(0, 6).toUpperCase(),
+                  createdAt: new Date().toISOString()
+              });
+              
+              await setDoc(doc(db, 'accounts', userCredential.user.uid), {
+                  accountName: userCredential.user.displayName || '',
+                  email: userCredential.user.email || '',
+                  id: userCredential.user.uid,
+                  shortUid: userCredential.user.uid.substring(0, 6).toUpperCase()
+              });
+          }
+      } catch (err) {
+          console.error("Failed to verify/create Google user records:", err);
+      }
+
       setIsAuthenticated(true);
       setShowAuthModal(false);
     } catch (err) {

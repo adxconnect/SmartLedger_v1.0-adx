@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Calendar, Filter, FileText, Landmark, Shield, Upload, Download, CheckCircle, AlertCircle, TrendingUp, TrendingDown, PieChart, RefreshCw, MessageSquare, DollarSign, ArrowRight, ArrowUp, Check, Wallet, Tag, Layers, History, Plus, Square } from 'lucide-react';
 import { auth } from './firebase';
+import { API_BASE_URL_PYTHON, API_BASE_URL_JAVA } from './config';
 
 // ─── Mini Donut Chart Component ───
 function MiniDonut({ segments, size = 120, label }) {
@@ -557,14 +558,14 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
             setLoading(true);
             try {
                 const [txRes, banksRes, depsRes, invRes, mfRes, goldRes, lendenRes, loansRes] = await Promise.all([
-                    fetch('http://localhost:8080/api/transactions').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/bankaccounts').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/deposits').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/investments').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/mutualfunds').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/goldsilverinvestments').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/lendings').then(r => r.ok ? r.json() : []),
-                    fetch('http://localhost:8080/api/loans').then(r => r.ok ? r.json() : [])
+                    fetch(`${API_BASE_URL_JAVA}/api/transactions`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/bankaccounts`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/deposits`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/investments`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/mutualfunds`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/goldsilverinvestments`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/lendings`).then(r => r.ok ? r.json() : []),
+                    fetch(`${API_BASE_URL_JAVA}/api/loans`).then(r => r.ok ? r.json() : [])
                 ]);
 
                 const txList = Array.isArray(txRes) ? txRes : [];
@@ -788,7 +789,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                 fd.append('password', pdfPassword);
             }
 
-            const res = await fetch("http://localhost:8000/api/ai/parse-statement", {
+            const res = await fetch(`${API_BASE_URL_PYTHON}/api/ai/parse-statement`, {
                 method: "POST",
                 body: fd
             });
@@ -850,12 +851,12 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                     refId: txn.refId || '',
                     description: `${txn.description} ${txn.taxSection ? '[' + txn.taxSection + ']' : ''}`.trim(),
                     amount: parseFloat(txn.amount) || 0,
-                    type: txn.type === 'CREDIT' ? 'Credit' : 'Debit',
+                    type: String(txn.type).toUpperCase() === 'CREDIT' ? 'Credit' : 'Debit',
                     category: txn.category || 'Others',
                     accountType: selectedAccount ? selectedAccount.accountType : 'Savings Account',
                     accountId: selectedBankAccountId
                 };
-                await fetch("http://localhost:8080/api/transactions", {
+                await fetch(`${API_BASE_URL_JAVA}/api/transactions`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
@@ -1030,7 +1031,7 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                 categoryBreakdown: categorySpending,
                 portfolioContext: portfolioContext
             };
-            const res = await fetch("http://localhost:8000/api/ai/ca-advisor", {
+            const res = await fetch(`${API_BASE_URL_PYTHON}/api/ai/ca-advisor`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
@@ -1870,13 +1871,24 @@ export default function AiVirtualCaImportView({ userUid, refreshTrigger, onTrans
                                                     ₹{parseFloat(t.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                                 </td>
                                                 <td style={{ padding: '12px' }}>
-                                                    <span style={{
-                                                        color: t.type === 'CREDIT' ? '#34d399' : '#ef4444',
-                                                        fontWeight: '700',
-                                                        fontSize: '13px'
-                                                    }}>
-                                                        {t.type}
-                                                    </span>
+                                                    <select
+                                                        className="vca-table-select"
+                                                        value={String(t.type).toUpperCase()}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setExtractedTransactions(prev => prev.map((item, i) => i === idx ? { ...item, type: val } : item));
+                                                        }}
+                                                        style={{
+                                                            color: String(t.type).toUpperCase() === 'CREDIT' ? '#34d399' : '#ef4444',
+                                                            fontWeight: '700',
+                                                            width: '100px',
+                                                            border: '1px solid var(--dash-border)',
+                                                            background: 'rgba(0,0,0,0.2)'
+                                                        }}
+                                                    >
+                                                        <option value="DEBIT" style={{ color: '#ef4444' }}>DEBIT</option>
+                                                        <option value="CREDIT" style={{ color: '#34d399' }}>CREDIT</option>
+                                                    </select>
                                                 </td>
                                                 <td style={{ padding: '12px' }}>
                                                     <select

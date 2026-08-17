@@ -55,8 +55,8 @@ from datetime import datetime
 import razorpay
 
 # Initialize Razorpay Client (Using test keys for development)
-RAZORPAY_KEY_ID = "rzp_test_TQ8tC5YEQHqehG"
-RAZORPAY_KEY_SECRET = "ZL2lrfxaVnUI36ZI9Zb0AYuQ"
+RAZORPAY_KEY_ID = "rzp_test_TQoEVoA414qbUS"
+RAZORPAY_KEY_SECRET = "z1rmY0MmZ60fLGUitKDm934j"
 
 try:
     razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
@@ -443,7 +443,8 @@ def health_check():
     
     return {
         "status": "online",
-        "service": "SmartLedger RAG & CA Service",
+        "service": "SmartLedger RAG & CA Service V2",
+        "debug": "antigravity_was_here",
         "geminiApiKeyConfigured": bool(GEMINI_API_KEY),
         "metrics": {
             "modelEngine": "Gemini 3 Pro" if GEMINI_API_KEY else "Local OCR Fallback",
@@ -532,10 +533,8 @@ def create_announcement(req: AnnouncementRequest):
 # --- Razorpay Billing Endpoints ---
 @app.post("/api/billing/create-order")
 def create_subscription_order(req: CreateOrderRequest):
-    if not razorpay_client:
-        raise HTTPException(status_code=500, detail="Razorpay client not configured")
-        
     try:
+        client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
         order_data = {
             "amount": req.amount,
             "currency": "INR",
@@ -544,7 +543,7 @@ def create_subscription_order(req: CreateOrderRequest):
                 "planName": req.planName
             }
         }
-        order = razorpay_client.order.create(data=order_data)
+        order = client.order.create(data=order_data)
         audit_logger.add_log('SYSTEM', f'Generated Razorpay Order for {req.planName}', 'admin@ledger.com', 'INFO')
         return order
     except Exception as e:

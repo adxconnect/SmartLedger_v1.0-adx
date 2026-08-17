@@ -11,7 +11,9 @@ import { auth, db } from './firebase';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import 'react-quill-new/dist/quill.snow.css';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { API_BASE_URL_PYTHON, API_BASE_URL_JAVA } from './config';
 
 const ExpandableMessage = ({ text }) => {
     const [expanded, setExpanded] = useState(false);
@@ -73,7 +75,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const adminFirestoreWrite = async (collectionName, documentId, data) => {
     try {
-      const response = await fetch('http://localhost:8000/api/admin/firestore-write', {
+      const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-write`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -95,7 +97,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const adminFirestoreRead = async (collectionName) => {
     try {
-      const response = await fetch('http://localhost:8000/api/admin/firestore-read', {
+      const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ collection_name: collectionName })
@@ -111,7 +113,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const adminFirestoreDelete = async (collectionName, documentId) => {
     try {
-      const response = await fetch('http://localhost:8000/api/admin/firestore-delete', {
+      const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/firestore-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ collection_name: collectionName, document_id: documentId })
@@ -250,7 +252,7 @@ export default function AdminDashboard({ onLogout }) {
     }
     
     try {
-      const response = await fetch('http://localhost:8000/api/billing/create-tier', {
+      const response = await fetch(`${API_BASE_URL_PYTHON}/api/billing/create-tier`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -368,7 +370,7 @@ export default function AdminDashboard({ onLogout }) {
     if (activeTab === 'users' || activeTab === 'overview' || activeTab === 'coupons') {
       const fetchUsers = async () => {
         try {
-          const response = await fetch('http://localhost:8000/api/admin/users');
+          const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/users`);
           if (response.ok) {
             const data = await response.json();
             if (data.users && data.users.length > 0) {
@@ -406,7 +408,7 @@ export default function AdminDashboard({ onLogout }) {
     if (activeTab === 'ai_engine' || activeTab === 'overview') {
       const fetchMetrics = async () => {
         try {
-          const response = await fetch('http://localhost:8000/api/ai/status');
+          const response = await fetch(`${API_BASE_URL_PYTHON}/api/ai/status`);
           if (response.ok) {
             const data = await response.json();
             if (data.metrics) {
@@ -437,7 +439,7 @@ export default function AdminDashboard({ onLogout }) {
         }
 
         try {
-          const logsResponse = await fetch('http://localhost:8000/api/ai/audit-logs');
+          const logsResponse = await fetch(`${API_BASE_URL_PYTHON}/api/ai/audit-logs`);
           if (logsResponse.ok) {
             const logsData = await logsResponse.json();
             setAuditLogs(logsData);
@@ -448,7 +450,7 @@ export default function AdminDashboard({ onLogout }) {
 
         try {
           // Poll the backend
-          const sbResponse = await fetch('http://localhost:8000/api/ai/status');
+          const sbResponse = await fetch(`${API_BASE_URL_PYTHON}/api/ai/status`);
           if (sbResponse.ok) {
             setInfraStatus(prev => ({ ...prev, springBoot: { label: 'OPTIMAL', class: 'admin-badge-success' } }));
           } else {
@@ -578,7 +580,7 @@ export default function AdminDashboard({ onLogout }) {
     if (announcementTargetType === 'SPECIFIC' && announcementUserSearch.trim().length > 0) {
       const fetchResults = async () => {
         try {
-          const res = await fetch(`http://localhost:8000/api/admin/users/search?q=${announcementUserSearch}`);
+          const res = await fetch(`${API_BASE_URL_PYTHON}/api/admin/users/search?q=${announcementUserSearch}`);
           if (res.ok) {
             const data = await res.json();
             setAnnouncementSearchResults(data.users || []);
@@ -644,7 +646,7 @@ export default function AdminDashboard({ onLogout }) {
         target: target,
         content: announcementContent
       };
-      const response = await fetch('http://localhost:8000/api/admin/announcement', {
+      const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/announcement`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -667,7 +669,7 @@ export default function AdminDashboard({ onLogout }) {
     if (activeTab === 'ledger') {
       const fetchTransactions = async () => {
         try {
-          const response = await fetch('http://localhost:8000/api/billing/transactions');
+          const response = await fetch(`${API_BASE_URL_PYTHON}/api/billing/transactions`);
           if (response.ok) {
             const data = await response.json();
             if (data && data.items) {
@@ -695,7 +697,7 @@ export default function AdminDashboard({ onLogout }) {
           refundAccountDetails: refundType === 'new' ? refundAccountDetails : 'existing'
         }
       };
-      const response = await fetch('http://localhost:8000/api/billing/refund', {
+      const response = await fetch(`${API_BASE_URL_PYTHON}/api/billing/refund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -704,7 +706,7 @@ export default function AdminDashboard({ onLogout }) {
         alert('Refund processed successfully!');
         setIsRefundModalOpen(false);
         setSelectedTxnForRefund(null);
-        const fetchResponse = await fetch('http://localhost:8000/api/billing/transactions');
+        const fetchResponse = await fetch(`${API_BASE_URL_PYTHON}/api/billing/transactions`);
         if (fetchResponse.ok) {
            const data = await fetchResponse.json();
            if (data && data.items) setRazorpayTransactions(data.items);
@@ -763,11 +765,107 @@ export default function AdminDashboard({ onLogout }) {
     setUserToDelete(id);
   };
 
-  const confirmDeleteUser = () => {
+  const confirmDeleteUser = async () => {
     if (userToDelete) {
-      setUsersList(usersList.filter(u => u.id !== userToDelete));
-      setUserToDelete(null);
+      try {
+        const response = await fetch(`${API_BASE_URL_PYTHON}/api/admin/users/${userToDelete}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          setUsersList(usersList.filter(u => u.id !== userToDelete));
+          setUserToDelete(null);
+        } else {
+          const errorData = await response.json();
+          alert(`Failed to delete user: ${errorData.detail || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error("Error deleting user:", error);
+        alert("Failed to delete user due to a network error.");
+      }
     }
+  };
+
+  const generateInvoice = (user) => {
+    let amount = 0;
+    if (user.tier === 'Enterprise') amount = 9999;
+    else if (user.tier === 'Pro') amount = 1999;
+    else amount = 499; // Standard
+
+    const doc = new jsPDF();
+    const logoUrl = '/assets/logo.png';
+    
+    const generatePdfContent = (img = null) => {
+      if (img) {
+        doc.addImage(img, 'PNG', 14, 15, 20, 20);
+      }
+      
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(33, 33, 33);
+      doc.text("INVOICE", 150, 25);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text("Smart Ledger V2", 14, 45);
+      doc.text("Kaliganj Durgapur, Pin 713212", 14, 50);
+
+      const invoiceNo = `INV-${new Date().getTime().toString().slice(-6)}`;
+      const date = new Date().toLocaleDateString('en-IN');
+      doc.text(`Invoice Number: ${invoiceNo}`, 140, 45);
+      doc.text(`Date of Issue: ${date}`, 140, 50);
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(33, 33, 33);
+      doc.text("Billed To:", 14, 75);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(user.name || "Customer", 14, 82);
+      doc.text(user.email || "customer@example.com", 14, 87);
+      if (user.uidDisplay || user.id) doc.text(`UID: ${user.uidDisplay || user.id}`, 14, 92);
+
+      const totalAmount = amount;
+      const baseAmount = (totalAmount / 1.18).toFixed(2);
+      const gstAmount = (totalAmount - parseFloat(baseAmount)).toFixed(2);
+
+      const tableColumn = ["Description", "Amount (INR)"];
+      const tableRows = [
+        [`SmartLedger ${user.tier} Subscription - Annual`, `${baseAmount}`],
+        ["IGST @ 18%", `${gstAmount}`]
+      ];
+
+      autoTable(doc, {
+        startY: 105,
+        head: [tableColumn],
+        body: tableRows,
+        theme: 'grid',
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 5 },
+        columnStyles: { 1: { halign: 'right' } }
+      });
+
+      const finalY = doc.lastAutoTable.finalY || 130;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Total Amount (Incl. GST):", 155, finalY + 10, { align: 'right' });
+      doc.text(`Rs. ${totalAmount.toFixed(2)}`, 196, finalY + 10, { align: 'right' });
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(150, 150, 150);
+      doc.text("Thank you for your business!", 105, 280, { align: 'center' });
+      doc.text("This is a computer-generated invoice and does not require a signature.", 105, 285, { align: 'center' });
+
+      doc.save(`Invoice_${invoiceNo}_${(user.name || 'User').replace(/\\s+/g, '_')}.pdf`);
+    };
+
+    const img = new Image();
+    img.src = logoUrl;
+    img.onload = () => generatePdfContent(img);
+    img.onerror = () => generatePdfContent(null);
   };
 
   const [usersCurrentPage, setUsersCurrentPage] = useState(1);
@@ -1199,9 +1297,6 @@ export default function AdminDashboard({ onLogout }) {
                   <button className="admin-action-btn" onClick={() => alert('Exporting full audit snapshot...')}>
                     Export System Report
                   </button>
-                  <button className="admin-btn-primary" onClick={() => setIsAddUserModalOpen(true)}>
-                    + Invite Enterprise User
-                  </button>
                 </div>
               </div>
 
@@ -1368,10 +1463,6 @@ export default function AdminDashboard({ onLogout }) {
                     <option value="FLAGGED">Flagged Users</option>
                     <option value="BLOCKED">Blocked Users</option>
                   </select>
-
-                  <button className="admin-btn-primary" onClick={() => setIsAddUserModalOpen(true)}>
-                    + Invite New User
-                  </button>
                 </div>
               </div>
 
@@ -1430,9 +1521,11 @@ export default function AdminDashboard({ onLogout }) {
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ fontWeight: '600', color: 'var(--dash-text)' }}>{user.tier}</div>
-                            <button className="admin-action-btn" style={{ fontSize: '11px', padding: '4px 8px', width: 'fit-content', border: '1px solid var(--dash-border)' }} onClick={() => alert('Downloading invoice PDF...')}>
-                              Download Invoice (PDF)
-                            </button>
+                            {user.tier !== 'Standard' && (
+                              <button className="admin-action-btn" style={{ fontSize: '11px', padding: '4px 8px', width: 'fit-content', border: '1px solid var(--dash-border)' }} onClick={() => generateInvoice(user)}>
+                                Download Invoice (PDF)
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td>
