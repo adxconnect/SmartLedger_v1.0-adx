@@ -16,8 +16,17 @@ public class FirebaseConfig {
     public void initFirebase() {
         System.out.println("========== INITIALIZING FIREBASE ==========");
         try {
-            // This expects a file named 'serviceAccountKey.json' in your src/main/resources folder
-            InputStream serviceAccount = getClass().getClassLoader().getResourceAsStream("serviceAccountKey.json");
+            // Support Render.com secret files or local classpath
+            InputStream serviceAccount;
+            java.io.File renderSecretFile = new java.io.File("/etc/secrets/serviceAccountKey.json");
+            
+            if (renderSecretFile.exists()) {
+                serviceAccount = new java.io.FileInputStream(renderSecretFile);
+                System.out.println("Using Firebase key from Render Secret File.");
+            } else {
+                serviceAccount = getClass().getClassLoader().getResourceAsStream("serviceAccountKey.json");
+                System.out.println("Using Firebase key from classpath.");
+            }
 
             if (serviceAccount == null) {
                 System.err.println("CRITICAL ERROR: Firebase Service Account Key not found in resources!");
