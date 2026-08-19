@@ -28,18 +28,44 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# DEFAULT FALLBACK PLANS if Firestore is unavailable or empty
+DEFAULT_SUBSCRIPTION_PLANS = [
+    { "id": "sub_student", "title": "Student Plan", "amount": 199, "duration": "Monthly", "currency": "INR", "status": "Active" },
+    { "id": "sub_pro", "title": "Pro Plan (Popular)", "amount": 999, "duration": "Monthly", "currency": "INR", "status": "Active" },
+    { "id": "sub_enterprise", "title": "Enterprise Plan", "amount": 4999, "duration": "Monthly", "currency": "INR", "status": "Active" }
+]
+
 # Initialize Firebase Admin
-try:
-    cred_path = os.path.join(os.path.dirname(__file__), "firebase-admin-key.json.json")
-    if os.path.exists(cred_path):
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': 'smart-ledger-a1775.firebasestorage.app'
-        })
-    else:
-        print("Firebase Admin Key not found.")
-except Exception as e:
-    print(f"Firebase Admin Initialization Failed: {e}")
+def init_firebase_admin():
+    if not firebase_admin._apps:
+        try:
+            cred_path = os.path.join(os.path.dirname(__file__), "firebase-admin-key.json.json")
+            if not os.path.exists(cred_path):
+                cred_path = os.path.join(os.path.dirname(__file__), "firebase-admin-key.json")
+            
+            if os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred, {
+                    'storageBucket': 'smart-ledger-a1775.firebasestorage.app'
+                })
+                print("Firebase Admin initialized via local service account key file.")
+            elif os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON"):
+                cred_dict = json.loads(os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON"))
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred, {
+                    'storageBucket': 'smart-ledger-a1775.firebasestorage.app'
+                })
+                print("Firebase Admin initialized via FIREBASE_SERVICE_ACCOUNT_JSON env var.")
+            else:
+                firebase_admin.initialize_app(options={
+                    'storageBucket': 'smart-ledger-a1775.firebasestorage.app',
+                    'projectId': 'smart-ledger-a1775'
+                })
+                print("Firebase Admin initialized via default configuration.")
+        except Exception as e:
+            print(f"Firebase Admin Initialization Warning: {e}")
+
+init_firebase_admin()
 
 # Enable CORS for React Frontend (localhost:5173) and Java Backend (localhost:8080)
 app.add_middleware(
@@ -671,6 +697,7 @@ def admin_firestore_write(req: AdminFirestoreWriteRequest):
 @app.post("/api/admin/firestore-read")
 def admin_firestore_read(req: AdminFirestoreReadRequest):
     try:
+        init_firebase_admin()
         from firebase_admin import firestore
         db = firestore.client()
         docs = db.collection(req.collection_name).stream()
@@ -679,10 +706,14 @@ def admin_firestore_read(req: AdminFirestoreReadRequest):
             d = doc.to_dict()
             d["id"] = doc.id
             results.append(d)
+        if not results and req.collection_name == "subscriptions":
+            results = DEFAULT_SUBSCRIPTION_PLANS
         return {"status": "success", "data": results}
     except Exception as e:
         print(f"Firestore Read Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        if req.collection_name == "subscriptions":
+            return {"status": "success", "data": DEFAULT_SUBSCRIPTION_PLANS}
+        return {"status": "success", "data": []}
 
 @app.post("/api/admin/firestore-delete")
 def admin_firestore_delete(req: AdminFirestoreDeleteRequest):

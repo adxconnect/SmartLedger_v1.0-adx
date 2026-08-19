@@ -70,9 +70,15 @@ const PricingCard = ({ plan, onAuthClick }) => {
   );
 };
 
+const DEFAULT_PLANS = [
+  { id: 'sub_student', title: 'Student Plan', amount: 199, duration: 'Monthly' },
+  { id: 'sub_pro', title: 'Pro Plan (Popular)', amount: 999, duration: 'Monthly' },
+  { id: 'sub_enterprise', title: 'Enterprise Plan', amount: 4999, duration: 'Monthly' }
+];
+
 export default function Landing({ onAuthClick }) {
   const [activeModal, setActiveModal] = useState(null);
-  const [plans, setPlans] = useState([]);
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -85,8 +91,10 @@ export default function Landing({ onAuthClick }) {
         if (response.ok) {
           const data = await response.json();
           const plansData = data.data || [];
-          plansData.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
-          setPlans(plansData);
+          if (plansData.length > 0) {
+            plansData.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+            setPlans(plansData);
+          }
         } else {
           console.error("Failed to fetch plans from backend:", await response.text());
         }
