@@ -55,7 +55,8 @@ export default function AdminDashboard({ onLogout }) {
     currency: 'INR',
     autopay: false,
     trialEnabled: false,
-    trialDays: ''
+    trialDays: '',
+    isStudentPlan: false
   });
   const [subscriptionsList, setSubscriptionsList] = useState([]);
 
@@ -72,6 +73,20 @@ export default function AdminDashboard({ onLogout }) {
   
   const [couponsList, setCouponsList] = useState([]);
   const [grievancesList, setGrievancesList] = useState([]);
+  const [studentVerificationsList, setStudentVerificationsList] = useState([]);
+  
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [accessDays, setAccessDays] = useState('');
+  const [selectedUserForAccess, setSelectedUserForAccess] = useState(null);
+  const [freeAccessList, setFreeAccessList] = useState([]);
 
   const adminFirestoreWrite = async (collectionName, documentId, data) => {
     try {
@@ -128,6 +143,57 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
+  const handleGrantFreeAccess = async (e) => {
+    e.preventDefault();
+    if (!selectedUserForAccess || !accessDays) return;
+    try {
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + parseInt(accessDays));
+        
+        const subData = {
+            userId: selectedUserForAccess.id,
+            userEmail: selectedUserForAccess.email,
+            planName: "Free Access",
+            amount: "0",
+            duration: `${accessDays} Days`,
+            status: "Active",
+            startDate: new Date().toISOString(),
+            endDate: endDate.toISOString(),
+            createdAt: new Date().toISOString(),
+            isFreeAccess: true
+        };
+        
+        const docId = `free_${selectedUserForAccess.id}_${Date.now()}`;
+        await adminFirestoreWrite('business_subscriptions', docId, subData);
+        setFreeAccessList([...freeAccessList, { id: docId, ...subData }]);
+        showToast(`Successfully granted ${accessDays} days of free access to ${selectedUserForAccess.name}`);
+        setIsAccessModalOpen(false);
+        setAccessDays('');
+        setSelectedUserForAccess(null);
+    } catch (err) {
+        console.error(err);
+        showToast("Failed to grant free access.", 'error');
+    }
+  };
+
+  const handleRevokeFreeAccess = (accessRecord) => {
+    setConfirmDialog({
+      title: 'Revoke Free Access',
+      message: `Are you sure you want to revoke free access for ${accessRecord.userEmail}?`,
+      onConfirm: async () => {
+        try {
+            await adminFirestoreWrite('business_subscriptions', accessRecord.id, { ...accessRecord, status: 'Revoked', endDate: new Date().toISOString() });
+            setFreeAccessList(freeAccessList.filter(a => a.id !== accessRecord.id));
+            showToast("Free access revoked successfully.");
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to revoke free access.", 'error');
+        }
+        setConfirmDialog(null);
+      }
+    });
+  };
+
   const handleResolveGrievance = async (grievanceId) => {
     try {
       const grievance = grievancesList.find(g => g.id === grievanceId);
@@ -142,7 +208,7 @@ export default function AdminDashboard({ onLogout }) {
       setGrievancesList(grievancesList.map(g => g.id === grievanceId ? updatedGrievance : g));
     } catch (e) {
       console.error(e);
-      alert("Failed to resolve grievance.");
+      showToast("Failed to resolve grievance.", 'error');
     }
   };
 
@@ -182,7 +248,7 @@ export default function AdminDashboard({ onLogout }) {
           await adminFirestoreWrite('coupons', editingCouponId, updatedCoupon);
       }
 
-      alert("Coupon Updated Successfully!");
+      showToast("Coupon Updated Successfully!");
       return;
     }
 
@@ -202,12 +268,12 @@ export default function AdminDashboard({ onLogout }) {
     
     await adminFirestoreWrite('coupons', newCoupon.id, newCoupon);
     
-    alert("Coupon Created Successfully!");
+    showToast("Coupon Created Successfully!");
   };
 
   const openCreateModal = () => {
     setEditingSubscriptionId(null);
-    setNewSubscriptionForm({ title: '', duration: 'Monthly', amount: '', currency: 'INR', autopay: false, trialEnabled: false, trialDays: '' });
+    setNewSubscriptionForm({ title: '', duration: 'Monthly', amount: '', currency: 'INR', autopay: false, trialEnabled: false, trialDays: '', isStudentPlan: false });
     setIsCreateSubscriptionModalOpen(true);
   };
 
@@ -220,7 +286,8 @@ export default function AdminDashboard({ onLogout }) {
       currency: sub.currency || 'INR',
       autopay: sub.autopay,
       trialEnabled: sub.trialEnabled || false,
-      trialDays: sub.trialDays || ''
+      trialDays: sub.trialDays || '',
+      isStudentPlan: sub.isStudentPlan || false
     });
     setIsCreateSubscriptionModalOpen(true);
   };
@@ -235,7 +302,8 @@ export default function AdminDashboard({ onLogout }) {
            ...sub, 
            ...newSubscriptionForm, 
            amount: parseFloat(newSubscriptionForm.amount), 
-           trialDays: newSubscriptionForm.trialEnabled ? parseInt(newSubscriptionForm.trialDays) : 0 
+           trialDays: newSubscriptionForm.trialEnabled ? parseInt(newSubscriptionForm.trialDays) : 0,
+           isStudentPlan: newSubscriptionForm.isStudentPlan
          } : sub
        );
        setSubscriptionsList(updatedList);
@@ -247,7 +315,7 @@ export default function AdminDashboard({ onLogout }) {
            await adminFirestoreWrite('subscriptions', editingSubscriptionId, updatedSub);
        }
 
-       alert("Subscription Tier Updated Successfully!");
+       showToast("Subscription Tier Updated Successfully!");
        return;
     }
     
@@ -262,7 +330,8 @@ export default function AdminDashboard({ onLogout }) {
           duration: newSubscriptionForm.duration,
           autopay: newSubscriptionForm.autopay,
           trialEnabled: newSubscriptionForm.trialEnabled,
-          trialDays: newSubscriptionForm.trialEnabled ? parseInt(newSubscriptionForm.trialDays) : 0
+          trialDays: newSubscriptionForm.trialEnabled ? parseInt(newSubscriptionForm.trialDays) : 0,
+          isStudentPlan: newSubscriptionForm.isStudentPlan
         })
       });
       
@@ -277,15 +346,16 @@ export default function AdminDashboard({ onLogout }) {
           autopay: newSubscriptionForm.autopay,
           trialEnabled: newSubscriptionForm.trialEnabled,
           trialDays: newSubscriptionForm.trialEnabled ? parseInt(newSubscriptionForm.trialDays) : 0,
+          isStudentPlan: newSubscriptionForm.isStudentPlan,
           status: 'Active'
         };
         setSubscriptionsList([newSub, ...subscriptionsList]);
         setIsCreateSubscriptionModalOpen(false);
-        setNewSubscriptionForm({ title: '', duration: 'Monthly', amount: '', currency: 'INR', autopay: false, trialEnabled: false, trialDays: '' });
+        setNewSubscriptionForm({ title: '', duration: 'Monthly', amount: '', currency: 'INR', autopay: false, trialEnabled: false, trialDays: '', isStudentPlan: false });
         
         await adminFirestoreWrite('subscriptions', newSub.id, newSub);
 
-        alert(data.type === 'plan' ? 'Razorpay Autopay Plan Created Successfully!' : 'Standard Tier Created Successfully!');
+        showToast(data.type === 'plan' ? 'Razorpay Autopay Plan Created Successfully!' : 'Standard Tier Created Successfully!');
       } else {
         const errText = await response.text();
         let errMsg = 'Unknown error';
@@ -295,28 +365,39 @@ export default function AdminDashboard({ onLogout }) {
         } catch (e) {
            errMsg = errText;
         }
-        alert('Failed to create tier: ' + errMsg);
+        showToast('Failed to create tier: ' + errMsg, 'error');
       }
     } catch (error) {
       console.error("Create Tier Error:", error);
-      alert('Error creating subscription tier: ' + error.message);
+      showToast('Error creating subscription tier: ' + error.message, 'error');
     }
   };
 
-  const handleDeleteSubscription = async (subId) => {
-    if (!window.confirm("Are you sure you want to delete this subscription tier?")) return;
-    try {
-      await adminFirestoreDelete('subscriptions', subId);
-      setSubscriptionsList(subscriptionsList.filter(s => s.id !== subId));
-      alert("Subscription Tier Deleted Successfully!");
-    } catch (error) {
-      alert("Failed to delete subscription tier.");
-    }
+  const handleDeleteSubscription = (subId) => {
+    setConfirmDialog({
+      title: 'Delete Subscription Tier',
+      message: 'Are you sure you want to delete this subscription tier?',
+      onConfirm: async () => {
+        try {
+          await adminFirestoreDelete('subscriptions', subId);
+          setSubscriptionsList(subscriptionsList.filter(s => s.id !== subId));
+          showToast("Subscription Tier Deleted Successfully!");
+        } catch (error) {
+          showToast("Failed to delete subscription tier.", 'error');
+        }
+        setConfirmDialog(null);
+      }
+    });
   };
 
   // Fetch billing data from backend (subscriptions, coupons, grievances)
   const fetchBillingData = async () => {
     try {
+      const busSubs = await adminFirestoreRead('business_subscriptions');
+      if (busSubs.length > 0) {
+        setFreeAccessList(busSubs.filter(s => s.isFreeAccess && s.status === 'Active'));
+      }
+
       const subs = await adminFirestoreRead('subscriptions');
       if (subs.length > 0) setSubscriptionsList(subs);
       
@@ -326,6 +407,11 @@ export default function AdminDashboard({ onLogout }) {
       const grievs = await adminFirestoreRead('grievances');
       if (grievs.length > 0) {
         setGrievancesList(grievs);
+      }
+
+      const studentVerifs = await adminFirestoreRead('student_verifications');
+      if (studentVerifs.length > 0) {
+        setStudentVerificationsList(studentVerifs);
       }
 
       const settings = await adminFirestoreRead('settings');
@@ -633,12 +719,12 @@ export default function AdminDashboard({ onLogout }) {
 
   const handleSendAnnouncement = async () => {
     if (!announcementContent || announcementContent === '<p><br></p>') {
-      alert("Announcement cannot be empty");
+      showToast("Announcement cannot be empty", 'error');
       return;
     }
     const target = announcementTargetType === 'ALL' ? 'ALL' : (announcementSelectedUser ? announcementSelectedUser.id : null);
     if (!target) {
-      alert("Please select a specific user to send the announcement to.");
+      showToast("Please select a specific user to send the announcement to.");
       return;
     }
     try {
@@ -652,16 +738,16 @@ export default function AdminDashboard({ onLogout }) {
         body: JSON.stringify(payload)
       });
       if (response.ok) {
-        alert('Announcement sent successfully! It will appear in client notifications.');
+        showToast('Announcement sent successfully! It will appear in client notifications.');
         setAnnouncementContent('');
         setAnnouncementTargetType('ALL');
         setAnnouncementSelectedUser(null);
       } else {
-        alert('Failed to send announcement');
+        showToast('Failed to send announcement', 'error');
       }
     } catch (e) {
       console.error(e);
-      alert('Error sending announcement');
+      showToast('Error sending announcement', 'error');
     }
   };
 
@@ -703,7 +789,7 @@ export default function AdminDashboard({ onLogout }) {
         body: JSON.stringify(payload)
       });
       if (response.ok) {
-        alert('Refund processed successfully!');
+        showToast('Refund processed successfully!');
         setIsRefundModalOpen(false);
         setSelectedTxnForRefund(null);
         const fetchResponse = await fetch(`${API_BASE_URL_PYTHON}/api/billing/transactions`);
@@ -713,11 +799,11 @@ export default function AdminDashboard({ onLogout }) {
         }
       } else {
         const errorData = await response.json();
-        alert('Refund failed: ' + (errorData.detail || 'Unknown error'));
+        showToast('Refund failed: ' + (errorData.detail || 'Unknown error', 'error'));
       }
     } catch (error) {
       console.error(error);
-      alert('Error processing refund');
+      showToast('Error processing refund', 'error');
     }
   };
 
@@ -761,6 +847,48 @@ export default function AdminDashboard({ onLogout }) {
     setUsersList(usersList.map(u => u.id === id ? { ...u, status: u.status === 'Blocked' ? 'Active' : 'Blocked' } : u));
   };
 
+  const handleToggleUploads = async (user) => {
+    try {
+      const newUploadStatus = !user.blockUploads;
+      await adminFirestoreWrite('users', user.id, { ...user, blockUploads: newUploadStatus });
+      setUsersList(usersList.map(u => u.id === user.id ? { ...u, blockUploads: newUploadStatus } : u));
+      showToast(newUploadStatus ? "Uploads Blocked for user" : "Uploads Allowed for user");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to toggle upload status", "error");
+    }
+  };
+
+  const handleApproveVerification = async (verification) => {
+    try {
+      await adminFirestoreWrite('student_verifications', verification.id, { ...verification, status: 'Approved' });
+      setStudentVerificationsList(studentVerificationsList.map(v => v.id === verification.id ? { ...v, status: 'Approved' } : v));
+      
+      // Also update the business_subscriptions status to 'Payment Pending' so they can pay
+      if (verification.subscriptionId) {
+        const sub = await adminFirestoreRead('business_subscriptions').then(res => res.find(s => s.id === verification.subscriptionId));
+        if (sub) {
+          await adminFirestoreWrite('business_subscriptions', sub.id, { ...sub, status: 'Payment Pending' });
+        }
+      }
+      showToast("Student Verification Approved!");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to approve verification", "error");
+    }
+  };
+
+  const handleRejectVerification = async (verification) => {
+    try {
+      await adminFirestoreWrite('student_verifications', verification.id, { ...verification, status: 'Rejected' });
+      setStudentVerificationsList(studentVerificationsList.map(v => v.id === verification.id ? { ...v, status: 'Rejected' } : v));
+      showToast("Student Verification Rejected");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to reject verification", "error");
+    }
+  };
+
   const handleDeleteUser = (id) => {
     setUserToDelete(id);
   };
@@ -777,11 +905,11 @@ export default function AdminDashboard({ onLogout }) {
           setUserToDelete(null);
         } else {
           const errorData = await response.json();
-          alert(`Failed to delete user: ${errorData.detail || 'Unknown error'}`);
+          showToast(`Failed to delete user: ${errorData.detail || 'Unknown error'}`, 'error');
         }
       } catch (error) {
         console.error("Error deleting user:", error);
-        alert("Failed to delete user due to a network error.");
+        showToast("Failed to delete user due to a network error.", 'error');
       }
     }
   };
@@ -809,7 +937,7 @@ export default function AdminDashboard({ onLogout }) {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100, 100, 100);
       doc.text("Smart Ledger V2", 14, 45);
-      doc.text("Kaliganj Durgapur, Pin 713212", 14, 50);
+      doc.text("City Centre, Durgapur, Pin - 713212", 14, 50);
 
       const invoiceNo = `INV-${new Date().getTime().toString().slice(-6)}`;
       const date = new Date().toLocaleDateString('en-IN');
@@ -892,7 +1020,7 @@ export default function AdminDashboard({ onLogout }) {
     }
     
     if (filteredLogs.length === 0) {
-      alert("No logs found in this date range.");
+      showToast("No logs found in this date range.");
       return;
     }
     
@@ -1077,6 +1205,14 @@ export default function AdminDashboard({ onLogout }) {
         >
           <MessageSquare size={18} />
           <span>Grievances</span>
+        </div>
+        <div
+          className={`admin-nav-item ${activeTab === 'student_verifications' ? 'active' : ''}`}
+          onClick={() => setActiveTab('student_verifications')}
+          title="Student Verifications"
+        >
+          <ShieldAlert size={18} />
+          <span>Student Verifications</span>
         </div>
       </aside>
 
@@ -1294,7 +1430,7 @@ export default function AdminDashboard({ onLogout }) {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <button className="admin-action-btn" onClick={() => alert('Exporting full audit snapshot...')}>
+                  <button className="admin-action-btn" onClick={() => showToast('Exporting full audit snapshot...')}>
                     Export System Report
                   </button>
                 </div>
@@ -1520,11 +1656,16 @@ export default function AdminDashboard({ onLogout }) {
                         <td style={{ fontWeight: '600', color: 'var(--dash-text-muted)', fontSize: '12px' }}>{user.uidDisplay || user.id}</td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ fontWeight: '600', color: 'var(--dash-text)' }}>{user.tier}</div>
+                            <div style={{ fontWeight: '600', color: 'var(--dash-text)' }}>{user.tier === 'Standard' ? 'Free Tier' : user.tier}</div>
                             {user.tier !== 'Standard' && (
                               <button className="admin-action-btn" style={{ fontSize: '11px', padding: '4px 8px', width: 'fit-content', border: '1px solid var(--dash-border)' }} onClick={() => generateInvoice(user)}>
                                 Download Invoice (PDF)
                               </button>
+                            )}
+                            {freeAccessList.find(a => a.userId === user.id) && (
+                               <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 8px', borderRadius: '6px', width: 'fit-content', marginTop: '4px' }}>
+                                 Free Access ({freeAccessList.find(a => a.userId === user.id).duration})
+                               </div>
                             )}
                           </div>
                         </td>
@@ -1546,6 +1687,36 @@ export default function AdminDashboard({ onLogout }) {
                               title="Inspect User Ledger"
                             >
                               <Eye size={14} />
+                            </button>
+                            {user.tier === 'Standard' && !freeAccessList.find(a => a.userId === user.id) && (
+                              <button
+                                className="admin-action-btn"
+                                onClick={() => {
+                                  setSelectedUserForAccess(user);
+                                  setIsAccessModalOpen(true);
+                                }}
+                                title="Grant Free Access"
+                              >
+                                <Key size={14} />
+                              </button>
+                            )}
+                            {freeAccessList.find(a => a.userId === user.id) && (
+                              <button
+                                className="admin-action-btn"
+                                onClick={() => handleRevokeFreeAccess(freeAccessList.find(a => a.userId === user.id))}
+                                title="Revoke Free Access"
+                                style={{ color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                              >
+                                <Lock size={14} />
+                              </button>
+                            )}
+                            <button
+                              className="admin-action-btn"
+                              onClick={() => handleToggleUploads(user)}
+                              style={{ color: user.blockUploads ? '#ef4444' : '#10b981' }}
+                              title={user.blockUploads ? "Allow Uploads" : "Block Uploads"}
+                            >
+                              <Database size={14} />
                             </button>
                             <button
                               className="admin-action-btn"
@@ -1655,7 +1826,7 @@ export default function AdminDashboard({ onLogout }) {
                       Immutable trace of all administrative logins, system overrides, and high-value transactions.
                     </p>
                   </div>
-                  <button className="admin-action-btn" onClick={() => alert('Refreshing live audit feed...')} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px' }}>
+                  <button className="admin-action-btn" onClick={() => showToast('Refreshing live audit feed...')} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px' }}>
                     <RefreshCw size={14} /> Refresh Feed
                   </button>
                 </div>
@@ -1802,10 +1973,10 @@ export default function AdminDashboard({ onLogout }) {
                       style={{ border: 'none', background: 'transparent', outline: 'none', color: 'var(--dash-text)', fontSize: '13px', marginLeft: '8px', width: '220px' }}
                     />
                   </div>
-                  <button className="admin-action-btn" onClick={() => alert('Exporting Ledger as CSV...')}>
+                  <button className="admin-action-btn" onClick={() => showToast('Exporting Ledger as CSV...')}>
                     Export CSV
                   </button>
-                  <button className="admin-btn-primary" onClick={() => alert('Add Manual Entry feature coming soon')}>
+                  <button className="admin-btn-primary" onClick={() => showToast('Add Manual Entry feature coming soon')}>
                     + Manual Entry
                   </button>
                 </div>
@@ -2045,6 +2216,86 @@ export default function AdminDashboard({ onLogout }) {
             </div>
           )}
 
+          {/* STUDENT VERIFICATIONS TAB */}
+          {activeTab === 'student_verifications' && (
+            <div className="admin-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>Student Verifications</h2>
+                  <p style={{ margin: '4px 0 0', color: 'var(--dash-text-muted)', fontSize: '13.5px' }}>
+                    Review student ID cards and fee receipts for subscription access.
+                  </p>
+                </div>
+              </div>
+
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>USER EMAIL</th>
+                      <th>PLAN NAME</th>
+                      <th>DOCUMENTS</th>
+                      <th>STATUS</th>
+                      <th>ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentVerificationsList.length > 0 ? studentVerificationsList.map(v => (
+                      <tr key={v.id}>
+                        <td style={{ fontWeight: '600', color: 'var(--dash-text-muted)', fontSize: '12px' }}>{v.id.substring(0, 8)}</td>
+                        <td>{v.userEmail}</td>
+                        <td style={{ fontWeight: '700' }}>{v.planName}</td>
+                        <td>
+                          {(v.documents && v.documents.length > 0) || (v.documentUrls && v.documentUrls.length > 0) ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              {(v.documents || v.documentUrls).map((docUrl, i) => (
+                                <a key={i} href={docUrl} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontSize: '12px' }}>
+                                  View Doc {i + 1}
+                                </a>
+                              ))}
+                            </div>
+                          ) : 'No documents'}
+                        </td>
+                        <td>
+                          <span className={`admin-badge ${v.status === 'Approved' ? 'admin-badge-success' : v.status === 'Rejected' ? 'admin-badge-danger' : 'admin-badge-warning'}`}>
+                            {v.status}
+                          </span>
+                        </td>
+                        <td>
+                          {v.status === 'Pending' && (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                className="admin-action-btn"
+                                style={{ color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}
+                                onClick={() => handleApproveVerification(v)}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="admin-action-btn"
+                                style={{ color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                                onClick={() => handleRejectVerification(v)}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--dash-text-muted)' }}>
+                          No student verifications found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* SUBSCRIPTIONS TAB */}
           {activeTab === 'subscriptions' && (
             <div className="admin-card">
@@ -2088,6 +2339,11 @@ export default function AdminDashboard({ onLogout }) {
                             {sub.trialEnabled && (
                               <span className="admin-badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                                 {sub.trialDays} Days Trial
+                              </span>
+                            )}
+                            {sub.isStudentPlan && (
+                              <span className="admin-badge" style={{ background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                                Student Plan
                               </span>
                             )}
                           </div>
@@ -2201,6 +2457,63 @@ export default function AdminDashboard({ onLogout }) {
           )}
 
         </div>
+
+
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: toast.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#fff',
+          padding: '16px 24px',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          zIndex: 9999,
+          fontWeight: '600',
+          fontSize: '14px',
+          animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          {toast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Custom Confirm Dialog */}
+      {confirmDialog && (
+        <div className="admin-modal-overlay" onClick={() => setConfirmDialog(null)} style={{ zIndex: 10000 }}>
+          <div className="admin-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <AlertTriangle size={24} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: '800' }}>{confirmDialog.title}</h3>
+            <p style={{ margin: '0 0 24px', color: 'var(--dash-text-muted)', fontSize: '14px' }}>
+              {confirmDialog.message}
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                className="admin-action-btn"
+                style={{ flex: 1, padding: '12px' }}
+                onClick={() => setConfirmDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="admin-btn-primary"
+                style={{ flex: 1, padding: '12px', background: '#ef4444', borderColor: '#ef4444' }}
+                onClick={confirmDialog.onConfirm}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </main>
 
       {/* Add User Modal */}
@@ -2549,6 +2862,15 @@ export default function AdminDashboard({ onLogout }) {
                   />
                   Trial Option
                 </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: 'var(--dash-text)' }}>
+                  <input
+                    type="checkbox"
+                    checked={newSubscriptionForm.isStudentPlan}
+                    onChange={(e) => setNewSubscriptionForm({ ...newSubscriptionForm, isStudentPlan: e.target.checked })}
+                    style={{ width: '18px', height: '18px', accentColor: '#a855f7' }}
+                  />
+                  Student Plan
+                </label>
               </div>
 
               {newSubscriptionForm.trialEnabled && (
@@ -2698,6 +3020,50 @@ export default function AdminDashboard({ onLogout }) {
                   style={{ flex: 1, padding: '12px' }}
                 >
                   {editingCouponId ? 'Save Changes' : 'Create Coupon'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Free Access Modal */}
+      {isAccessModalOpen && selectedUserForAccess && (
+        <div className="admin-modal-overlay" onClick={() => setIsAccessModalOpen(false)}>
+          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: '800' }}>Grant Free Access</h3>
+            <p style={{ margin: '0 0 20px', color: 'var(--dash-text-muted)', fontSize: '13.5px' }}>
+              Provide temporary premium access to <strong>{selectedUserForAccess.name}</strong> ({selectedUserForAccess.email}).
+            </p>
+            <form onSubmit={handleGrantFreeAccess} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--dash-text-muted)', marginBottom: '6px' }}>DURATION (DAYS)</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  placeholder="e.g. 7"
+                  value={accessDays}
+                  onChange={(e) => setAccessDays(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--dash-bg)', color: 'var(--dash-text)', border: '1px solid var(--dash-border)', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="admin-action-btn"
+                  style={{ flex: 1, padding: '12px' }}
+                  onClick={() => setIsAccessModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="admin-btn-primary"
+                  style={{ flex: 1, padding: '12px' }}
+                >
+                  Grant Access
                 </button>
               </div>
             </form>

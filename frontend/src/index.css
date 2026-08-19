@@ -1029,6 +1029,12 @@ td.danger {
   --dash-border: rgba(255,255,255,0.05);
   --dash-border-strong: rgba(255,255,255,0.1);
   --dash-text-inverse: #000;
+  --status-pending-text: #fbbf24;
+  --status-pending-bg: rgba(245, 158, 11, 0.1);
+  --status-pending-border: rgba(245, 158, 11, 0.3);
+  --status-active-text: #34d399;
+  --status-active-bg: rgba(52, 211, 153, 0.1);
+  --status-active-border: rgba(52, 211, 153, 0.3);
 }
 
 [data-theme='light'] {
@@ -1041,6 +1047,12 @@ td.danger {
   --dash-border: rgba(0,0,0,0.1);
   --dash-border-strong: rgba(0,0,0,0.15);
   --dash-text-inverse: #fff;
+  --status-pending-text: #d97706;
+  --status-pending-bg: rgba(245, 158, 11, 0.15);
+  --status-pending-border: rgba(245, 158, 11, 0.3);
+  --status-active-text: #059669;
+  --status-active-bg: rgba(52, 211, 153, 0.15);
+  --status-active-border: rgba(52, 211, 153, 0.3);
 }
 
 [data-theme='light'] .vca-page-title,
@@ -1845,3 +1857,6 @@ td.danger {
     border-color: #94a3b8 !important;
 }
 
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -33,7 +33,9 @@ try:
     cred_path = os.path.join(os.path.dirname(__file__), "firebase-admin-key.json.json")
     if os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': 'smart-ledger-a1775.firebasestorage.app'
+        })
     else:
         print("Firebase Admin Key not found.")
 except Exception as e:
@@ -366,7 +368,10 @@ def enhance_descriptions_with_ai(transactions: List[ExtractedTransaction]) -> Li
             Raw descriptions:
             {json.dumps(batch)}
             """
-            response = model.generate_content(prompt)
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(model.generate_content, prompt)
+                response = future.result(timeout=15.0)
             raw_text = response.text.strip()
             if raw_text.startswith("```json"):
                 raw_text = raw_text[7:-3].strip()
@@ -447,7 +452,7 @@ def health_check():
         "debug": "antigravity_was_here",
         "geminiApiKeyConfigured": bool(GEMINI_API_KEY),
         "metrics": {
-            "modelEngine": "Gemini 3 Pro" if GEMINI_API_KEY else "Local OCR Fallback",
+            "modelEngine": "Gemini 3.5 Flash" if GEMINI_API_KEY else "Local OCR Fallback",
             "avgProcessingTime": f"{avg_time:.2f} sec",
             "successRate": f"{success_rate:.1f}%",
             "totalRequests": ai_metrics.total_requests
@@ -691,6 +696,33 @@ def admin_firestore_delete(req: AdminFirestoreDeleteRequest):
         print(f"Firestore Delete Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/admin/storage-upload")
+async def admin_storage_upload(
+    file: UploadFile = File(...),
+    path: str = Form(...)
+):
+    try:
+        from firebase_admin import storage as admin_storage
+        import urllib.parse
+        
+        # Determine content type
+        content_type = file.content_type or 'application/octet-stream'
+        
+        bucket = admin_storage.bucket()
+        blob = bucket.blob(path)
+        
+        content = await file.read()
+        blob.upload_from_string(content, content_type=content_type)
+        
+        # Make it public so the frontend can display it
+        blob.make_public()
+        
+        return {"status": "success", "url": blob.public_url}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/ai/parse-statement", response_model=List[ExtractedTransaction])
 async def parse_statement(
@@ -790,7 +822,7 @@ async def parse_statement(
             # Try Gemini AI if API key is configured and valid
             if GEMINI_API_KEY:
                 try:
-                    model = genai.GenerativeModel("gemini-flash-latest")
+                    model = genai.GenerativeModel("gemini-3.5-flash")
                     prompt = f"""
                     You are an expert Chartered Accountant and data extraction assistant.
                     Extract all financial transactions from the following bank statement text into a clean JSON array.
@@ -821,7 +853,10 @@ async def parse_statement(
                     
                     Return ONLY a valid JSON array of objects. No markdown formatting outside the JSON array.
                     """
-                    response = model.generate_content(prompt)
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(model.generate_content, prompt)
+                        response = future.result(timeout=20.0)
                     raw_text = response.text.strip()
                     if raw_text.startswith("```json"):
                         raw_text = raw_text[7:-3].strip()
@@ -865,7 +900,7 @@ async def parse_statement(
         raise HTTPException(status_code=400, detail="Unsupported file format. Please upload .pdf, .csv, or .xlsx")
 
 @app.post("/api/ai/ca-advisor")
-async def ca_advisor(request: CAAdvisorRequest):
+def ca_advisor(request: CAAdvisorRequest):
     """
     RAG-powered Virtual Chartered Accountant endpoint.
     Takes user financial metrics + query and generates professional tax & advisory guidance.
@@ -888,9 +923,10 @@ async def ca_advisor(request: CAAdvisorRequest):
     gap80D = max(0.0, 25000.0 - request.healthInsurance80D)
 
     # 1. Check if Gemini API is available and valid
+    ai_failed = False
     if GEMINI_API_KEY:
         try:
-            model = genai.GenerativeModel("gemini-flash-latest")
+            model = genai.GenerativeModel("gemini-3.5-flash")
             
             system_prompt = f"""
             You are a highly experienced Chartered Accountant (CA) and Personal Financial Advisor in India for SmartLedger.
@@ -928,7 +964,10 @@ async def ca_advisor(request: CAAdvisorRequest):
             """
             
             full_prompt = f"{system_prompt}\n\nUser Question: {request.userQuery}"
-            response = model.generate_content(full_prompt)
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(model.generate_content, full_prompt)
+                response = future.result(timeout=10.0)
             
             return {
                 "advisorResponse": response.text,
@@ -939,6 +978,7 @@ async def ca_advisor(request: CAAdvisorRequest):
             }
         except Exception as e:
             print(f"Gemini API error in CA Advisor, falling back to statutory rule engine: {str(e)}")
+            ai_failed = True
 
     # 2. Zero-Config Smart Portfolio & Statutory Rule Engine Fallback (Works without API Key)
     ctx = request.portfolioContext or {}
@@ -953,15 +993,16 @@ async def ca_advisor(request: CAAdvisorRequest):
     is_inv_q = any(k in q_lower for k in ["invest", "mutual fund", "mf", "gold", "silver", "stock", "portfolio", "sip"])
     is_lenden_q = any(k in q_lower for k in ["len", "den", "lenden", "owe", "lent", "borrow", "peer", "friend", "gave", "took"])
     is_loan_q = any(k in q_lower for k in ["loan", "emi", "debt", "principal", "lender", "interest"])
+    is_tax_q = any(k in q_lower for k in ["tax", "80c", "80d", "regime", "deduction"])
 
     response_sections = []
     
-    if not GEMINI_API_KEY:
-        response_sections.append("> [!WARNING]\n> **AI Offline Mode:** No valid Google Gemini API Key was found in the backend (`GEMINI_API_KEY`). Ledger AI is currently operating using its offline static fallback engine. To enable intelligent live AI chat and internet web searches, please configure your API key in the terminal before starting the server.")
+    if not GEMINI_API_KEY or ai_failed:
+        response_sections.append("> [!WARNING] **AI Offline Mode:** No valid Google Gemini API Key was found in the backend (`GEMINI_API_KEY`) or the AI request failed. Ledger AI is currently operating using its offline static fallback engine. To enable intelligent live AI chat and internet web searches, please configure a valid API key in the `.env` file.")
         
     response_sections.append(f"### ✨ Ledger AI — Comprehensive Portfolio Answer\n\n**Question:** *\" {request.userQuery} \"*\n")
 
-    show_all = not (is_overview_q or is_tx_q or is_inv_q or is_lenden_q or is_loan_q)
+    show_all = not (is_overview_q or is_tx_q or is_inv_q or is_lenden_q or is_loan_q or is_tax_q)
 
     if is_overview_q or show_all:
         bank_bal = ov.get('totalBankBalance', 0.0)
@@ -1026,7 +1067,7 @@ async def ca_advisor(request: CAAdvisorRequest):
     tax_text = f"#### 🏛️ 6. Statutory Tax Deduction Gap Analysis (FY 2025–26)\n"
     tax_text += f"* **Section 80C Limit:** ₹1,50,000 | **Current Utilization:** ₹{request.investments80C:,.2f} | **Remaining Gap:** **₹{gap80C:,.2f}**\n"
     tax_text += f"* **Section 80D Limit:** ₹25,000 | **Current Utilization:** ₹{request.healthInsurance80D:,.2f} | **Remaining Gap:** **₹{gap80D:,.2f}**\n\n"
-    tax_text += f"> [!TIP]\n> **Ledger AI Insight:** All your modules (**Overview, Transactions, Live Investments, Len-Den, Loans**) are actively synced. You can ask specific questions like *'How much did I spend on food?'* or *'What is my bank balance?'*"
+    tax_text += f"> [!TIP] **Ledger AI Insight:** All your modules (**Overview, Transactions, Live Investments, Len-Den, Loans**) are actively synced. You can ask specific questions like *'How much did I spend on food?'* or *'What is my bank balance?'*"
     response_sections.append(tax_text)
 
     advisor_text = "\n\n---\n\n".join(response_sections)
